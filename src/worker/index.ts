@@ -16,7 +16,7 @@ import { cacheGet, cachePut } from "./cache"
 import { buildInscriptionRarity } from "./rarity"
 import { validateAcrossSources, mergeCharms } from "./validation"
 import { db } from "./db"
-import type { InscriptionMeta, UnisatEnrichment } from "../app/lib/types"
+import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment } from "../app/lib/types"
 
 export interface Env {
   CHRONICLES_KV: KVNamespace
@@ -74,6 +74,38 @@ function summarizeSourceCatalog(
     partial: partialBySource.length,
     partialBySource,
   }
+}
+
+function buildMempoolSourceCatalog(options: {
+  meta: InscriptionMeta
+  fetchedAt: string
+  transferFetchOk: boolean
+  transferCount: number
+  genesisTxFetched: boolean
+}): SourceCatalogItem[] {
+  const { meta, fetchedAt, transferFetchOk, transferCount, genesisTxFetched } = options
+  return [
+    {
+      source_type: "mempool_genesis_tx",
+      url_or_ref: `https://mempool.space/api/tx/${meta.genesis_txid}`,
+      trust_level: "bitcoin_indexer",
+      fetched_at: fetchedAt,
+      partial: !genesisTxFetched,
+      detail: genesisTxFetched
+        ? "Genesis transaction fetched from mempool.space"
+        : "Genesis transaction unavailable from mempool.space",
+    },
+    {
+      source_type: "mempool_forward_transfer_trace",
+      url_or_ref: `https://mempool.space/api/tx/${meta.genesis_txid}/outspend/${meta.genesis_vout}`,
+      trust_level: "bitcoin_indexer",
+      fetched_at: fetchedAt,
+      partial: !transferFetchOk,
+      detail: transferFetchOk
+        ? `${transferCount} forward transfer${transferCount !== 1 ? "s" : ""} traced from genesis output`
+        : "Forward transfer trace unavailable from mempool.space",
+    },
+  ]
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -261,7 +293,7 @@ async function handleStandardChronicle(
         collectionContext: {
           protocol: { parents: null, children: null, gallery: null },
           registry: { match: null, issues: [] },
-          market: { match: null },
+          market: { match: null, satflow_match: null, ord_net_match: null },
           profile: null,
           presentation: { facets: [] },
         },
@@ -269,17 +301,23 @@ async function handleStandardChronicle(
         collectionName: undefined,
       }
 
-  const rarity = buildInscriptionRarity(cborTraits, collectionData.collectionContext.market?.match?.satflow_rarity)
+  const info = unisatInfo.status === "fulfilled" ? unisatInfo.value : null
+  const marketMatch = collectionData.collectionContext.market?.match
+  const marketRarity = marketMatch?.rarity_overlay
+  const rarity = buildInscriptionRarity(
+    cborTraits,
+    marketRarity
+  )
   diagLog(diagnostics, "rarity_pipeline_summary", {
     cbor_trait_count: cborTraits ? Object.keys(cborTraits).length : 0,
-    satflow_trait_count: collectionData.collectionContext.market?.match?.satflow_rarity?.traits.length ?? 0,
-    satflow_rank: collectionData.collectionContext.market?.match?.satflow_rarity?.rank ?? null,
-    satflow_supply: collectionData.collectionContext.market?.match?.satflow_rarity?.supply ?? null,
+    market_rarity_source: marketRarity?.source ?? null,
+    market_trait_count: marketRarity?.traits.length ?? 0,
+    market_rank: marketRarity?.rank ?? null,
+    market_supply: marketRarity?.supply ?? null,
     rarity_trait_count: rarity?.traits.length ?? 0,
     rarity_breakdown_count: rarity?.trait_breakdown.length ?? 0,
   })
-  
-  const info = unisatInfo.status === "fulfilled" ? unisatInfo.value : null
+
   const unisatEnrichment: UnisatEnrichment = {
     inscription_info: info,
     collection_context: null,
@@ -304,14 +342,14 @@ async function handleStandardChronicle(
         partial: false,
       })
     }
-    if (collectionData.collectionContext.market?.match?.satflow_rarity) {
+    if (marketRarity) {
       const raritySourceRef =
-        collectionData.collectionContext.market.match.satflow_rarity.source_ref
-        ?? collectionData.collectionContext.market.match.source_ref
+        marketRarity.source_ref
+        ?? marketMatch.source_ref
       unisatEnrichment.source_catalog.push({
-        source_type: raritySourceRef.includes("satflow.com")
+        source_type: marketRarity.source === "satflow"
           ? "satflow_rarity_stats"
-          : "market_rarity_overlay",
+          : "ord_net_rarity_overlay",
         url_or_ref: raritySourceRef,
         trust_level: "market_overlay",
         fetched_at: new Date().toISOString(),
@@ -383,8 +421,17 @@ async function handleStandardChronicle(
   const events = buildTimeline(meta, enrichedTransfers, mentions, unisatEnrichment ?? undefined)
 
   // Merge source catalogs
+  const fetchedAt = new Date().toISOString()
+  const mempoolSourceCatalog = buildMempoolSourceCatalog({
+    meta,
+    fetchedAt,
+    transferFetchOk: transfers.status === "fulfilled",
+    transferCount: enrichedTransfers.length,
+    genesisTxFetched: genesisTx.status === "fulfilled" && Boolean(genesisTx.value),
+  })
   const sourceCatalog = [
     ...collectionData.sourceCatalog,
+    ...mempoolSourceCatalog,
     ...(unisatEnrichment?.source_catalog ?? []),
   ]
   const sourceSummary = summarizeSourceCatalog(sourceCatalog)
@@ -397,7 +444,7 @@ async function handleStandardChronicle(
     media_context: collectionData.mediaContext,
     collection_context: collectionData.collectionContext,
     source_catalog: sourceCatalog,
-    cached_at: new Date().toISOString(),
+    cached_at: fetchedAt,
     unisat_enrichment: unisatEnrichment ?? undefined,
     validation,
   }
@@ -534,12 +581,18 @@ async function handleStreamingChronicle(
         // UniSat fetch is non-blocking
       }
       
-      const rarity = buildInscriptionRarity(cborTraits, collectionContext.collectionContext.market?.match?.satflow_rarity)
+      const marketMatch = collectionContext.collectionContext.market?.match
+      const marketRarity = marketMatch?.rarity_overlay
+      const rarity = buildInscriptionRarity(
+        cborTraits,
+        marketRarity
+      )
       diagLog(diagnostics, "stream_rarity_pipeline_summary", {
         cbor_trait_count: cborTraits ? Object.keys(cborTraits).length : 0,
-        satflow_trait_count: collectionContext.collectionContext.market?.match?.satflow_rarity?.traits.length ?? 0,
-        satflow_rank: collectionContext.collectionContext.market?.match?.satflow_rarity?.rank ?? null,
-        satflow_supply: collectionContext.collectionContext.market?.match?.satflow_rarity?.supply ?? null,
+        market_rarity_source: marketRarity?.source ?? null,
+        market_trait_count: marketRarity?.traits.length ?? 0,
+        market_rank: marketRarity?.rank ?? null,
+        market_supply: marketRarity?.supply ?? null,
         rarity_trait_count: rarity?.traits.length ?? 0,
       })
       
@@ -571,14 +624,14 @@ async function handleStreamingChronicle(
             partial: false,
           })
         }
-        if (collectionContext.collectionContext.market?.match?.satflow_rarity) {
+        if (marketRarity) {
           const raritySourceRef =
-            collectionContext.collectionContext.market.match.satflow_rarity.source_ref
-            ?? collectionContext.collectionContext.market.match.source_ref
+            marketRarity.source_ref
+            ?? marketMatch.source_ref
           unisatEnrichment.source_catalog.push({
-            source_type: raritySourceRef.includes("satflow.com")
+            source_type: marketRarity.source === "satflow"
               ? "satflow_rarity_stats"
-              : "market_rarity_overlay",
+              : "ord_net_rarity_overlay",
             url_or_ref: raritySourceRef,
             trust_level: "market_overlay",
             fetched_at: new Date().toISOString(),
@@ -663,8 +716,17 @@ async function handleStreamingChronicle(
       const events = buildTimeline(meta, transfers, mentions, unisatEnrichment ?? undefined)
 
       // Merge source catalogs
+      const fetchedAt = new Date().toISOString()
+      const mempoolSourceCatalog = buildMempoolSourceCatalog({
+        meta,
+        fetchedAt,
+        transferFetchOk: true,
+        transferCount: transfers.length,
+        genesisTxFetched: Boolean(genesisTx),
+      })
       const sourceCatalog = [
         ...collectionContext.sourceCatalog,
+        ...mempoolSourceCatalog,
         ...(unisatEnrichment?.source_catalog ?? []),
       ]
       diagLog(diagnostics, "stream_source_catalog_summary", summarizeSourceCatalog(sourceCatalog))
@@ -676,7 +738,7 @@ async function handleStreamingChronicle(
         media_context: collectionContext.mediaContext,
         collection_context: collectionContext.collectionContext,
         source_catalog: sourceCatalog,
-        cached_at: new Date().toISOString(),
+        cached_at: fetchedAt,
         unisat_enrichment: unisatEnrichment ?? undefined,
         validation,
       }

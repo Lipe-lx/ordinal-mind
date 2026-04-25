@@ -19,7 +19,7 @@ function textResponse(text: string, status = 200): Response {
   })
 }
 
-function createEnv(): Env {
+function createEnv(options?: { unisatApiKey?: string }): Env {
   const kvStore = new Map<string, string>()
   return {
     CHRONICLES_KV: {
@@ -32,6 +32,7 @@ function createEnv(): Env {
       fetch: async () => new Response("not found", { status: 404 }),
     },
     ENVIRONMENT: "test",
+    UNISAT_API_KEY: options?.unisatApiKey,
   }
 }
 
@@ -196,19 +197,43 @@ function setupUpstreamMocks(options: {
         return new Response("", { status: 503 })
       }
 
+      if (url === `https://open-api.unisat.io/v1/indexer/inscription/info/${INSCRIPTION_ID}`) {
+        return jsonResponse({
+          code: 0,
+          msg: "ok",
+          data: {
+            inscriptionId: INSCRIPTION_ID,
+            inscriptionNumber: 2971,
+            address: "bc1ptestaddress",
+            contentType: "image/webp",
+            contentLength: 12345,
+            height: 840000,
+            timestamp: 1713571200,
+            sat: 1403294488638613,
+            genesisTransaction: GENESIS_TXID,
+            offset: 0,
+            charms: [],
+            metaprotocol: null,
+          },
+        })
+      }
+
       return new Response(`unmocked url: ${url}`, { status: 404 })
     })
   )
 }
 
-async function callChronicle(debug = true): Promise<{
+async function callChronicle(
+  debug = true,
+  options?: { unisatApiKey?: string }
+): Promise<{
   status: number
   body: Record<string, unknown>
 }> {
   const request = new Request(
     `https://ordinalmind.local/api/chronicle?id=${INSCRIPTION_ID}${debug ? "&debug=1" : ""}`
   )
-  const response = await worker.fetch(request, createEnv())
+  const response = await worker.fetch(request, createEnv(options))
   return {
     status: response.status,
     body: (await response.json()) as Record<string, unknown>,
@@ -257,8 +282,15 @@ describe("chronicle pipeline smoke", () => {
 
     const market = (body.collection_context as Record<string, unknown>).market as Record<string, unknown>
     const match = market.match as Record<string, unknown>
-    const satflowRarity = match.satflow_rarity as Record<string, unknown>
-    expect((satflowRarity.traits as unknown[]).length).toBeGreaterThan(0)
+    const ordNetMatch = market.ord_net_match as Record<string, unknown>
+    const satflowMatch = market.satflow_match as Record<string, unknown>
+    expect(match.source_ref).toBe(`https://ord.net/inscription/${INSCRIPTION_ID}`)
+    expect(match.verified).toBe(true)
+    expect(ordNetMatch.source_ref).toBe(`https://ord.net/inscription/${INSCRIPTION_ID}`)
+    expect(satflowMatch.source_ref).toBe(`https://www.satflow.com/ordinal/${INSCRIPTION_ID}`)
+    const rarityOverlay = match.rarity_overlay as Record<string, unknown>
+    expect(rarityOverlay.source).toBe("satflow")
+    expect((rarityOverlay.traits as unknown[]).length).toBeGreaterThan(0)
 
     expect(
       infoSpy.mock.calls.some((call) =>
@@ -324,10 +356,30 @@ describe("chronicle pipeline smoke", () => {
     expect(sourceCatalog).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          source_type: "market_rarity_overlay",
+          source_type: "ord_net_rarity_overlay",
           url_or_ref: `https://ord.net/inscription/${INSCRIPTION_ID}`,
         }),
       ])
     )
+  })
+
+  it("does not use UniSat as a trait source when CBOR and market overlays have no traits", async () => {
+    setupUpstreamMocks({
+      metadataStatus: 404,
+      metadataPayload: null,
+      satflowWithCount: false,
+      satflowRank: 0,
+      satflowIncludeTraits: false,
+      ordNetTraitFallback: false,
+    })
+
+    const { status, body } = await callChronicle(true, { unisatApiKey: "test-key" })
+    expect(status).toBe(200)
+
+    const enrichment = body.unisat_enrichment as Record<string, unknown>
+    const info = enrichment.inscription_info as Record<string, unknown>
+    expect(info).toMatchObject({ sat: 1403294488638613, content_length: 12345 })
+    expect(info.attributes).toBeUndefined()
+    expect(enrichment.rarity).toBeNull()
   })
 })

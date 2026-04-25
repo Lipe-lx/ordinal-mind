@@ -1,10 +1,9 @@
-// UniSat Open API agent — enriches inscriptions with traits, charms, and marketplace data.
+// UniSat Open API agent — optional inscription enrichment for Ordinal Mind.
 // Base: https://open-api.unisat.io
 // Auth: Bearer token from env.UNISAT_API_KEY (server-side secret, not BYOK).
 //
-// Provides: inscription metadata (charms, sat, metaprotocol), collection stats (floor, volume),
-// collection items with trait attributes (for rarity computation), marketplace listing info,
-// and activity history (sales, listings, delists).
+// Production scope (current): inscription metadata such as charms/sat/metaprotocol/content length.
+// Traits/rank context for the card comes from ordinals CBOR + Satflow/ord.net overlays, not UniSat.
 //
 // Rate limit: Free tier = 5 req/s, 2000/day. We use 200ms delay between sequential calls.
 
@@ -27,7 +26,6 @@ export interface UnisatInscriptionInfo {
   offset: number
   charms: string[]
   metaprotocol: string | null
-  attributes?: { trait_type: string; value: string }[]
 }
 
 // --- Public API ---

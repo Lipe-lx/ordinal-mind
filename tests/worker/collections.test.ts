@@ -244,7 +244,8 @@ describe("ord.net market overlay parsing", () => {
     expect(parseOrdMarketOverlay(html, "https://ord.net/inscription/11337510")).toMatchObject({
       collection_slug: "wizards",
       collection_name: "The Wizards of Ord",
-      satflow_rarity: {
+      rarity_overlay: {
+        source: "ord_net",
         rank: 0,
         supply: 3333,
         source_ref: "https://ord.net/inscription/11337510",
@@ -254,6 +255,23 @@ describe("ord.net market overlay parsing", () => {
           { key: "Head", value: "Starry Blue Wizard Hat", tokenCount: 255 },
         ],
       },
+    })
+  })
+
+  it("extracts collection data from escaped ord.net payload blocks", () => {
+    const html = `
+      <script>
+        self.__data = "item:{\\"name\\":\\"NodeMonke #1\\",\\"collection\\":\\"nodemonkes\\",\\"collectionHref\\":\\"/collection/nodemonkes\\"},collection:{\\"slug\\":\\"nodemonkes\\",\\"href\\":\\"/collection/nodemonkes\\",\\"name\\":\\"NodeMonkes\\",\\"verified\\":true},verifiedCollections:[{\\"slug\\":\\"nodemonkes\\",\\"href\\":\\"/collection/nodemonkes\\",\\"name\\":\\"NodeMonkes\\"}]"
+      </script>
+    `
+
+    expect(parseOrdMarketOverlay(html, "https://ord.net/inscription/example")).toMatchObject({
+      collection_slug: "nodemonkes",
+      collection_name: "NodeMonkes",
+      collection_href: "/collection/nodemonkes",
+      item_name: "NodeMonke #1",
+      verified: true,
+      source_ref: "https://ord.net/inscription/example",
     })
   })
 })
@@ -313,7 +331,8 @@ describe("Satflow inscription overlay parsing", () => {
       collection_slug: "bitcoin-puppets",
       collection_name: "Bitcoin Puppets",
       item_name: "Bitcoin Puppet #2971",
-      satflow_rarity: {
+      rarity_overlay: {
+        source: "satflow",
         rank: 0,
         supply: 5159,
         traits: [
@@ -349,12 +368,36 @@ describe("Satflow inscription overlay parsing", () => {
 
     expect(parseSatflowInscriptionOverlay(html, "https://www.satflow.com/ordinal/wizard")).toMatchObject({
       collection_slug: "wizards",
-      satflow_rarity: {
+      rarity_overlay: {
+        source: "satflow",
         source_ref: "https://www.satflow.com/ordinal/wizard",
         traits: [
           { key: "Type", value: "Ape", tokenCount: 436 },
           { key: "Eyes", value: "Wide Open", tokenCount: 338 },
           { key: "Weapon", value: "Dagger", tokenCount: 266 },
+        ],
+      },
+    })
+  })
+
+  it("parses traits from escaped __next_f payload blocks", () => {
+    const html = `
+      <meta property="og:title" content="Quantum Cat #1105 - Quantum Cats" />
+      <a href="/ordinals/quantum_cats">Quantum Cats</a>
+      <script>
+        self.__next_f.push([1,"meta:{\\\"token\\\":{\\\"inscription_id\\\":\\\"6e357...i104\\\",\\\"attributes\\\":[{\\\"key\\\":\\\"Background\\\",\\\"value\\\":\\\"Concatenation\\\",\\\"tokenCount\\\":141},{\\\"key\\\":\\\"Body\\\",\\\"value\\\":\\\"Purple Haze\\\",\\\"tokenCount\\\":103}]},\\\"rarityRank\\\":0}"])
+      </script>
+    `
+
+    expect(parseSatflowInscriptionOverlay(html, "https://www.satflow.com/ordinal/qcat-1105")).toMatchObject({
+      collection_slug: "quantum_cats",
+      rarity_overlay: {
+        source: "satflow",
+        rank: 0,
+        source_ref: "https://www.satflow.com/ordinal/qcat-1105",
+        traits: [
+          { key: "Background", value: "Concatenation", tokenCount: 141 },
+          { key: "Body", value: "Purple Haze", tokenCount: 103 },
         ],
       },
     })

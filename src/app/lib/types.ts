@@ -8,7 +8,7 @@ export type EventType =
   | "collection_link" // belongs to a collection (parent inscription)
   | "recursive_ref"   // references another inscription
   | "sat_context"     // sat rarity data
-  | "trait_context"   // trait-based rarity data from UniSat
+  | "trait_context"   // trait-based rarity data from CBOR + market overlays
 
 export type SatRarity =
   | "common"
@@ -24,6 +24,7 @@ export type SourceTrustLevel =
   | "curated_public_registry"
   | "curated_public_research"
   | "market_overlay"
+  | "bitcoin_indexer"
   | "unisat_indexer"
 
 export type VisionTransport = "public_url" | "inline_data" | "unsupported"
@@ -140,6 +141,16 @@ export interface CollectionPresentationFacet {
   detail?: string
 }
 
+export type MarketRaritySource = "satflow" | "ord_net"
+
+export interface MarketRarityOverlay {
+  source: MarketRaritySource
+  rank: number
+  supply?: number
+  source_ref?: string
+  traits: Array<{ key: string, value: string, tokenCount: number }>
+}
+
 export interface MarketOverlayMatch {
   collection_slug: string
   collection_name: string
@@ -148,12 +159,7 @@ export interface MarketOverlayMatch {
   verified: boolean
   owner_address?: string
   source_ref: string
-  satflow_rarity?: {
-    rank: number
-    supply?: number
-    source_ref?: string
-    traits: Array<{ key: string, value: string, tokenCount: number }>
-  }
+  rarity_overlay?: MarketRarityOverlay
 }
 
 export interface CollectionMarketStats {
@@ -195,6 +201,8 @@ export interface CollectionContext {
   }
   market: {
     match: MarketOverlayMatch | null
+    satflow_match?: MarketOverlayMatch | null
+    ord_net_match?: MarketOverlayMatch | null
   }
   profile: CollectionProfile | null
   presentation: {

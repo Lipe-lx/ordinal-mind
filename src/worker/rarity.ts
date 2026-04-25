@@ -1,10 +1,12 @@
-// Rarity Engine — merges factual on-chain CBOR traits with Satflow frequency/rank data.
+// Rarity Engine — merges factual on-chain CBOR traits with market overlay frequency/rank data.
 // 
-// Instead of fetching the entire collection to compute statistics (which requires closed APIs),
-// we use a Cypherpunk approach:
-// 1. Fetch exact attributes from the inscription envelope (ord.net / CBOR)
-// 2. Fetch global frequency stats and official rank from Satflow (HTML scrape)
-// 3. Graceful degradation: if Satflow has no data, still display the traits without a global rank.
+// Priority order for traits:
+// 1. Marketplace overlays (Satflow / ord.net) — preferred because they aggregate
+//    the full trait set with frequency counts. On-chain CBOR may only carry the
+//    linking sat's traits, resulting in an incomplete picture.
+// 2. CBOR on-chain metadata — supplementary; any unique traits not in marketplace
+//    data are merged in.
+// 3. Graceful degradation: if overlays have no data, CBOR traits are shown without a global rank.
 
 import type {
   InscriptionRarity,
@@ -15,24 +17,43 @@ import type {
 
 export function buildInscriptionRarity(
   cborTraits: Record<string, string> | null,
-  satflowRarity: MarketOverlayMatch["satflow_rarity"] | undefined
+  marketRarity: MarketOverlayMatch["rarity_overlay"] | undefined
 ): InscriptionRarity | null {
-  // We need at least CBOR traits or Satflow traits to build a rarity context
-  if (!cborTraits && !satflowRarity?.traits) return null
+  // We need at least one factual trait source to build a rarity context
+  if (!cborTraits && !marketRarity?.traits) {
+    return null
+  }
 
-  // Prioritize CBOR for the canonical list of traits, fallback to Satflow traits
+  // Marketplace sources (satflow / ord.net) are preferred for the trait list
+  // because on-chain CBOR traits may be spread across different sats with only
+  // one linking sat, resulting in an incomplete trait set. Marketplace sources
+  // aggregate all traits with frequency counts, making them the most reliable
+  // source for the "Traits & Attributes" card.
+  //
+  // Any unique CBOR traits not present in the marketplace data are merged in
+  // as supplementary entries.
   const finalTraits: TraitAttribute[] = []
   
-  if (cborTraits) {
-    for (const [key, value] of Object.entries(cborTraits)) {
-      const normalized = normalizeTraitPair(key, value)
-      if (normalized) finalTraits.push(normalized)
-    }
-  } else if (satflowRarity?.traits) {
-    for (const t of satflowRarity.traits) {
-      if (t.key === "Attributes") continue // skip the empty trait container
+  if (marketRarity?.traits && marketRarity.traits.length > 0) {
+    for (const t of marketRarity.traits) {
+      if (t.key.trim().toLowerCase() === "attributes") continue // skip empty container rows
       const normalized = normalizeTraitPair(t.key, t.value)
       if (normalized) finalTraits.push(normalized)
+    }
+  }
+
+  // Merge unique CBOR traits that the marketplace doesn't cover
+  if (cborTraits) {
+    const existingKeys = new Set(
+      finalTraits.map(t => `${t.trait_type.toLowerCase()}\0${t.value.toLowerCase()}`)
+    )
+    for (const [key, value] of Object.entries(cborTraits)) {
+      const normalized = normalizeTraitPair(key, value)
+      if (!normalized) continue
+      const dedupeKey = `${normalized.trait_type.toLowerCase()}\0${normalized.value.toLowerCase()}`
+      if (!existingKeys.has(dedupeKey)) {
+        finalTraits.push(normalized)
+      }
     }
   }
 
@@ -40,13 +61,13 @@ export function buildInscriptionRarity(
   if (uniqueTraits.length === 0) return null
 
   const breakdown: TraitRarityBreakdown[] = uniqueTraits.map(attr => {
-    // Attempt to find the frequency from Satflow
-    const satflowMatch = satflowRarity?.traits?.find(
+    // Attempt to find the frequency from the selected market overlay.
+    const marketMatch = marketRarity?.traits?.find(
       t => t.key.toLowerCase() === attr.trait_type.toLowerCase() && t.value.toLowerCase() === attr.value.toLowerCase()
     )
     
-    const count = satflowMatch?.tokenCount
-    const supply = satflowRarity?.supply
+    const count = marketMatch?.tokenCount
+    const supply = marketRarity?.supply
     
     let pct: number | undefined = undefined
     let contribution: number | undefined = undefined
@@ -73,8 +94,8 @@ export function buildInscriptionRarity(
     return 0
   })
 
-  const rank = satflowRarity?.rank ?? null
-  const supply = satflowRarity?.supply ?? null
+  const rank = marketRarity?.rank ?? null
+  const supply = marketRarity?.supply ?? null
   let percentile: number | null = null
   
   if (rank && supply && supply > 0) {

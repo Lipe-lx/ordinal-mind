@@ -81,10 +81,12 @@ export function CollectionContextWidget({ collectionContext }: Props) {
     ?? presentation.facets.find((f) => f.tone === "curated" || f.tone === "canonical")?.value
     ?? null
 
-  // Remaining facets (skip the one already shown in the badge)
-  const detailFacets = primaryBadge
-    ? presentation.facets.filter((f) => f.value !== primaryBadge)
-    : presentation.facets
+  const primaryFacetIndex = primaryBadge
+    ? presentation.facets.findIndex((f) =>
+        f.value === primaryBadge && (f.tone === "curated" || f.tone === "canonical")
+      )
+    : -1
+  const detailFacets = presentation.facets.filter((_, index) => index !== primaryFacetIndex)
 
   const relationGroups: RelationGroup[] = []
   if ((protocol.parents?.items.length ?? 0) > 0) {
@@ -117,6 +119,9 @@ export function CollectionContextWidget({ collectionContext }: Props) {
 
   const identityFacets = detailFacets.filter((facet) => facet.tone === "curated" || facet.tone === "canonical")
   const marketFacets = detailFacets.filter((facet) => facet.tone === "overlay").filter(facet => {
+    if (facet.label === "Satflow overlay" || facet.label === "ord.net overlay" || facet.label === "ord.net verified overlay") {
+      return false
+    }
     // Hide market stats if they were scraped incorrectly as text instead of numbers
     if (facet.label === "Market supply" || facet.label === "Listed") {
       return /\d/.test(facet.value)
@@ -243,17 +248,19 @@ export function CollectionContextWidget({ collectionContext }: Props) {
           {(marketFacets.length > 0 || market.match || marketSignals.length > 0) && (
             <section className="widget-provenance-section">
               <span className="widget-provenance-section-label">Market &amp; collector signals</span>
-              {market.match && (
+              {market.ord_net_match && (
                 <EvidenceRow
-                  label={
-                    market.match.source_ref.includes("satflow.com")
-                      ? "satflow overlay"
-                      : market.match.verified
-                        ? "ord.net verified overlay"
-                        : "ord.net overlay"
-                  }
-                  value={market.match.collection_name}
-                  detail={market.match.item_name ?? market.match.collection_slug}
+                  label={market.ord_net_match.verified ? "ord.net verified overlay" : "ord.net overlay"}
+                  value={market.ord_net_match.collection_name}
+                  detail={market.ord_net_match.item_name ?? market.ord_net_match.collection_slug}
+                  tone="overlay"
+                />
+              )}
+              {market.satflow_match && (
+                <EvidenceRow
+                  label="Satflow overlay"
+                  value={market.satflow_match.collection_name}
+                  detail={market.satflow_match.item_name ?? market.satflow_match.collection_slug}
                   tone="overlay"
                 />
               )}

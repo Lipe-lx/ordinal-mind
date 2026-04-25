@@ -1,11 +1,15 @@
 import { useEffect, useReducer, useCallback } from "react"
-import { useLoaderData, useLocation, useNavigate } from "react-router"
+import { useLoaderData, useLocation, useNavigate, useOutletContext } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
+import { InscriptionPreview } from "../components/InscriptionPreview"
+import { InscriptionMetaWidget } from "../components/widgets/InscriptionMetaWidget"
+import { RarityWidget } from "../components/widgets/RarityWidget"
 import { SatBadge } from "../components/SatBadge"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
 import { useSynthesize } from "../lib/byok/useSynthesize"
+import type { LayoutOutletContext } from "../components/Layout"
 import type { ChronicleResponse, ScanProgress as ScanProgressType } from "../lib/types"
 
 interface LoaderData {
@@ -125,6 +129,54 @@ export function Chronicle() {
   } = useSynthesize()
   const navigate = useNavigate()
   const homePath = `/${location.search}`
+  const { setHeaderCenter, setHeaderRight } = useOutletContext<LayoutOutletContext>()
+
+  // Inject inscription title + share into Layout header when chronicle loads
+  useEffect(() => {
+    if (!chronicle) {
+      setHeaderCenter(null)
+      setHeaderRight(null)
+      return
+    }
+
+    const handleShare = () => {
+      const text = `Inscription #${chronicle.meta.inscription_number} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
+      const url = window.location.href
+
+      if (navigator.share) {
+        navigator.share({ title: "Ordinal Mind Chronicle", text, url }).catch(() => {})
+      } else {
+        navigator.clipboard.writeText(`${text}\n${url}`).catch(() => {})
+      }
+    }
+
+    setHeaderCenter(
+      <>
+        <h1 className="layout-header-title">
+          Inscription{" "}
+          <span className="chronicle-header-number">
+            #{chronicle.meta.inscription_number}
+          </span>
+        </h1>
+        <SatBadge rarity={chronicle.meta.sat_rarity} />
+      </>
+    )
+
+    setHeaderRight(
+      <button
+        className="btn btn-share-header"
+        onClick={handleShare}
+        title="Share this Chronicle"
+      >
+        ✦ Share
+      </button>
+    )
+
+    return () => {
+      setHeaderCenter(null)
+      setHeaderRight(null)
+    }
+  }, [chronicle, setHeaderCenter, setHeaderRight])
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
@@ -168,46 +220,22 @@ export function Chronicle() {
 
   // No data yet
   if (!chronicle) return null
-  const loadedChronicle = chronicle
 
-  function handleShare() {
-    const text = `Inscription #${loadedChronicle.meta.inscription_number} — ${loadedChronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
-    const url = window.location.href
-
-    if (navigator.share) {
-      navigator.share({ title: "Ordinal Mind Chronicle", text, url }).catch(() => {})
-    } else {
-      navigator.clipboard.writeText(`${text}\n${url}`).catch(() => {})
-    }
-  }
-
-  // Chronicle loaded — render full view
+  // Chronicle loaded — render 3-column layout
   return (
     <div className="chronicle-page fade-in">
-      <div className="chronicle-header">
-        <div className="chronicle-header-left">
-          <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
-          <h1>
-            Inscription{" "}
-            <span className="chronicle-header-number">
-              #{chronicle.meta.inscription_number}
-            </span>
-          </h1>
-          <SatBadge rarity={chronicle.meta.sat_rarity} />
-        </div>
-        <div className="chronicle-header-right">
-          <button
-            className="btn btn-share-header"
-            onClick={handleShare}
-            title="Share this Chronicle"
-          >
-            ✦ Share
-          </button>
-        </div>
-      </div>
-
       <div className="chronicle">
-        {/* Left: Card with image + narrative */}
+        {/* Left Sidebar: Inscription preview + metadata + rarity */}
+        <div className="chronicle-sidebar-left">
+          <InscriptionPreview chronicle={chronicle} />
+          <InscriptionMetaWidget meta={chronicle.meta} events={chronicle.events} />
+          <RarityWidget
+            unisatEnrichment={chronicle.unisat_enrichment}
+            validation={chronicle.validation}
+          />
+        </div>
+
+        {/* Center: Provenance, narrative, sources */}
         <ChronicleCard
           chronicle={chronicle}
           narrative={narrative}
@@ -220,17 +248,19 @@ export function Chronicle() {
           onCancel={cancel}
         />
 
-        {/* Right: Timeline in its own scrollable panel */}
+        {/* Right Sidebar: Temporal Timeline */}
         <div className="timeline-panel">
           <div className="timeline-panel-title">
-            <span>Temporal Timeline</span>
+            <span className="timeline-panel-title-text">Temporal Timeline</span>
             <OwnershipWidget
               events={chronicle.events}
               genesisAddress={chronicle.meta.genesis_owner_address}
               currentOwnerAddress={chronicle.meta.owner_address}
             />
           </div>
-          <TemporalTree events={chronicle.events} />
+          <div className="timeline-scroll-container">
+            <TemporalTree events={chronicle.events} />
+          </div>
         </div>
       </div>
     </div>

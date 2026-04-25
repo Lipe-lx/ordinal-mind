@@ -1,10 +1,7 @@
 import { KeyStore } from "../lib/byok"
-import { InscriptionMetaWidget } from "./widgets/InscriptionMetaWidget"
 import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
-import { RarityWidget } from "./widgets/RarityWidget"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
 import { NarrativeRenderer } from "./NarrativeRenderer"
-import { InscriptionPreview } from "./InscriptionPreview"
 import type { ChronicleResponse } from "../lib/types"
 import type { SynthesisPhase } from "../lib/byok/useSynthesize"
 import type { SynthesisMode } from "../lib/byok/context"
@@ -32,7 +29,6 @@ export function ChronicleCard({
   onSynthesize,
   onCancel,
 }: Props) {
-  const { meta, events } = chronicle
   const hasKey = KeyStore.has()
   const config = KeyStore.get()
 
@@ -41,42 +37,28 @@ export function ChronicleCard({
 
   return (
     <div className="chronicle-card glass-card">
-      {/* Left Column */}
-      <div className="chronicle-card-left">
-        <InscriptionPreview chronicle={chronicle} />
-
-        <InscriptionMetaWidget meta={meta} events={events} />
-        <RarityWidget
-          unisatEnrichment={chronicle.unisat_enrichment}
-          validation={chronicle.validation}
-        />
-      </div>
-
-      {/* Right Column */}
-      <div className="chronicle-card-right">
-        <CollectionContextWidget collectionContext={chronicle.collection_context} />
-        {!narrative && !hasKey && (
-          <p className="chronicle-card-hint" style={{ marginBottom: "var(--space-md)" }}>
-            🔑 Set your API key to generate narratives
-          </p>
-        )}
-        <NarrativeRenderer
-          narrative={narrative}
-          streamingText={streamingText}
-          phase={phase}
-          elapsed={elapsed}
-          providerName={config?.provider}
-          modelName={config?.model}
-          error={synthError}
-          inputMode={lastInputMode}
-          onGenerate={hasKey ? onSynthesize : undefined}
-          onCancel={onCancel}
-        />
-        
-        {/* Sources Widget */}
-        <div style={{ marginTop: "auto" }}>
-          <SourcesWidget sources={sources} />
-        </div>
+      <CollectionContextWidget collectionContext={chronicle.collection_context} />
+      {!narrative && !hasKey && (
+        <p className="chronicle-card-hint" style={{ marginBottom: "var(--space-md)" }}>
+          🔑 Set your API key to generate narratives
+        </p>
+      )}
+      <NarrativeRenderer
+        narrative={narrative}
+        streamingText={streamingText}
+        phase={phase}
+        elapsed={elapsed}
+        providerName={config?.provider}
+        modelName={config?.model}
+        error={synthError}
+        inputMode={lastInputMode}
+        onGenerate={hasKey ? onSynthesize : undefined}
+        onCancel={onCancel}
+      />
+      
+      {/* Sources Widget */}
+      <div style={{ marginTop: "auto" }}>
+        <SourcesWidget sources={sources} />
       </div>
     </div>
   )
@@ -96,6 +78,9 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
   )
   const marketEntries = sourceCatalog.filter(
     (source) => source.trust_level === "market_overlay"
+  )
+  const mempoolEntries = sourceCatalog.filter(
+    (source) => source.trust_level === "bitcoin_indexer"
   )
 
   // ordinals.com — always queried for metadata
@@ -125,18 +110,23 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
   ).length
   sources.push({
     name: "mempool.space",
-    status: transferCount > 0 ? "success" : "partial",
+    status: mempoolEntries.some((entry) => !entry.partial) ? "success" : "partial",
     detail: transferCount > 0
       ? `${transferCount} transfer${transferCount > 1 ? "s" : ""} found`
-      : "No transfers detected",
+      : mempoolEntries.length > 0
+        ? "Genesis and current output checked"
+        : "No transfers detected",
     cached: chronicle.from_cache,
-    count: transferCount,
-    links: events
+    count: mempoolEntries.length > 0 ? mempoolEntries.length : transferCount,
+    links: [
+      ...mempoolEntries.map((entry) => ({ label: entry.source_type, url: entry.url_or_ref })),
+      ...events
       .filter((e) => e.event_type === "transfer" || e.event_type === "sale")
       .map((e) => ({
         label: `${e.event_type} tx`,
         url: e.source.ref.startsWith("http") ? e.source.ref : `https://mempool.space/tx/${e.source.ref.split(":")[0]}`
       }))
+    ]
   })
 
   // X mentions
@@ -174,11 +164,15 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
     const marketMatch = chronicle.collection_context.market.match
     const isSatflowSource = marketMatch?.source_ref.includes("satflow.com")
     const marketSourceName = isSatflowSource ? "satflow.com" : "ord.net"
+    const rarityOverlay = marketMatch?.rarity_overlay
+    const rarityDetail = rarityOverlay
+      ? ` · ${rarityOverlay.source === "satflow" ? "Satflow" : "ord.net"} rarity · ${rarityOverlay.traits.length} traits`
+      : ""
     sources.push({
       name: marketSourceName,
       status: marketEntries.some((entry) => !entry.partial) ? "success" : "partial",
       detail: marketMatch
-        ? `${marketMatch.collection_name} · ${marketMatch.verified ? "verified" : "overlay"}`
+        ? `${marketMatch.collection_name} · ${marketMatch.verified ? "verified" : "overlay"}${rarityDetail}`
         : "Public market overlay",
       cached: chronicle.from_cache,
       count: marketEntries.length,
@@ -191,13 +185,10 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
     (source) => source.trust_level === "unisat_indexer"
   )
   if (unisatEntries.length > 0) {
-    const rarity = chronicle.unisat_enrichment?.rarity
     sources.push({
       name: "unisat.io",
       status: unisatEntries.some((entry) => !entry.partial) ? "success" : "partial",
-      detail: rarity
-        ? `Rarity #${rarity.rarity_rank} of ${rarity.total_supply} · ${rarity.traits.length} traits`
-        : "Inscription indexer data",
+      detail: "Indexer inscription data",
       cached: chronicle.from_cache,
       count: unisatEntries.length,
       links: unisatEntries.map((e) => ({ label: e.source_type, url: e.url_or_ref }))

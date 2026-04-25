@@ -180,16 +180,12 @@ export async function fetchCollectionContext(
         ? "ord_net"
         : "none",
     selected_slug: marketOverlay?.collection_slug ?? null,
-    satflow_rarity_rank: satflowOverlay?.satflow_rarity?.rank ?? null,
-    satflow_rarity_trait_count: satflowOverlay?.satflow_rarity?.traits.length ?? 0,
-    ord_net_rarity_trait_count: ordNetOverlay?.satflow_rarity?.traits.length ?? 0,
+    satflow_rarity_rank: satflowOverlay?.rarity_overlay?.rank ?? null,
+    satflow_rarity_trait_count: satflowOverlay?.rarity_overlay?.traits.length ?? 0,
+    ord_net_rarity_trait_count: ordNetOverlay?.rarity_overlay?.traits.length ?? 0,
     selected_rarity_source:
-      marketOverlay?.satflow_rarity?.source_ref?.includes("satflow.com")
-        ? "satflow"
-        : marketOverlay?.satflow_rarity
-          ? "ord_net"
-          : "none",
-    selected_rarity_trait_count: marketOverlay?.satflow_rarity?.traits.length ?? 0,
+      marketOverlay?.rarity_overlay?.source ?? "none",
+    selected_rarity_trait_count: marketOverlay?.rarity_overlay?.traits.length ?? 0,
   })
   const ordNetDirectoryMatch = marketOverlay
     ? await fetchOrdNetCollectionDirectoryMatch(marketOverlay, fetchedAt, sourceCatalog)
@@ -232,6 +228,8 @@ export async function fetchCollectionContext(
     registry,
     market: {
       match: marketOverlay,
+      satflow_match: satflowOverlay,
+      ord_net_match: ordNetOverlay,
     },
     profile,
     presentation: buildPresentation(
@@ -241,6 +239,8 @@ export async function fetchCollectionContext(
       protocolGallery,
       registry.match,
       marketOverlay,
+      satflowOverlay,
+      ordNetOverlay,
       satflowStats,
       ordNetDirectoryMatch
     ),
@@ -468,19 +468,32 @@ function buildPresentation(
   gallery: ProtocolGalleryContext | null,
   registryMatch: CuratedRegistryMatch | null,
   marketMatch: MarketOverlayMatch | null,
+  satflowMatch: MarketOverlayMatch | null,
+  ordNetMatch: MarketOverlayMatch | null,
   satflowStats: CollectionMarketStats | null,
   ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null
 ): CollectionContext["presentation"] {
   const facets: CollectionPresentationFacet[] = []
 
-  if (marketMatch) {
+  if (ordNetMatch) {
     facets.push({
-      label: marketMatch.verified ? "Verified Collection" : "Market Overlay",
-      value: marketMatch.collection_name,
-      tone: marketMatch.verified ? "overlay" : "partial",
-      detail: marketMatch.item_name
-        ? `${marketMatch.item_name} · ${marketMatch.collection_slug}`
-        : marketMatch.collection_slug,
+      label: ordNetMatch.verified ? "ord.net verified overlay" : "ord.net overlay",
+      value: ordNetMatch.collection_name,
+      tone: "overlay",
+      detail: ordNetMatch.item_name
+        ? `${ordNetMatch.item_name} · ${ordNetMatch.collection_slug}`
+        : ordNetMatch.collection_slug,
+    })
+  }
+
+  if (satflowMatch) {
+    facets.push({
+      label: "Satflow overlay",
+      value: satflowMatch.collection_name,
+      tone: "overlay",
+      detail: satflowMatch.item_name
+        ? `${satflowMatch.item_name} · ${satflowMatch.collection_slug}`
+        : satflowMatch.collection_slug,
     })
   }
 
@@ -792,8 +805,8 @@ async function fetchMarketOverlay(
   debugCollection(diagnostics, inscriptionId, "ord_net_overlay_parsed", {
     has_overlay: Boolean(overlay),
     collection_slug: overlay?.collection_slug ?? null,
-    rarity_trait_count: overlay?.satflow_rarity?.traits.length ?? 0,
-    rarity_supply: overlay?.satflow_rarity?.supply ?? null,
+    rarity_trait_count: overlay?.rarity_overlay?.traits.length ?? 0,
+    rarity_supply: overlay?.rarity_overlay?.supply ?? null,
   })
   return overlay
 }
@@ -823,9 +836,9 @@ async function fetchSatflowInscriptionOverlay(
   debugCollection(diagnostics, inscriptionId, "satflow_overlay_parsed", {
     has_overlay: Boolean(overlay),
     collection_slug: overlay?.collection_slug ?? null,
-    rarity_rank: overlay?.satflow_rarity?.rank ?? null,
-    rarity_trait_count: overlay?.satflow_rarity?.traits.length ?? 0,
-    rarity_supply: overlay?.satflow_rarity?.supply ?? null,
+    rarity_rank: overlay?.rarity_overlay?.rank ?? null,
+    rarity_trait_count: overlay?.rarity_overlay?.traits.length ?? 0,
+    rarity_supply: overlay?.rarity_overlay?.supply ?? null,
   })
   return overlay
 }
@@ -856,9 +869,9 @@ export function parseSatflowInscriptionOverlay(
   const collectionSlug = extractSatflowCollectionSlug(html, collectionName)
   if (!collectionSlug) return null
 
-  const satflow_rarity = extractSatflowRarity(html)
-  if (satflow_rarity) {
-    satflow_rarity.source_ref = sourceRef
+  const rarity_overlay = extractSatflowRarity(html)
+  if (rarity_overlay) {
+    rarity_overlay.source_ref = sourceRef
   }
 
   return {
@@ -868,7 +881,7 @@ export function parseSatflowInscriptionOverlay(
     item_name: itemName,
     verified: false,
     source_ref: sourceRef,
-    satflow_rarity,
+    rarity_overlay,
   }
 }
 
@@ -999,18 +1012,19 @@ export function parseOrdMarketOverlay(
   html: string,
   sourceRef = `${ORD_MARKET_BASE_URL}/inscription`
 ): MarketOverlayMatch | null {
-  const collectionSlug = html.match(/collection:"([^"]+)"/)?.[1]
-    ?? html.match(/verifiedCollections:\[\{[\s\S]*?slug:"([^"]+)"/)?.[1]
-  const collectionHref = html.match(/collectionHref:"([^"]+)"/)?.[1]
-    ?? html.match(/verifiedCollections:\[\{[\s\S]*?href:"([^"]+)"/)?.[1]
-  const collectionName = html.match(/collection:\{[\s\S]*?name:"([^"]+)"/)?.[1]
-    ?? html.match(/verifiedCollections:\[\{[\s\S]*?name:"([^"]+)"/)?.[1]
-  const itemName = html.match(/item:\{[\s\S]*?name:"([^"]+)"/)?.[1]
-    ?? html.match(/<title>([^<]+)<\/title>/)?.[1]
-  const ownerAddress = html.match(/item:\{[\s\S]*?owner:"([^"]+)"/)?.[1]
-  const verifiedMatch = html.match(/collection:\{[\s\S]*?verified:(true|false)/)?.[1]
-    ?? (html.includes("verifiedCollections:[{") ? "true" : undefined)
-  const ordNetRarity = extractOrdNetVerifiedGalleryTraits(html, sourceRef)
+  const payload = normalizeOrdNetPayload(html)
+  const collectionSlug = payload.match(/"?collection"?:"([^"]+)"/)?.[1]
+    ?? payload.match(/"?verifiedCollections"?:\[\{[\s\S]*?"?slug"?:"([^"]+)"/)?.[1]
+  const collectionHref = payload.match(/"?collectionHref"?:"([^"]+)"/)?.[1]
+    ?? payload.match(/"?verifiedCollections"?:\[\{[\s\S]*?"?href"?:"([^"]+)"/)?.[1]
+  const collectionName = payload.match(/"?collection"?:\{[\s\S]*?"?name"?:"([^"]+)"/)?.[1]
+    ?? payload.match(/"?verifiedCollections"?:\[\{[\s\S]*?"?name"?:"([^"]+)"/)?.[1]
+  const itemName = payload.match(/"?item"?:\{[\s\S]*?"?name"?:"([^"]+)"/)?.[1]
+    ?? payload.match(/<title>([^<]+)<\/title>/)?.[1]
+  const ownerAddress = payload.match(/"?item"?:\{[\s\S]*?"?owner"?:"([^"]+)"/)?.[1]
+  const verifiedMatch = payload.match(/"?collection"?:\{[\s\S]*?"?verified"?:(true|false)/)?.[1]
+    ?? (payload.includes("verifiedCollections:[{") ? "true" : undefined)
+  const ordNetRarity = extractOrdNetVerifiedGalleryTraits(payload, sourceRef)
 
   if (!collectionSlug || !collectionHref || !collectionName) return null
   if (collectionName.toLowerCase() === "uncategorized" || collectionSlug.toLowerCase() === "uncategorized") return null
@@ -1023,8 +1037,14 @@ export function parseOrdMarketOverlay(
     verified: verifiedMatch === "true",
     owner_address: ownerAddress,
     source_ref: sourceRef,
-    satflow_rarity: ordNetRarity,
+    rarity_overlay: ordNetRarity,
   }
+}
+
+function normalizeOrdNetPayload(html: string): string {
+  return html
+    .replace(/&quot;/g, "\"")
+    .replace(/\\"/g, "\"")
 }
 
 export function parseSatflowCollectionStats(
@@ -1063,7 +1083,7 @@ export function parseSatflowCollectionStats(
 
 function extractSatflowRarity(
   html: string
-): MarketOverlayMatch["satflow_rarity"] | undefined {
+): MarketOverlayMatch["rarity_overlay"] | undefined {
   try {
     const rank = extractMetricInteger(html, ["rarityRank"]) ?? 0
     const rawAttributes = selectBestSatflowAttributeArray(html)
@@ -1101,6 +1121,7 @@ function extractSatflowRarity(
     if (rank === 0 && usefulTraits.length === 0 && supply == null) return undefined
 
     return {
+      source: "satflow",
       rank,
       supply,
       source_ref: undefined,
@@ -1143,7 +1164,8 @@ function scoreSatflowAttributeArray(candidate: unknown[]): number {
           : null
 
     if (key && value !== undefined && value !== null) populatedTraits += 1
-    if (count != null && count > 0) countedTraits += 1
+    // Counted traits are only useful when they also have key + value.
+    if (count != null && count > 0 && key && value !== undefined && value !== null) countedTraits += 1
   }
 
   return countedTraits * 100 + populatedTraits
@@ -1201,7 +1223,7 @@ function extractJsonArraysForKey(html: string, key: string): unknown[][] {
 function extractOrdNetVerifiedGalleryTraits(
   html: string,
   sourceRef: string
-): MarketOverlayMatch["satflow_rarity"] | undefined {
+): MarketOverlayMatch["rarity_overlay"] | undefined {
   const marker = "verifiedGalleryTraitGroups:"
   const markerIndex = html.indexOf(marker)
   if (markerIndex === -1) return undefined
@@ -1223,6 +1245,7 @@ function extractOrdNetVerifiedGalleryTraits(
   if (traits.length === 0) return undefined
 
   return {
+    source: "ord_net",
     rank: 0,
     supply: extractLooseIntegerMetric(html, ["totalSupply", "items"]) ?? undefined,
     source_ref: sourceRef,
@@ -1257,24 +1280,27 @@ function mergeMarketOverlays(
   if (!satflowOverlay) return ordNetOverlay
   if (!ordNetOverlay) return satflowOverlay
 
-  const satflowTraits = satflowOverlay.satflow_rarity?.traits.length ?? 0
-  const ordNetTraits = ordNetOverlay.satflow_rarity?.traits.length ?? 0
+  const satflowTraits = satflowOverlay.rarity_overlay?.traits.length ?? 0
+  const ordNetTraits = ordNetOverlay.rarity_overlay?.traits.length ?? 0
   const rarity =
     satflowTraits > 0
-      ? satflowOverlay.satflow_rarity
+      ? satflowOverlay.rarity_overlay
       : ordNetTraits > 0
-        ? ordNetOverlay.satflow_rarity
-        : satflowOverlay.satflow_rarity ?? ordNetOverlay.satflow_rarity
+        ? ordNetOverlay.rarity_overlay
+        : satflowOverlay.rarity_overlay ?? ordNetOverlay.rarity_overlay
 
+  // Provenance/identity should prefer ord.net when it exists because it is the
+  // collection directory/verification layer. Satflow can still provide richer
+  // rarity/frequency data through the selected rarity overlay above.
   return {
-    collection_slug: satflowOverlay.collection_slug || ordNetOverlay.collection_slug,
-    collection_name: satflowOverlay.collection_name || ordNetOverlay.collection_name,
-    collection_href: satflowOverlay.collection_href || ordNetOverlay.collection_href,
-    item_name: satflowOverlay.item_name || ordNetOverlay.item_name,
-    verified: satflowOverlay.verified || ordNetOverlay.verified,
-    owner_address: satflowOverlay.owner_address || ordNetOverlay.owner_address,
-    source_ref: satflowOverlay.source_ref,
-    satflow_rarity: rarity,
+    collection_slug: ordNetOverlay.collection_slug || satflowOverlay.collection_slug,
+    collection_name: ordNetOverlay.collection_name || satflowOverlay.collection_name,
+    collection_href: ordNetOverlay.collection_href || satflowOverlay.collection_href,
+    item_name: ordNetOverlay.item_name || satflowOverlay.item_name,
+    verified: ordNetOverlay.verified || satflowOverlay.verified,
+    owner_address: ordNetOverlay.owner_address || satflowOverlay.owner_address,
+    source_ref: ordNetOverlay.source_ref,
+    rarity_overlay: rarity,
   }
 }
 
@@ -1283,30 +1309,15 @@ function extractBalancedJsonArray(text: string, startIndex: number): string | nu
 
   let depth = 0
   let inString = false
-  let escaped = false
 
   for (let i = startIndex; i < text.length; i++) {
     const ch = text[i]
 
-    if (inString) {
-      if (escaped) {
-        escaped = false
-        continue
-      }
-      if (ch === "\\") {
-        escaped = true
-        continue
-      }
-      if (ch === "\"") {
-        inString = false
-      }
+    if (ch === "\"" && !isEscapedQuote(text, i)) {
+      inString = !inString
       continue
     }
-
-    if (ch === "\"") {
-      inString = true
-      continue
-    }
+    if (inString) continue
 
     if (ch === "[") {
       depth += 1
@@ -1322,6 +1333,14 @@ function extractBalancedJsonArray(text: string, startIndex: number): string | nu
   }
 
   return null
+}
+
+function isEscapedQuote(text: string, index: number): boolean {
+  let backslashCount = 0
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i--) {
+    backslashCount += 1
+  }
+  return backslashCount % 2 === 1
 }
 
 function parseJsonArrayLiteral(arrayLiteral: string): unknown[] | null {

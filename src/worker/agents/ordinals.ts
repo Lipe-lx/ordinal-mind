@@ -88,38 +88,52 @@ export const fetchOrdinals = {
   async metadata(id: string, options?: OrdinalsMetadataOptions): Promise<Record<string, string> | null> {
     try {
       const res = await fetch(`https://ordinals.com/r/metadata/${id}`, {
-        headers: { Accept: "application/json" },
+        headers: { Accept: "application/cbor, application/json, text/plain;q=0.9, */*;q=0.8" },
       })
       if (!res.ok) {
         metadataDiag(options, id, "metadata_http_non_ok", { status: res.status })
         return null
       }
 
-      const payload = await res.json() as unknown
+      const contentType = res.headers.get("content-type")
+      const raw = new Uint8Array(await res.arrayBuffer())
+      const payload = decodeTransportPayload(raw)
       metadataDiag(options, id, "metadata_payload_received", {
+        content_type: contentType,
+        byte_size: raw.byteLength,
         payload_type: payload === null ? "null" : Array.isArray(payload) ? "array" : typeof payload,
       })
 
-      // Some inscriptions expose metadata as JSON directly.
-      const directTraits = toTraitRecord(extractTraits(payload))
-      if (directTraits) {
-        metadataDiag(options, id, "metadata_direct_traits", {
-          trait_count: Object.keys(directTraits).length,
-        })
-        return directTraits
-      }
+      if (payload !== undefined) {
+        // Some inscriptions expose metadata as JSON directly or as a JSON-wrapped CBOR hex string.
+        const directTraits = toTraitRecord(extractTraits(payload))
+        if (directTraits) {
+          metadataDiag(options, id, "metadata_direct_traits", {
+            trait_count: Object.keys(directTraits).length,
+          })
+          return directTraits
+        }
 
-      // Most ordinals metadata responses are CBOR hex payloads.
-      const hexStr = extractHexPayload(payload)
-      if (!hexStr) {
-        metadataDiag(options, id, "metadata_no_hex_payload")
+        const hexStr = extractHexPayload(payload)
+        if (hexStr) {
+          const decoded = cbor.decode(Buffer.from(hexStr, "hex"))
+          const decodedTraits = toTraitRecord(extractTraits(decoded))
+          metadataDiag(options, id, "metadata_cbor_hex_decoded", {
+            hex_size: hexStr.length,
+            trait_count: decodedTraits ? Object.keys(decodedTraits).length : 0,
+          })
+          return decodedTraits
+        }
+
+        metadataDiag(options, id, "metadata_no_traits_or_hex_payload")
         return null
       }
 
-      const decoded = cbor.decode(Buffer.from(hexStr, "hex"))
+      // Native ordinals metadata can also be returned as raw CBOR bytes.
+      const decoded = cbor.decode(Buffer.from(raw))
       const decodedTraits = toTraitRecord(extractTraits(decoded))
-      metadataDiag(options, id, "metadata_cbor_decoded", {
-        hex_size: hexStr.length,
+      metadataDiag(options, id, "metadata_cbor_bytes_decoded", {
+        byte_size: raw.byteLength,
         trait_count: decodedTraits ? Object.keys(decodedTraits).length : 0,
       })
       return decodedTraits
@@ -131,6 +145,25 @@ export const fetchOrdinals = {
       return null
     }
   }
+}
+
+function decodeTransportPayload(raw: Uint8Array): unknown | undefined {
+  const text = decodeTextPayload(raw)
+  if (text == null) return undefined
+
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return text
+  }
+}
+
+function decodeTextPayload(raw: Uint8Array): string | null {
+  const text = new TextDecoder().decode(raw).trim()
+  if (!text) return null
+  if (text.includes("\uFFFD")) return null
+  if (/[\x00-\x08\x0E-\x1F]/.test(text)) return null
+  return text
 }
 
 function metadataDiag(
@@ -157,6 +190,10 @@ const RESERVED_METADATA_KEYS = new Set([
   "external_url",
   "background_color",
   "compiler",
+  "data",
+  "hex",
+  "metadata",
+  "value",
 ])
 
 function extractHexPayload(payload: unknown): string | null {
@@ -195,6 +232,14 @@ function toTraitRecord(
 }
 
 function extractTraits(payload: unknown): Array<{ trait_type: string; value: string }> {
+  // Some indexers/envelopes wrap metadata one level down.
+  for (const key of ["metadata", "meta", "token"]) {
+    const nested = getField(payload, key)
+    if (nested === undefined || typeof nested === "string") continue
+    const fromNested = extractTraits(nested)
+    if (fromNested.length > 0) return fromNested
+  }
+
   // Common NFT-like containers
   for (const key of ["attributes", "traits"]) {
     const fromArray = parseTraitArray(getField(payload, key))

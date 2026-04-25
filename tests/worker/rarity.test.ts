@@ -4,6 +4,7 @@ import { buildInscriptionRarity } from "../../src/worker/rarity"
 describe("rarity builder", () => {
   it("drops empty and duplicate traits before rendering", () => {
     const rarity = buildInscriptionRarity(null, {
+      source: "satflow",
       rank: 0,
       supply: 3333,
       traits: [
@@ -21,5 +22,9 @@ describe("rarity builder", () => {
       { trait_type: "Facial Hair", value: "Long Beard" },
     ])
     expect(rarity?.trait_breakdown).toHaveLength(3)
+  })
+
+  it("returns null when CBOR and market overlay traits are unavailable", () => {
+    expect(buildInscriptionRarity(null, undefined)).toBeNull()
   })
 })

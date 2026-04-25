@@ -38,6 +38,11 @@ Sem login, sem wallet connect, sem API paga. Todo o dado é público e imutável
 **Princípio central:** o Worker apenas agrega dados brutos públicos e cacheáveis. A síntese LLM
 acontece client-side com a key do usuário. O servidor não toca nem armazena chaves de API.
 
+**Atualização operacional (abril/2026):** no OrdinalMind, traits e rarity context do card vêm
+primariamente de `ordinals.com` (CBOR) + overlays públicos (`satflow.com` e fallback `ord.net`).
+A UniSat é usada como enriquecimento opcional de inscrição (charms/metaprotocol), não como fonte
+principal de traits/rank.
+
 ---
 
 ## Estrutura do projeto
@@ -89,7 +94,12 @@ cache.ts → KV lookup por inscription_id
   ↓ cache miss
 ordinals.ts → fetch metadata principal (satpoint, genesis, etc)
   ↓
-Promise.all([mempool (UTXO traceTransfers), xsearch])   ← paralelo
+Promise.all([
+  mempool (UTXO traceTransfers),
+  xsearch,
+  collection overlays (satflow/ord.net),
+  unisat inscription info (opcional)
+])   ← paralelo
   ↓
 timeline.ts → merge, sort por timestamp, tipifica
   ↓

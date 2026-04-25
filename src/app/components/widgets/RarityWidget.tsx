@@ -1,8 +1,9 @@
-// Rarity & Traits Widget — displays trait-based rarity data from UniSat.
+// Rarity & Traits Widget — displays trait-based rarity data from the merged factual pipeline.
 // Shows: rank headline, trait breakdown with frequency bars, data confidence indicator.
 // Refactored to match InscriptionMetaWidget grid style.
 
-import type { UnisatEnrichment, DataValidationResult } from "../../lib/types"
+import { useEffect, useMemo, useState } from "react"
+import type { UnisatEnrichment, DataValidationResult, TraitRarityBreakdown } from "../../lib/types"
 
 interface Props {
   unisatEnrichment?: UnisatEnrichment
@@ -12,6 +13,36 @@ interface Props {
 export function RarityWidget({ unisatEnrichment, validation }: Props) {
   const rarity = unisatEnrichment?.rarity
   if (!rarity || rarity.traits.length === 0) return null
+
+  const TRAITS_PER_PAGE = 6
+  const traitItems: TraitRarityBreakdown[] = rarity.trait_breakdown.length > 0
+    ? rarity.trait_breakdown
+    : rarity.traits.map((trait) => ({
+        trait_type: trait.trait_type,
+        value: trait.value,
+        frequency: undefined,
+        frequency_pct: undefined,
+        rarity_contribution: undefined,
+      }))
+  const totalPages = Math.max(1, Math.ceil(traitItems.length / TRAITS_PER_PAGE))
+  const [currentPage, setCurrentPage] = useState(0)
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages - 1))
+  }, [totalPages])
+
+  const visibleTraits = useMemo(() => {
+    const start = currentPage * TRAITS_PER_PAGE
+    return traitItems.slice(start, start + TRAITS_PER_PAGE)
+  }, [currentPage, traitItems])
+
+  const traitSlots = useMemo(() => {
+    const slots: Array<(typeof visibleTraits)[number] | null> = [...visibleTraits]
+    while (slots.length < TRAITS_PER_PAGE) {
+      slots.push(null)
+    }
+    return slots
+  }, [visibleTraits])
 
   const confidenceIcon = validation
     ? validation.confidence === "high" ? "✓" : validation.confidence === "medium" ? "⚠" : "✗"
@@ -32,32 +63,65 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
 
   return (
     <div className="widget-rarity-grid-wrapper">
-      <div className="widget-rarity-grid-label">Traits & Attributes</div>
-      
-      <div className="widget-meta-grid">
-        {/* Rank Cell */}
-        {rarity.rarity_rank && (
-          <div className="widget-meta-cell">
-            <span className="widget-meta-label">Rarity Rank</span>
-            <span className="widget-meta-value">#{rarity.rarity_rank.toLocaleString("en-US")}</span>
-            <span className="widget-meta-sub">
-              of {rarity.total_supply?.toLocaleString("en-US") ?? "—"} {rarity.rarity_percentile ? `· top ${rarity.rarity_percentile}%` : ""}
+      <div className="widget-rarity-grid-header">
+        <div className="widget-rarity-grid-label">Traits & Attributes</div>
+        {totalPages > 1 && (
+          <div className="widget-rarity-pagination" aria-label="Traits pagination">
+            <button
+              type="button"
+              className="widget-rarity-page-btn"
+              aria-label="Previous traits page"
+              onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
+              disabled={currentPage === 0}
+            >
+              ←
+            </button>
+            <span className="widget-rarity-page-indicator">
+              {currentPage + 1}/{totalPages}
             </span>
+            <button
+              type="button"
+              className="widget-rarity-page-btn"
+              aria-label="Next traits page"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages - 1, page + 1))}
+              disabled={currentPage === totalPages - 1}
+            >
+              →
+            </button>
           </div>
         )}
+      </div>
 
-        {/* Traits */}
-        {rarity.trait_breakdown.map((trait) => (
-          <div key={`${trait.trait_type}-${trait.value}`} className="widget-meta-cell">
-            <span className="widget-meta-label">{trait.trait_type}</span>
-            <span className="widget-meta-value">{trait.value}</span>
-            {trait.frequency_pct !== undefined && (
-              <span className="widget-meta-sub">
-                {trait.frequency_pct < 1
-                  ? `${trait.frequency_pct.toFixed(2)}%`
-                  : `${Math.round(trait.frequency_pct)}%`} freq
-              </span>
-            )}
+      {!!rarity.rarity_rank && (
+        <div className="widget-meta-cell widget-rarity-rank-cell">
+          <span className="widget-meta-label">Rarity Rank</span>
+          <span className="widget-meta-value">#{rarity.rarity_rank.toLocaleString("en-US")}</span>
+          <span className="widget-meta-sub">
+            of {rarity.total_supply?.toLocaleString("en-US") ?? "—"} {rarity.rarity_percentile ? `· top ${rarity.rarity_percentile}%` : ""}
+          </span>
+        </div>
+      )}
+      
+      <div className="widget-meta-grid widget-rarity-traits-grid">
+        {traitSlots.map((trait, index) => (
+          <div
+            key={trait ? `${trait.trait_type}-${trait.value}` : `empty-${currentPage}-${index}`}
+            className={`widget-meta-cell ${trait ? "" : "widget-meta-cell-empty"}`.trim()}
+            aria-hidden={!trait}
+          >
+            {trait ? (
+              <>
+                <span className="widget-meta-label">{trait.trait_type}</span>
+                <span className="widget-meta-value">{trait.value}</span>
+                {trait.frequency_pct !== undefined && (
+                  <span className="widget-meta-sub">
+                    {trait.frequency_pct < 1
+                      ? `${trait.frequency_pct.toFixed(2)}%`
+                      : `${Math.round(trait.frequency_pct)}%`} freq
+                  </span>
+                )}
+              </>
+            ) : null}
           </div>
         ))}
       </div>
@@ -70,7 +134,7 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
           </div>
         )}
         <div className="widget-rarity-source-mini">
-          via {rarity.rarity_rank ? "Satflow & ord.net" : "ord.net"}
+          via public metadata and market overlays
         </div>
       </div>
     </div>
