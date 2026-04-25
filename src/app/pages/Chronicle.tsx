@@ -4,6 +4,7 @@ import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
 import { SatBadge } from "../components/SatBadge"
 import { ScanProgress } from "../components/ScanProgress"
+import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
 import { useSynthesize } from "../lib/byok/useSynthesize"
 import type { ChronicleResponse, ScanProgress as ScanProgressType } from "../lib/types"
 
@@ -106,7 +107,15 @@ function useChronicleStream(id: string) {
 export function Chronicle() {
   const { id } = useLoaderData() as LoaderData
   const { chronicle, progress, error, isScanning, retry } = useChronicleStream(id)
-  const { narrative, loading: synthLoading, error: synthError, synthesize } = useSynthesize()
+  const {
+    narrative,
+    streamingText,
+    phase,
+    elapsed,
+    error: synthError,
+    synthesize,
+    cancel,
+  } = useSynthesize()
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
@@ -155,14 +164,19 @@ export function Chronicle() {
   return (
     <div className="chronicle-page fade-in">
       <div className="chronicle-header">
-        <Link to="/" className="btn btn-ghost">← Back</Link>
-        <h1>
-          Inscription{" "}
-          <span className="chronicle-header-number">
-            #{chronicle.meta.inscription_number}
-          </span>
-        </h1>
-        <SatBadge rarity={chronicle.meta.sat_rarity} />
+        <div className="chronicle-header-left">
+          <Link to="/" className="btn btn-ghost">← Back</Link>
+          <h1>
+            Inscription{" "}
+            <span className="chronicle-header-number">
+              #{chronicle.meta.inscription_number}
+            </span>
+          </h1>
+          <SatBadge rarity={chronicle.meta.sat_rarity} />
+        </div>
+        <div className="chronicle-header-right">
+          <OwnershipWidget events={chronicle.events} genesisAddress={chronicle.meta.owner_address} />
+        </div>
       </div>
 
       <div className="chronicle">
@@ -170,9 +184,12 @@ export function Chronicle() {
         <ChronicleCard
           chronicle={chronicle}
           narrative={narrative}
-          synthLoading={synthLoading}
+          streamingText={streamingText}
+          phase={phase}
+          elapsed={elapsed}
           synthError={synthError}
           onSynthesize={() => synthesize(chronicle)}
+          onCancel={cancel}
         />
 
         {/* Right: Timeline in its own scrollable panel */}

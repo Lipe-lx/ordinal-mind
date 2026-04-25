@@ -1,9 +1,31 @@
-// Shared prompt for the Chronicle Synthesizer.
-// Used by all 3 BYOK adapters. English system prompt, response language adapts to user.
+// Chronicle Synthesizer prompts — split into system + user.
+// System prompt contains role + constraints (never seen by end user).
+// User prompt contains only the inscription data.
 
 import type { ChronicleEvent, InscriptionMeta } from "../types"
 
-export function buildChroniclePrompt(meta: InscriptionMeta, events: ChronicleEvent[]): string {
+/**
+ * System prompt: role definition, constraints, and output format rules.
+ * Sent as `system` message where the API supports it.
+ */
+export function buildSystemPrompt(): string {
+  return `You are a factual chronicler of digital Bitcoin artifacts.
+
+Your task is to write a concise, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
+
+Rules:
+- Write in the same language as the user's browser locale if detectable, otherwise default to English.
+- Tone: objective, with a slight sense of historical weight.
+- Maximum 4 short paragraphs.
+- Every fact must be backed by the provided data. If something is not in the data, do not mention it.
+- Output ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
+}
+
+/**
+ * User prompt: inscription data + timeline events.
+ * This is what varies per request.
+ */
+export function buildUserPrompt(meta: InscriptionMeta, events: ChronicleEvent[]): string {
   const eventsText = events
     .map(
       (e) =>
@@ -11,27 +33,26 @@ export function buildChroniclePrompt(meta: InscriptionMeta, events: ChronicleEve
     )
     .join("\n")
 
-  return `You are a factual chronicler of digital Bitcoin artifacts. Write a concise, factual Chronicle for this Ordinal inscription. Use ONLY the data provided below. Do NOT invent any information.
+  return `Write a Chronicle for this Ordinal inscription:
 
-Write in the same language as the user's browser locale if detectable, otherwise default to English.
+ID: ${meta.inscription_id}
+Number: #${meta.inscription_number}
+Sat: ${meta.sat.toLocaleString("en-US")} (rarity: ${meta.sat_rarity})
+Content type: ${meta.content_type}
+Genesis block: ${meta.genesis_block}
+Current owner: ${meta.owner_address}
+${meta.collection ? `Collection: ${meta.collection.name ?? "unnamed"}` : ""}
 
-Tone: objective, with a slight sense of historical weight. Maximum 4 short paragraphs.
-
-INSCRIPTION DATA:
-- ID: ${meta.inscription_id}
-- Number: #${meta.inscription_number}
-- Sat: ${meta.sat.toLocaleString("en-US")} (rarity: ${meta.sat_rarity})
-- Content type: ${meta.content_type}
-- Genesis block: ${meta.genesis_block}
-- Current owner: ${meta.owner_address}
-${meta.collection ? `- Collection: ${meta.collection.name ?? "unnamed"}` : ""}
-
-EVENT TIMELINE:
+Timeline:
 ${eventsText}
 
-Write the Chronicle now. Every fact must be backed by the data above.
-If something is not in the data, do not mention it.
+Write the Chronicle now.`
+}
 
-CRITICAL INSTRUCTION:
-Output ONLY the final Chronicle text. Do NOT include any internal thoughts, reasoning, <think> tags, constraints, or scratchpad notes. Do NOT repeat the prompt. Return ONLY the 4 paragraphs of the final narrative.`
+/**
+ * Combined prompt for providers that don't support system messages.
+ * Falls back to a single user message containing both parts.
+ */
+export function buildCombinedPrompt(meta: InscriptionMeta, events: ChronicleEvent[]): string {
+  return `${buildSystemPrompt()}\n\n${buildUserPrompt(meta, events)}`
 }

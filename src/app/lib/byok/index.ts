@@ -17,6 +17,12 @@ export interface ByokConfig {
 
 export interface LLMAdapter {
   synthesize(meta: InscriptionMeta, events: ChronicleEvent[]): Promise<string>
+  synthesizeStream(
+    meta: InscriptionMeta,
+    events: ChronicleEvent[],
+    onChunk: (text: string) => void,
+    signal?: AbortSignal
+  ): Promise<string>
   provider: Provider
   model: string
 }
@@ -42,9 +48,9 @@ export const MODELS: Record<string, { id: string, name: string }[]> = {
     { id: "o1", name: "o1" }
   ],
   gemini: [
-    { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" },
-    { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash" },
-    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+    { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro" },
+    { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview" },
+    { id: "gemini-2.5-flash-001", name: "Gemini 2.5 Flash" },
     { id: "gemma-4-31b-it", name: "Gemma 4 (31B)" },
     { id: "gemma-4-26b-a4b-it", name: "Gemma 4 (26B A4B)" }
   ],
