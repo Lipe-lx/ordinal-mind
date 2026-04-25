@@ -5,7 +5,6 @@ import { ChronicleCard } from "../components/ChronicleCard"
 import { InscriptionPreview } from "../components/InscriptionPreview"
 import { InscriptionMetaWidget } from "../components/widgets/InscriptionMetaWidget"
 import { RarityWidget } from "../components/widgets/RarityWidget"
-import { SatBadge } from "../components/SatBadge"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
 import { useSynthesize } from "../lib/byok/useSynthesize"
@@ -140,7 +139,9 @@ export function Chronicle() {
     }
 
     const handleShare = () => {
-      const text = `Inscription #${chronicle.meta.inscription_number} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
+      const fullLabel = chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label
+      const label = fullLabel ? `${fullLabel} (#${chronicle.meta.inscription_number})` : `Inscription #${chronicle.meta.inscription_number}`
+      const text = `${label} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
       const url = window.location.href
 
       if (navigator.share) {
@@ -150,15 +151,36 @@ export function Chronicle() {
       }
     }
 
-    setHeaderCenter(
-      <>
-        <h1 className="layout-header-title">
+    const fullLabel = chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label
+
+    let headerContent: React.ReactNode
+    if (fullLabel) {
+      if (fullLabel.includes(" • ")) {
+        const parts = fullLabel.split(" • ")
+        const colName = parts[0]
+        const itemName = parts.slice(1).join(" • ")
+        headerContent = (
+          <>
+            {colName} <span style={{ opacity: 0.5 }}>•</span> <span style={{ color: "var(--accent-primary)" }}>{itemName}</span>
+          </>
+        )
+      } else {
+        headerContent = <span style={{ color: "var(--accent-primary)" }}>{fullLabel}</span>
+      }
+    } else {
+      headerContent = (
+        <>
           Inscription{" "}
           <span className="chronicle-header-number">
             #{chronicle.meta.inscription_number}
           </span>
-        </h1>
-        <SatBadge rarity={chronicle.meta.sat_rarity} />
+        </>
+      )
+    }
+
+    setHeaderCenter(
+      <>
+        <h1 className="layout-header-title">{headerContent}</h1>
       </>
     )
 

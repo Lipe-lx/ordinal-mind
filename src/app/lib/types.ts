@@ -207,6 +207,8 @@ export interface CollectionContext {
   profile: CollectionProfile | null
   presentation: {
     primary_label?: string
+    item_label?: string
+    full_label?: string
     facets: CollectionPresentationFacet[]
   }
 }

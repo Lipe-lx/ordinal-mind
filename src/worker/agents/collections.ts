@@ -595,14 +595,53 @@ function buildPresentation(
     }
   }
 
+  // Prefer a human-readable collection name. ord.net sometimes returns
+  // a parent inscription ref like "#124517225" instead of the real name.
+  // Satflow typically has the proper collection name (e.g., "Pupsogette").
+  const resolvedCollectionName =
+    registryMatch?.matched_collection ??
+    pickReadableCollectionName(ordNetMatch?.collection_name, satflowMatch?.collection_name) ??
+    marketMatch?.collection_name ??
+    selfDetails?.properties?.attributes?.title
+
+  const itemLabel =
+    ordNetMatch?.item_name ??
+    satflowMatch?.item_name ??
+    selfDetails?.properties?.attributes?.title
+
+  let fullLabel = itemLabel
+  if (resolvedCollectionName && itemLabel) {
+    if (!itemLabel.toLowerCase().startsWith(resolvedCollectionName.toLowerCase())) {
+      fullLabel = `${resolvedCollectionName} • ${itemLabel}`
+    }
+  } else if (resolvedCollectionName) {
+    fullLabel = resolvedCollectionName
+  }
+
   return {
-    primary_label:
-      registryMatch?.matched_collection ??
-      marketMatch?.collection_name ??
-      selfDetails?.properties?.attributes?.title,
+    primary_label: resolvedCollectionName,
+    item_label: itemLabel,
+    full_label: fullLabel,
     facets: mergedFacets,
   }
 }
+
+/**
+ * Returns the most human-readable collection name between two overlay sources.
+ * ord.net sometimes returns a parent inscription ref like "#124517225" or
+ * "p-124517225" as the collection name; satflow usually has the real name.
+ */
+function pickReadableCollectionName(
+  ordNetName: string | undefined,
+  satflowName: string | undefined
+): string | undefined {
+  const isParentRef = (name: string) => /^[#p]-?\d+$/.test(name.trim())
+
+  if (ordNetName && !isParentRef(ordNetName)) return ordNetName
+  if (satflowName && !isParentRef(satflowName)) return satflowName
+  return ordNetName ?? satflowName
+}
+
 
 export function buildCollectionProfile(
   registryMatch: CuratedRegistryMatch | null,

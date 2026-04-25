@@ -1,4 +1,5 @@
 import type { InscriptionMeta, ChronicleEvent } from "../../lib/types"
+import { SatBadge } from "../SatBadge"
 
 interface Props {
   meta: InscriptionMeta
@@ -35,8 +36,7 @@ export function InscriptionMetaWidget({ meta, events }: Props) {
       <MetricCell
         label="Sat"
         value={meta.sat?.toLocaleString("en-US") ?? "—"}
-        badge={meta.sat_rarity}
-        badgeClass={`rarity-badge rarity-${meta.sat_rarity}`}
+        badge={<SatBadge rarity={meta.sat_rarity} />}
       />
       <MetricCell
         label="Genesis Block"
@@ -87,23 +87,19 @@ function MetricCell({
   value,
   sub,
   badge,
-  badgeClass,
   actions,
 }: {
   label: string
   value: string
   sub?: string
-  badge?: string
-  badgeClass?: string
+  badge?: React.ReactNode
   actions?: React.ReactNode
 }) {
   return (
     <div className="widget-meta-cell">
       <span className="widget-meta-label">{label}</span>
       <span className="widget-meta-value">{value}</span>
-      {badge && (
-        <span className={badgeClass || "rarity-badge"}>{badge}</span>
-      )}
+      {badge}
       {sub && <span className="widget-meta-sub">{sub}</span>}
       {actions}
     </div>

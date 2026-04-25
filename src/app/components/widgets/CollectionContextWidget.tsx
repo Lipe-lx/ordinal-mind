@@ -77,7 +77,9 @@ export function CollectionContextWidget({ collectionContext }: Props) {
   if (!hasContent) return null
 
   // Derive the primary badge text from presentation or first curated facet
-  const primaryBadge = presentation.primary_label
+  const primaryBadge = presentation.full_label
+    ?? presentation.item_label
+    ?? presentation.primary_label
     ?? presentation.facets.find((f) => f.tone === "curated" || f.tone === "canonical")?.value
     ?? null
 

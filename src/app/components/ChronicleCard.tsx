@@ -93,8 +93,8 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
         : chronicle.meta.inscription_id
           ? "success"
           : "failed",
-    detail: chronicle.collection_context.presentation.primary_label
-      ? `Metadata + provenance for ${chronicle.collection_context.presentation.primary_label}`
+    detail: (chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label ?? chronicle.collection_context.presentation.primary_label)
+      ? `Metadata + provenance for ${chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label ?? chronicle.collection_context.presentation.primary_label}`
       : "Inscription metadata and protocol provenance",
     cached: chronicle.from_cache,
     count: protocolEntries.length > 0 ? protocolEntries.length : 1,
