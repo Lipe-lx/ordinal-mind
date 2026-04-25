@@ -1,0 +1,103 @@
+import { motion, AnimatePresence } from "motion/react"
+import type { ScanProgress as ScanProgressType } from "../lib/types"
+
+interface Props {
+  progress: ScanProgressType
+  inscriptionId: string
+}
+
+const PHASE_ORDER = ["metadata", "transfers", "mentions", "complete"] as const
+const PHASE_LABELS: Record<string, string> = {
+  metadata: "Inscription Data",
+  transfers: "Transfer History",
+  mentions: "X Mentions",
+  complete: "Building Timeline",
+}
+const PHASE_ICONS: Record<string, string> = {
+  metadata: "🔍",
+  transfers: "⛓️",
+  mentions: "𝕏",
+  complete: "✨",
+}
+
+export function ScanProgress({ progress, inscriptionId }: Props) {
+  const currentPhaseIndex = PHASE_ORDER.indexOf(
+    progress.phase as (typeof PHASE_ORDER)[number]
+  )
+
+  // Short display ID
+  const displayId = inscriptionId.length > 20
+    ? `${inscriptionId.substring(0, 8)}…`
+    : `#${inscriptionId}`
+
+  return (
+    <motion.div
+      className="scan-progress glass-card"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="scan-progress-header">
+        <span className="scan-progress-title">
+          ⛏️ Scanning {displayId}
+        </span>
+      </div>
+
+      <div className="scan-progress-steps">
+        <AnimatePresence mode="popLayout">
+          {PHASE_ORDER.map((phase, index) => {
+            const isComplete = index < currentPhaseIndex
+            const isCurrent = index === currentPhaseIndex
+            const _isFuture = index > currentPhaseIndex
+
+            return (
+              <motion.div
+                key={phase}
+                className={`scan-progress-step ${
+                  isComplete ? "complete" : isCurrent ? "current" : "future"
+                }`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05, duration: 0.2 }}
+              >
+                <span className="scan-progress-step-icon">
+                  {isComplete ? "✅" : isCurrent ? "⏳" : "○"}
+                </span>
+                <span className="scan-progress-step-label">
+                  {PHASE_ICONS[phase]} {PHASE_LABELS[phase]}
+                </span>
+                {isCurrent && (
+                  <motion.span
+                    className="scan-progress-step-detail"
+                    key={progress.description}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {progress.description}
+                  </motion.span>
+                )}
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+      </div>
+
+      {/* Progress bar */}
+      <div className="scan-progress-bar-track">
+        <motion.div
+          className="scan-progress-bar-fill"
+          initial={{ width: "0%" }}
+          animate={{
+            width: `${((currentPhaseIndex + 1) / PHASE_ORDER.length) * 100}%`,
+          }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+        />
+      </div>
+
+      <p className="scan-progress-footer">
+        {currentPhaseIndex + 1}/{PHASE_ORDER.length} phases
+      </p>
+    </motion.div>
+  )
+}
