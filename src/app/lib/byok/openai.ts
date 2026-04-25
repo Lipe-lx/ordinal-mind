@@ -1,9 +1,11 @@
 import type { LLMAdapter, Provider } from "./index"
-import type { ChronicleEvent, InscriptionMeta } from "../types"
-import { buildSystemPrompt, buildUserPrompt, buildCombinedPrompt } from "./prompt"
+import type { Chronicle } from "../types"
+import type { ProviderCapabilities } from "./context"
+import type { SynthesisResult } from "./index"
+import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 
-const API_URL = "https://api.openai.com/v1/chat/completions"
+const API_URL = "https://api.openai.com/v1/responses"
 
 export class OpenAIAdapter implements LLMAdapter {
   readonly provider: Provider = "openai"
@@ -16,54 +18,74 @@ export class OpenAIAdapter implements LLMAdapter {
     }
   }
 
-  async synthesize(meta: InscriptionMeta, events: ChronicleEvent[]): Promise<string> {
+  getCapabilities(): ProviderCapabilities {
+    return {
+      supportsVisionInput: true,
+      supportsToolCalling: true,
+      imageTransport: "public_url",
+      preferredApi: "responses",
+    }
+  }
+
+  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
     try {
-      return await this.request(meta, events, false, true)
+      return await this.request(chronicle, false, true)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(meta, events, false, false)
+        return await this.request(chronicle, false, false)
       }
       throw err
     }
   }
 
   async synthesizeStream(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     onChunk: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
     try {
-      return await this.request(meta, events, true, true, onChunk, signal)
+      return await this.request(chronicle, true, true, onChunk, signal)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(meta, events, true, false, onChunk, signal)
+        return await this.request(chronicle, true, false, onChunk, signal)
       }
       throw err
     }
   }
 
   private async request(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     stream: boolean,
     useSystemRole: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
-    const messages = useSystemRole
+  ): Promise<SynthesisResult> {
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
+    const userContent = [
+      {
+        type: "input_text",
+        text: useSystemRole ? prepared.userPrompt : prepared.combinedPrompt,
+      },
+      ...(prepared.image ? [toOpenAIImageInput(prepared.image)] : []),
+    ]
+
+    const input = useSystemRole
       ? [
-          { role: "system", content: buildSystemPrompt() },
-          { role: "user", content: buildUserPrompt(meta, events) },
+          {
+            role: "system",
+            content: [{ type: "input_text", text: prepared.systemPrompt }],
+          },
+          { role: "user", content: userContent },
         ]
-      : [{ role: "user", content: buildCombinedPrompt(meta, events) }]
+      : [{ role: "user", content: userContent }]
+
     const res = await fetch(API_URL, {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
         model: this.model,
-        max_tokens: 600,
-        messages,
+        max_output_tokens: 600,
+        input,
         stream,
       }),
       signal,
@@ -75,11 +97,15 @@ export class OpenAIAdapter implements LLMAdapter {
     }
 
     if (stream && onChunk) {
-      return this.consumeOpenAIStream(res, onChunk, signal)
+      const text = await this.consumeOpenAIStream(res, onChunk, signal)
+      return { text, inputMode: prepared.inputMode }
     }
 
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-    return data.choices?.[0]?.message?.content ?? ""
+    const data = (await res.json()) as OpenAIResponse
+    return {
+      text: extractOpenAIText(data),
+      inputMode: prepared.inputMode,
+    }
   }
 
   /**
@@ -99,10 +125,16 @@ export class OpenAIAdapter implements LLMAdapter {
       (data) => {
         try {
           const parsed = JSON.parse(data)
-          const content = parsed.choices?.[0]?.delta?.content
-          if (content) {
-            accumulated += content
-            onChunk(content)
+          if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
+            accumulated += parsed.delta
+            onChunk(parsed.delta)
+          } else if (
+            parsed.type === "response.output_text.done" &&
+            typeof parsed.text === "string" &&
+            accumulated.length === 0
+          ) {
+            accumulated = parsed.text
+            onChunk(parsed.text)
           }
         } catch {
           // Skip unparseable chunks
@@ -113,6 +145,39 @@ export class OpenAIAdapter implements LLMAdapter {
 
     return accumulated
   }
+}
+
+function toOpenAIImageInput(image: Awaited<ReturnType<typeof prepareSynthesisInput>>["image"]) {
+  if (!image) return null
+
+  return {
+    type: "input_image",
+    image_url:
+      image.transport === "public_url"
+        ? image.url
+        : `data:${image.mimeType};base64,${image.data}`,
+    detail: image.detail,
+  }
+}
+
+function extractOpenAIText(data: OpenAIResponse): string {
+  if (typeof data.output_text === "string") return data.output_text
+
+  const chunks = data.output
+    ?.flatMap((item) => item.content ?? [])
+    .flatMap((content) => (content.type === "output_text" && typeof content.text === "string" ? [content.text] : []))
+
+  return chunks?.join("") ?? ""
+}
+
+interface OpenAIResponse {
+  output_text?: string
+  output?: {
+    content?: {
+      type?: string
+      text?: string
+    }[]
+  }[]
 }
 
 function isSystemRoleError(err: unknown): boolean {

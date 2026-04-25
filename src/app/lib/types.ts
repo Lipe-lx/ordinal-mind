@@ -17,6 +17,23 @@ export type SatRarity =
   | "legendary"
   | "mythic"
 
+export type SourceTrustLevel =
+  | "canonical_onchain"
+  | "official_index"
+  | "curated_public_registry"
+  | "market_overlay"
+
+export type VisionTransport = "public_url" | "inline_data" | "unsupported"
+
+export type MediaKind =
+  | "image"
+  | "audio"
+  | "video"
+  | "html"
+  | "svg"
+  | "text"
+  | "unknown"
+
 export interface ChronicleEvent {
   id: string
   timestamp: string                    // ISO8601 derived from BTC block
@@ -41,6 +58,7 @@ export interface InscriptionMeta {
   genesis_timestamp: string
   genesis_fee: number
   owner_address: string
+  genesis_owner_address?: string
   // Forward tracking fields
   satpoint?: string                    // "txid:vout:offset" — exact sat location
   genesis_txid: string                 // txid of the reveal transaction
@@ -53,10 +71,103 @@ export interface InscriptionMeta {
   recursive_refs?: string[]            // other inscription IDs referenced
 }
 
+export interface SourceCatalogItem {
+  source_type: string
+  url_or_ref: string
+  trust_level: SourceTrustLevel
+  fetched_at: string
+  partial: boolean
+  detail?: string
+}
+
+export interface MediaContext {
+  kind: MediaKind
+  content_type: string
+  content_url: string
+  vision_eligible: boolean
+  vision_transport: VisionTransport
+  fallback_reason?: string
+}
+
+export interface RelatedInscriptionSummary {
+  inscription_id: string
+  inscription_number?: number
+  content_type?: string
+  content_url?: string
+  genesis_block?: number
+  genesis_timestamp?: string
+}
+
+export interface ProtocolRelationSet {
+  items: RelatedInscriptionSummary[]
+  total_count: number
+  more: boolean
+  source_ref: string
+  partial: boolean
+}
+
+export interface ProtocolGalleryContext {
+  gallery_id: string
+  items: RelatedInscriptionSummary[]
+  total_count: number
+  more: boolean
+  source_ref: string
+  partial: boolean
+}
+
+export interface CuratedRegistryMatch {
+  matched_collection: string
+  match_type: "parent" | "gallery"
+  slug: string
+  registry_ids: string[]
+  quality_state: "verified" | "needs_info"
+  issues: string[]
+  source_ref: string
+}
+
+export interface CollectionPresentationFacet {
+  label: string
+  value: string
+  tone: "canonical" | "curated" | "overlay" | "partial"
+  detail?: string
+}
+
+export interface MarketOverlayMatch {
+  collection_slug: string
+  collection_name: string
+  collection_href: string
+  item_name?: string
+  verified: boolean
+  owner_address?: string
+  source_ref: string
+}
+
+export interface CollectionContext {
+  protocol: {
+    parents: ProtocolRelationSet | null
+    children: ProtocolRelationSet | null
+    gallery: ProtocolGalleryContext | null
+  }
+  registry: {
+    match: CuratedRegistryMatch | null
+    issues: string[]
+  }
+  market: {
+    match: MarketOverlayMatch | null
+  }
+  presentation: {
+    primary_label?: string
+    facets: CollectionPresentationFacet[]
+  }
+}
+
 export interface Chronicle {
   inscription_id: string
   meta: InscriptionMeta
   events: ChronicleEvent[]
+  media_context: MediaContext
+  collection_context: CollectionContext
+  source_catalog: SourceCatalogItem[]
   cached_at: string
   narrative?: string                    // filled client-side by LLM
 }

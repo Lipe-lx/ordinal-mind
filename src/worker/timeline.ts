@@ -27,6 +27,7 @@ export function buildTimeline(
       sat: meta.sat,
       content_type: meta.content_type,
       genesis_fee: meta.genesis_fee,
+      address: meta.genesis_owner_address ?? meta.owner_address,
     },
   })
 

@@ -1,6 +1,8 @@
 import type { LLMAdapter, Provider } from "./index"
-import type { ChronicleEvent, InscriptionMeta } from "../types"
-import { buildSystemPrompt, buildUserPrompt, buildCombinedPrompt } from "./prompt"
+import type { Chronicle } from "../types"
+import type { PreparedImageInput, ProviderCapabilities } from "./context"
+import type { SynthesisResult } from "./index"
+import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 
 const API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -18,47 +20,63 @@ export class OpenRouterAdapter implements LLMAdapter {
     }
   }
 
-  async synthesize(meta: InscriptionMeta, events: ChronicleEvent[]): Promise<string> {
+  getCapabilities(): ProviderCapabilities {
+    return {
+      supportsVisionInput: true,
+      supportsToolCalling: false,
+      imageTransport: "public_url",
+      preferredApi: "chat_completions",
+    }
+  }
+
+  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
     try {
-      return await this.request(meta, events, false, true)
+      return await this.request(chronicle, false, true)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(meta, events, false, false)
+        return await this.request(chronicle, false, false)
       }
       throw err
     }
   }
 
   async synthesizeStream(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     onChunk: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
     try {
-      return await this.request(meta, events, true, true, onChunk, signal)
+      return await this.request(chronicle, true, true, onChunk, signal)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(meta, events, true, false, onChunk, signal)
+        return await this.request(chronicle, true, false, onChunk, signal)
       }
       throw err
     }
   }
 
   private async request(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     stream: boolean,
     useSystemRole: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
     const messages = useSystemRole
       ? [
-          { role: "system", content: buildSystemPrompt() },
-          { role: "user", content: buildUserPrompt(meta, events) },
+          { role: "system", content: prepared.systemPrompt },
+          {
+            role: "user",
+            content: buildOpenRouterContent(prepared.userPrompt, prepared.image),
+          },
         ]
-      : [{ role: "user", content: buildCombinedPrompt(meta, events) }]
+      : [
+          {
+            role: "user",
+            content: buildOpenRouterContent(prepared.combinedPrompt, prepared.image),
+          },
+        ]
     const res = await fetch(API_URL, {
       method: "POST",
       headers: this.headers(),
@@ -77,11 +95,15 @@ export class OpenRouterAdapter implements LLMAdapter {
     }
 
     if (stream && onChunk) {
-      return this.consumeOpenRouterStream(res, onChunk, signal)
+      const text = await this.consumeOpenRouterStream(res, onChunk, signal)
+      return { text, inputMode: prepared.inputMode }
     }
 
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-    return data.choices?.[0]?.message?.content ?? ""
+    return {
+      text: data.choices?.[0]?.message?.content ?? "",
+      inputMode: prepared.inputMode,
+    }
   }
 
   /**
@@ -128,6 +150,23 @@ export class OpenRouterAdapter implements LLMAdapter {
 
     return accumulated
   }
+}
+
+function buildOpenRouterContent(text: string, image?: PreparedImageInput) {
+  if (!image) return text
+
+  return [
+    { type: "text", text },
+    {
+      type: "image_url",
+      image_url: {
+        url:
+          image.transport === "public_url"
+            ? image.url
+            : `data:${image.mimeType};base64,${image.data}`,
+      },
+    },
+  ]
 }
 
 function isSystemRoleError(err: unknown): boolean {

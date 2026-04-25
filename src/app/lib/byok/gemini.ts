@@ -1,6 +1,8 @@
 import type { LLMAdapter, Provider } from "./index"
-import type { ChronicleEvent, InscriptionMeta } from "../types"
-import { buildSystemPrompt, buildUserPrompt, buildCombinedPrompt } from "./prompt"
+import type { Chronicle } from "../types"
+import type { PreparedImageInput, ProviderCapabilities } from "./context"
+import type { SynthesisResult } from "./index"
+import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -9,43 +11,51 @@ export class GeminiAdapter implements LLMAdapter {
   readonly provider: Provider = "gemini"
   constructor(private key: string, public model: string) {}
 
-  async synthesize(meta: InscriptionMeta, events: ChronicleEvent[]): Promise<string> {
+  getCapabilities(): ProviderCapabilities {
+    return {
+      supportsVisionInput: true,
+      supportsToolCalling: true,
+      imageTransport: "inline_data",
+      preferredApi: "generateContent",
+    }
+  }
+
+  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
     try {
-      return await this.request(meta, events, false, true)
+      return await this.request(chronicle, false, true)
     } catch (err) {
       if (isSystemInstructionError(err)) {
         console.warn("[GeminiAdapter] systemInstruction not supported, falling back to combined prompt")
-        return await this.request(meta, events, false, false)
+        return await this.request(chronicle, false, false)
       }
       throw err
     }
   }
 
   async synthesizeStream(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     onChunk: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
     try {
-      return await this.request(meta, events, true, true, onChunk, signal)
+      return await this.request(chronicle, true, true, onChunk, signal)
     } catch (err) {
       if (isSystemInstructionError(err)) {
         console.warn("[GeminiAdapter] systemInstruction not supported in stream mode, falling back")
-        return await this.request(meta, events, true, false, onChunk, signal)
+        return await this.request(chronicle, true, false, onChunk, signal)
       }
       throw err
     }
   }
 
   private async request(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     stream: boolean,
     useSystemInstruction: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
     const action = stream ? "streamGenerateContent" : "generateContent"
     const streamParam = stream ? "&alt=sse" : ""
     const url = `${BASE_URL}/${this.model}:${action}?key=${this.key}${streamParam}`
@@ -54,13 +64,10 @@ export class GeminiAdapter implements LLMAdapter {
     const body: Record<string, unknown> = {
       contents: [
         {
-          parts: [
-            {
-              text: useSystemInstruction
-                ? buildUserPrompt(meta, events)
-                : buildCombinedPrompt(meta, events),
-            },
-          ],
+          parts: buildGeminiParts(
+            useSystemInstruction ? prepared.userPrompt : prepared.combinedPrompt,
+            prepared.image
+          ),
         },
       ],
       generationConfig: { maxOutputTokens: 600 },
@@ -69,7 +76,7 @@ export class GeminiAdapter implements LLMAdapter {
     // Add systemInstruction when supported
     if (useSystemInstruction) {
       body.system_instruction = {
-        parts: [{ text: buildSystemPrompt() }],
+        parts: [{ text: prepared.systemPrompt }],
       }
     }
 
@@ -93,11 +100,15 @@ export class GeminiAdapter implements LLMAdapter {
     }
 
     if (stream && onChunk) {
-      return this.consumeGeminiStream(res, onChunk, signal)
+      const text = await this.consumeGeminiStream(res, onChunk, signal)
+      return { text, inputMode: prepared.inputMode }
     }
 
     const data = (await res.json()) as GeminiResponse
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+    return {
+      text: extractGeminiText(data),
+      inputMode: prepared.inputMode,
+    }
   }
 
   /**
@@ -140,6 +151,39 @@ export class GeminiAdapter implements LLMAdapter {
 
     return accumulated
   }
+}
+
+function buildGeminiParts(text: string, image?: PreparedImageInput) {
+  return [
+    { text },
+    ...(image ? [toGeminiImagePart(image)] : []),
+  ]
+}
+
+function toGeminiImagePart(image: PreparedImageInput) {
+  if (image.transport === "inline_data") {
+    return {
+      inline_data: {
+        mime_type: image.mimeType,
+        data: image.data,
+      },
+    }
+  }
+
+  return {
+    file_data: {
+      mime_type: "text/plain",
+      file_uri: image.url,
+    },
+  }
+}
+
+function extractGeminiText(data: GeminiResponse): string {
+  return (
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("") ?? ""
+  )
 }
 
 

@@ -99,6 +99,7 @@ export const fetchMempool = {
     const transfers: EnrichedTransfer[] = []
     let currentTxid = genesisTxid
     let currentVout = genesisVout
+    let currentOffset = 0
     let depth = 0
 
     while (depth < limit) {
@@ -117,7 +118,8 @@ export const fetchMempool = {
 
       // 3. Analyze: transfer vs sale, extract price
       const inscriptionVinIndex = outspendData.vin ?? 0
-      const transfer = analyzeTransfer(spendingTx, inscriptionVinIndex)
+      const location = findInscriptionOutputLocation(spendingTx, inscriptionVinIndex, currentOffset)
+      const transfer = analyzeTransfer(spendingTx, inscriptionVinIndex, location.vout)
       transfers.push(transfer)
 
       // Report progress
@@ -132,7 +134,8 @@ export const fetchMempool = {
 
       // 4. Determine which vout the inscription moved to in this tx
       currentTxid = spendingTx.txid
-      currentVout = findInscriptionOutputVout(spendingTx, inscriptionVinIndex)
+      currentVout = location.vout
+      currentOffset = location.offset
       depth++
     }
 
@@ -159,12 +162,10 @@ export const fetchMempool = {
  * - OTC peer-to-peer sales without standard PSBT structure
  * - Non-standard marketplace transaction formats
  */
-function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number): EnrichedTransfer {
+function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, inscriptionVout: number): EnrichedTransfer {
   const sellerPrevout = tx.vin[inscriptionVinIndex]?.prevout
   const sellerAddress = sellerPrevout?.scriptpubkey_address ?? "?"
 
-  // Where did the inscription go? (FIFO simplified: vout 0)
-  const inscriptionVout = findInscriptionOutputVout(tx, inscriptionVinIndex)
   const buyerAddress = tx.vout[inscriptionVout]?.scriptpubkey_address ?? "?"
   const postageValue = tx.vout[inscriptionVout]?.value ?? 0
 
@@ -204,24 +205,32 @@ function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number): EnrichedTr
   }
 }
 
-/**
- * Determines which output (vout) the inscription moved to in a transaction.
- *
- * FIFO Simplified: In well-formed ordinal transactions, the inscription
- * always lands on vout 0. This covers ~95% of real-world transfers.
- *
- * A full FIFO implementation would need to:
- * 1. Sum satoshis in all inputs before the inscription input
- * 2. Add the offset of the inscription within its input
- * 3. Walk through outputs, subtracting each output's value
- * 4. The output where the running count hits zero contains the inscription
- *
- * TODO: Implement full FIFO for edge cases (pointer inscriptions,
- * multi-inscription transactions, non-standard tx structures).
- */
-function findInscriptionOutputVout(_tx: MempoolTx, _inscriptionVinIndex: number): number {
-  // Simplified: inscription goes to vout 0 in standard ordinal txs
-  return 0
+export function findInscriptionOutputLocation(
+  tx: MempoolTx,
+  inscriptionVinIndex: number,
+  inputOffset: number
+): { vout: number; offset: number } {
+  const absoluteOffset = tx.vin
+    .slice(0, inscriptionVinIndex)
+    .reduce((sum, input) => sum + (input.prevout?.value ?? 0), 0) + inputOffset
+
+  let running = 0
+  for (let i = 0; i < tx.vout.length; i++) {
+    const value = tx.vout[i].value
+    if (absoluteOffset < running + value) {
+      return {
+        vout: i,
+        offset: absoluteOffset - running,
+      }
+    }
+    running += value
+  }
+
+  // Defensive fallback for malformed or incomplete transaction data.
+  return {
+    vout: Math.max(tx.vout.length - 1, 0),
+    offset: 0,
+  }
 }
 
 const truncAddr = (addr: string) =>

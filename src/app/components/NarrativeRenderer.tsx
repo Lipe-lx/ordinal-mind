@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown"
 import type { SynthesisPhase } from "../lib/byok/useSynthesize"
+import type { SynthesisMode } from "../lib/byok/context"
 
 interface Props {
   /** Final sanitized narrative text (markdown) */
@@ -16,6 +17,8 @@ interface Props {
   modelName?: string
   /** Error message */
   error?: string | null
+  /** Actual request mode used by the adapter */
+  inputMode?: SynthesisMode | null
   /** Called when user clicks Generate */
   onGenerate?: () => void
   /** Called when user clicks Cancel */
@@ -38,6 +41,7 @@ export function NarrativeRenderer({
   providerName,
   modelName,
   error,
+  inputMode,
   onGenerate,
   onCancel,
 }: Props) {
@@ -74,6 +78,11 @@ export function NarrativeRenderer({
               {providerName && modelName && (
                 <span className="narrative-model-badge">
                   {providerName} · {modelName}
+                </span>
+              )}
+              {inputMode && (
+                <span className="narrative-model-badge">
+                  {inputMode === "image+context" ? "image + context" : "text-only"}
                 </span>
               )}
               {elapsed >= 10 && (

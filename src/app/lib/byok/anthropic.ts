@@ -1,6 +1,8 @@
 import type { LLMAdapter, Provider } from "./index"
-import type { ChronicleEvent, InscriptionMeta } from "../types"
-import { buildSystemPrompt, buildUserPrompt, buildCombinedPrompt } from "./prompt"
+import type { Chronicle } from "../types"
+import type { PreparedImageInput, ProviderCapabilities } from "./context"
+import type { SynthesisResult } from "./index"
+import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
@@ -18,45 +20,53 @@ export class AnthropicAdapter implements LLMAdapter {
     }
   }
 
-  async synthesize(meta: InscriptionMeta, events: ChronicleEvent[]): Promise<string> {
+  getCapabilities(): ProviderCapabilities {
+    return {
+      supportsVisionInput: true,
+      supportsToolCalling: true,
+      imageTransport: "public_url",
+      preferredApi: "messages",
+    }
+  }
+
+  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
     try {
-      return await this.requestWithSystemMessage(meta, events, false)
+      return await this.requestWithSystemMessage(chronicle, false)
     } catch (err) {
       if (isSystemMessageError(err)) {
-        return await this.requestCombined(meta, events, false)
+        return await this.requestCombined(chronicle, false)
       }
       throw err
     }
   }
 
   async synthesizeStream(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     onChunk: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
     try {
-      return await this.requestWithSystemMessage(meta, events, true, onChunk, signal)
+      return await this.requestWithSystemMessage(chronicle, true, onChunk, signal)
     } catch (err) {
       if (isSystemMessageError(err)) {
-        return await this.requestCombined(meta, events, true, onChunk, signal)
+        return await this.requestCombined(chronicle, true, onChunk, signal)
       }
       throw err
     }
   }
 
   private async requestWithSystemMessage(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     stream: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
     const body = {
       model: this.model,
       max_tokens: 600,
-      system: buildSystemPrompt(),
-      messages: [{ role: "user", content: buildUserPrompt(meta, events) }],
+      system: prepared.systemPrompt,
+      messages: [{ role: "user", content: buildAnthropicContent(prepared.userPrompt, prepared.image) }],
       stream,
     }
 
@@ -73,24 +83,28 @@ export class AnthropicAdapter implements LLMAdapter {
     }
 
     if (stream && onChunk) {
-      return this.consumeAnthropicStream(res, onChunk, signal)
+      const text = await this.consumeAnthropicStream(res, onChunk, signal)
+      return { text, inputMode: prepared.inputMode }
     }
 
     const data = (await res.json()) as { content?: { text?: string }[] }
-    return data.content?.[0]?.text ?? ""
+    return {
+      text: data.content?.[0]?.text ?? "",
+      inputMode: prepared.inputMode,
+    }
   }
 
   private async requestCombined(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     stream: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
+  ): Promise<SynthesisResult> {
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
     const body = {
       model: this.model,
       max_tokens: 600,
-      messages: [{ role: "user", content: buildCombinedPrompt(meta, events) }],
+      messages: [{ role: "user", content: buildAnthropicContent(prepared.combinedPrompt, prepared.image) }],
       stream,
     }
 
@@ -107,11 +121,15 @@ export class AnthropicAdapter implements LLMAdapter {
     }
 
     if (stream && onChunk) {
-      return this.consumeAnthropicStream(res, onChunk, signal)
+      const text = await this.consumeAnthropicStream(res, onChunk, signal)
+      return { text, inputMode: prepared.inputMode }
     }
 
     const data = (await res.json()) as { content?: { text?: string }[] }
-    return data.content?.[0]?.text ?? ""
+    return {
+      text: data.content?.[0]?.text ?? "",
+      inputMode: prepared.inputMode,
+    }
   }
 
   /**
@@ -145,6 +163,34 @@ export class AnthropicAdapter implements LLMAdapter {
     )
 
     return accumulated
+  }
+}
+
+function buildAnthropicContent(text: string, image?: PreparedImageInput) {
+  return [
+    { type: "text", text },
+    ...(image ? [toAnthropicImageBlock(image)] : []),
+  ]
+}
+
+function toAnthropicImageBlock(image: PreparedImageInput) {
+  if (image.transport === "public_url") {
+    return {
+      type: "image",
+      source: {
+        type: "url",
+        url: image.url,
+      },
+    }
+  }
+
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: image.mimeType,
+      data: image.data,
+    },
   }
 }
 

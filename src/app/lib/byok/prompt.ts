@@ -2,7 +2,7 @@
 // System prompt contains role + constraints (never seen by end user).
 // User prompt contains only the inscription data.
 
-import type { ChronicleEvent, InscriptionMeta } from "../types"
+import type { Chronicle, ChronicleEvent, ProtocolRelationSet, RelatedInscriptionSummary } from "../types"
 
 /**
  * System prompt: role definition, constraints, and output format rules.
@@ -18,6 +18,9 @@ Rules:
 - Tone: objective, with a slight sense of historical weight.
 - Maximum 4 short paragraphs.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
+- Treat protocol-native relations as higher trust than curated registry matches.
+- Parent provenance and galleries are different mechanisms. Never imply that a gallery or curated match creates an on-chain parent-child relationship.
+- If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
 - Output ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
 }
 
@@ -25,26 +28,10 @@ Rules:
  * User prompt: inscription data + timeline events.
  * This is what varies per request.
  */
-export function buildUserPrompt(meta: InscriptionMeta, events: ChronicleEvent[]): string {
-  const eventsText = events
-    .map(
-      (e) =>
-        `[${e.timestamp.substring(0, 10)}] ${e.event_type.toUpperCase()}: ${e.description}`
-    )
-    .join("\n")
+export function buildUserPrompt(chronicle: Chronicle): string {
+  return `Write a Chronicle for this Ordinal inscription using the structured factual context below.
 
-  return `Write a Chronicle for this Ordinal inscription:
-
-ID: ${meta.inscription_id}
-Number: #${meta.inscription_number}
-Sat: ${meta.sat.toLocaleString("en-US")} (rarity: ${meta.sat_rarity})
-Content type: ${meta.content_type}
-Genesis block: ${meta.genesis_block}
-Current owner: ${meta.owner_address}
-${meta.collection ? `Collection: ${meta.collection.name ?? "unnamed"}` : ""}
-
-Timeline:
-${eventsText}
+${buildSynthesisContext(chronicle)}
 
 Write the Chronicle now.`
 }
@@ -53,6 +40,179 @@ Write the Chronicle now.`
  * Combined prompt for providers that don't support system messages.
  * Falls back to a single user message containing both parts.
  */
-export function buildCombinedPrompt(meta: InscriptionMeta, events: ChronicleEvent[]): string {
-  return `${buildSystemPrompt()}\n\n${buildUserPrompt(meta, events)}`
+export function buildCombinedPrompt(chronicle: Chronicle): string {
+  return `${buildSystemPrompt()}\n\n${buildUserPrompt(chronicle)}`
+}
+
+export function buildSynthesisContext(chronicle: Chronicle): string {
+  const { meta, events, media_context, collection_context, source_catalog } = chronicle
+
+  const sections = [
+    buildSection("Identity", [
+      `ID: ${meta.inscription_id}`,
+      `Number: #${meta.inscription_number}`,
+      `Sat: ${meta.sat.toLocaleString("en-US")} (${meta.sat_rarity})`,
+      `Content type: ${meta.content_type}`,
+      `Genesis block: ${meta.genesis_block}`,
+      `Genesis timestamp: ${meta.genesis_timestamp}`,
+      `Genesis owner: ${meta.genesis_owner_address ?? "unknown"}`,
+      `Current owner: ${meta.owner_address}`,
+      meta.collection
+        ? `Parent collection link: ${meta.collection.name ?? meta.collection.parent_inscription_id}`
+        : "Parent collection link: none",
+    ]),
+    buildSection("Media", [
+      `Kind: ${media_context.kind}`,
+      `Vision eligible: ${media_context.vision_eligible ? "yes" : "no"}`,
+      `Content URL: ${media_context.content_url}`,
+      media_context.fallback_reason
+        ? `Fallback reason: ${media_context.fallback_reason}`
+        : "Fallback reason: none",
+    ]),
+    buildSection("On-chain facts", buildTimelineSummary(events)),
+    buildSection("Transfers", summarizeEvents(events, ["transfer", "sale"], 12)),
+    buildSection(
+      "Parents",
+      summarizeRelationSet(
+        collection_context.protocol.parents,
+        (item) => describeRelatedInscription(item)
+      )
+    ),
+    buildSection(
+      "Children",
+      summarizeRelationSet(
+        collection_context.protocol.children,
+        (item) => describeRelatedInscription(item)
+      )
+    ),
+    buildSection(
+      "Gallery sample",
+      collection_context.protocol.gallery
+        ? [
+            `Gallery root: ${collection_context.protocol.gallery.gallery_id}`,
+            `Sample size: ${collection_context.protocol.gallery.total_count}${collection_context.protocol.gallery.more ? "+" : ""}`,
+            ...collection_context.protocol.gallery.items.map((item) => `- ${describeRelatedInscription(item)}`),
+          ]
+        : ["No protocol gallery sample found."],
+    ),
+    buildSection(
+      "Curated collection match",
+      collection_context.registry.match
+        ? [
+            `Matched collection: ${collection_context.registry.match.matched_collection}`,
+            `Match type: ${collection_context.registry.match.match_type}`,
+            `Slug: ${collection_context.registry.match.slug}`,
+            `Quality state: ${collection_context.registry.match.quality_state}`,
+            `Registry IDs: ${collection_context.registry.match.registry_ids.join(", ")}`,
+            collection_context.registry.match.issues.length
+              ? `Issues: ${collection_context.registry.match.issues.join(" | ")}`
+              : "Issues: none",
+          ]
+        : ["No curated registry match found."],
+    ),
+    buildSection(
+      "Market overlay",
+      collection_context.market.match
+        ? [
+            `Collection: ${collection_context.market.match.collection_name}`,
+            `Slug: ${collection_context.market.match.collection_slug}`,
+            `Verified: ${collection_context.market.match.verified ? "yes" : "no"}`,
+            `Item name: ${collection_context.market.match.item_name ?? "unknown"}`,
+            `Collection href: ${collection_context.market.match.collection_href}`,
+          ]
+        : ["No market overlay match found."],
+    ),
+    buildSection("Uncertainties", buildUncertainties(chronicle)),
+    buildSection(
+      "Sources",
+      source_catalog.length > 0
+        ? source_catalog.map((source) =>
+            `- ${source.source_type} · ${source.trust_level} · ${source.partial ? "partial" : "ok"} · ${source.url_or_ref}`
+          )
+        : ["No source catalog entries recorded."],
+    ),
+  ]
+
+  return sections.join("\n\n")
+}
+
+function buildTimelineSummary(events: ChronicleEvent[]): string[] {
+  const summary = summarizeEvents(events, ["genesis", "sat_context", "collection_link", "recursive_ref"], 10)
+  return summary.length > 0 ? summary : ["No additional on-chain context beyond genesis."]
+}
+
+function summarizeEvents(
+  events: ChronicleEvent[],
+  eventTypes: ChronicleEvent["event_type"][],
+  limit: number
+): string[] {
+  const filtered = events
+    .filter((event) => eventTypes.includes(event.event_type))
+    .slice(0, limit)
+    .map((event) => `- [${event.timestamp.slice(0, 10)}] ${event.event_type}: ${event.description}`)
+
+  return filtered.length > 0 ? filtered : ["No events in this section."]
+}
+
+function summarizeRelationSet(
+  relationSet: ProtocolRelationSet | null,
+  formatter: (value: RelatedInscriptionSummary) => string
+): string[] {
+  if (!relationSet || relationSet.items.length === 0) {
+    return ["No related inscriptions found."]
+  }
+
+  const lines = [
+    `Returned count: ${relationSet.total_count}`,
+    `More pages available: ${relationSet.more ? "yes" : "no"}`,
+  ]
+
+  for (const item of relationSet.items) {
+    lines.push(`- ${formatter(item)}`)
+  }
+
+  return lines
+}
+
+function buildUncertainties(chronicle: Chronicle): string[] {
+  const uncertainties: string[] = []
+  const { collection_context, media_context } = chronicle
+
+  if (media_context.fallback_reason) {
+    uncertainties.push(`- Media fallback: ${media_context.fallback_reason}`)
+  }
+
+  if (collection_context.protocol.parents?.partial) {
+    uncertainties.push("- Parent provenance is sampled from the first recursive page.")
+  }
+
+  if (collection_context.protocol.children?.partial) {
+    uncertainties.push("- Children are sampled from the first recursive page.")
+  }
+
+  if (collection_context.protocol.gallery?.partial) {
+    uncertainties.push("- Gallery items are sampled from the first gallery page.")
+  }
+
+  if (collection_context.registry.match?.quality_state === "needs_info") {
+    uncertainties.push("- The curated registry marks this collection as needing more information.")
+  }
+
+  if (collection_context.market.match) {
+    uncertainties.push("- Market overlay collection data is public index metadata, not an on-chain provenance claim.")
+  }
+
+  return uncertainties.length > 0
+    ? uncertainties
+    : ["- No special uncertainties were recorded beyond normal public index limits."]
+}
+
+function describeRelatedInscription(item: RelatedInscriptionSummary): string {
+  const number = item.inscription_number != null ? `#${item.inscription_number}` : "unknown number"
+  const contentType = item.content_type ?? "unknown type"
+  return `${number} · ${item.inscription_id} · ${contentType}`
+}
+
+function buildSection(title: string, lines: string[]): string {
+  return `${title}:\n${lines.join("\n")}`
 }

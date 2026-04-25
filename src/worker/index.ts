@@ -8,6 +8,7 @@
 import { resolveInput } from "./resolver"
 import { fetchMempool } from "./agents/mempool"
 import { fetchOrdinals } from "./agents/ordinals"
+import { buildMediaContext, fetchCollectionContext } from "./agents/collections"
 import { scrapeXMentions } from "./agents/xsearch"
 import { buildTimeline } from "./timeline"
 import { cacheGet, cachePut } from "./cache"
@@ -110,14 +111,49 @@ async function handleStandardChronicle(id: string, env: Env): Promise<Response> 
     return jsonResponse({ error: "Inscription not found" }, 404)
   }
 
-  // 2. Parallel fetch for transfers and mentions
-  const [transfers, xMentions] = await Promise.allSettled([
+  // 2. Parallel fetch for transfers, mentions, and collection context
+  const [transfers, xMentions, collectionContext, genesisTx] = await Promise.allSettled([
     fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, { limit: 30 }),
     scrapeXMentions(id),
+    fetchCollectionContext(id, meta),
+    fetchMempool.tx(meta.genesis_txid),
   ])
 
   const enrichedTransfers = transfers.status === "fulfilled" ? transfers.value : []
   const mentions = xMentions.status === "fulfilled" ? xMentions.value : []
+  const collectionData = collectionContext.status === "fulfilled"
+    ? collectionContext.value
+    : {
+        mediaContext: buildMediaContext(meta),
+        collectionContext: {
+          protocol: { parents: null, children: null, gallery: null },
+          registry: { match: null, issues: [] },
+          market: { match: null },
+          presentation: { facets: [] },
+        },
+        sourceCatalog: [],
+        collectionName: undefined,
+      }
+
+  if (collectionData.collectionName && meta.collection) {
+    meta = {
+      ...meta,
+      collection: {
+        ...meta.collection,
+        name: collectionData.collectionName,
+      },
+    }
+  }
+
+  const genesisOwnerAddress = genesisTx.status === "fulfilled"
+    ? genesisTx.value?.vout?.[meta.genesis_vout]?.scriptpubkey_address
+    : enrichedTransfers[0]?.from_address
+  if (genesisOwnerAddress) {
+    meta = {
+      ...meta,
+      genesis_owner_address: genesisOwnerAddress,
+    }
+  }
 
   // 3. Build timeline
   const events = buildTimeline(meta, enrichedTransfers, mentions)
@@ -126,6 +162,9 @@ async function handleStandardChronicle(id: string, env: Env): Promise<Response> 
     inscription_id: id,
     meta,
     events,
+    media_context: collectionData.mediaContext,
+    collection_context: collectionData.collectionContext,
+    source_catalog: collectionData.sourceCatalog,
     cached_at: new Date().toISOString(),
   }
 
@@ -186,18 +225,22 @@ async function handleStreamingChronicle(id: string, env: Env): Promise<Response>
       })
 
       let transferCount = 0
-      const transfers = await fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, {
-        limit: 30,
-        delayMs: 150,
-        onProgress: async (step, desc) => {
-          transferCount = step
-          await sendEvent("progress", {
+      const [transfers, collectionContext, genesisTx] = await Promise.all([
+        fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, {
+          limit: 30,
+          delayMs: 150,
+          onProgress: async (step, desc) => {
+            transferCount = step
+            await sendEvent("progress", {
             phase: "transfers",
             step,
-            description: desc,
-          })
-        },
-      })
+              description: desc,
+            })
+          },
+        }),
+        fetchCollectionContext(id, meta),
+        fetchMempool.tx(meta.genesis_txid),
+      ])
 
       await sendEvent("progress", {
         phase: "transfers",
@@ -226,12 +269,34 @@ async function handleStreamingChronicle(id: string, env: Env): Promise<Response>
         description: "Building timeline…",
       })
 
+      if (collectionContext.collectionName && meta.collection) {
+        meta = {
+          ...meta,
+          collection: {
+            ...meta.collection,
+            name: collectionContext.collectionName,
+          },
+        }
+      }
+
+      const genesisOwnerAddress = genesisTx?.vout?.[meta.genesis_vout]?.scriptpubkey_address
+        ?? transfers[0]?.from_address
+      if (genesisOwnerAddress) {
+        meta = {
+          ...meta,
+          genesis_owner_address: genesisOwnerAddress,
+        }
+      }
+
       const events = buildTimeline(meta, transfers, mentions)
 
       const chronicle = {
         inscription_id: id,
         meta,
         events,
+        media_context: collectionContext.mediaContext,
+        collection_context: collectionContext.collectionContext,
+        source_catalog: collectionContext.sourceCatalog,
         cached_at: new Date().toISOString(),
       }
 

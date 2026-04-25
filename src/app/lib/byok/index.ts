@@ -1,7 +1,8 @@
 // BYOK provider detection and key management.
 // The key stays in sessionStorage — never sent to the server.
 
-import type { ChronicleEvent, InscriptionMeta } from "../types"
+import type { Chronicle } from "../types"
+import type { ProviderCapabilities, SynthesisMode } from "./context"
 import { AnthropicAdapter } from "./anthropic"
 import { OpenAIAdapter } from "./openai"
 import { GeminiAdapter } from "./gemini"
@@ -15,14 +16,19 @@ export interface ByokConfig {
   key: string
 }
 
+export interface SynthesisResult {
+  text: string
+  inputMode: SynthesisMode
+}
+
 export interface LLMAdapter {
-  synthesize(meta: InscriptionMeta, events: ChronicleEvent[]): Promise<string>
+  synthesize(chronicle: Chronicle): Promise<SynthesisResult>
   synthesizeStream(
-    meta: InscriptionMeta,
-    events: ChronicleEvent[],
+    chronicle: Chronicle,
     onChunk: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string>
+  ): Promise<SynthesisResult>
+  getCapabilities(): ProviderCapabilities
   provider: Provider
   model: string
 }

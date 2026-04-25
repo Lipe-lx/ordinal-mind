@@ -3,6 +3,7 @@ import type { ChronicleEvent } from "../../lib/types"
 interface Props {
   events: ChronicleEvent[]
   genesisAddress?: string
+  currentOwnerAddress?: string
 }
 
 interface OwnershipNode {
@@ -12,9 +13,9 @@ interface OwnershipNode {
 }
 
 /** Horizontal ownership chain showing the transfer history of the inscription. Designed for header placement. */
-export function OwnershipWidget({ events, genesisAddress }: Props) {
-  const chain = buildOwnershipChain(events, genesisAddress)
-  const transferCount = events.filter((e) => e.event_type === "transfer" || e.event_type === "sale").length
+export function OwnershipWidget({ events, genesisAddress, currentOwnerAddress }: Props) {
+  const chain = buildOwnershipChain(events, genesisAddress, currentOwnerAddress)
+  const txCount = events.filter((e) => e.event_type === "genesis" || e.event_type === "transfer" || e.event_type === "sale").length
 
   if (chain.length === 0) {
     return (
@@ -51,8 +52,8 @@ export function OwnershipWidget({ events, genesisAddress }: Props) {
         <>
           <div className="widget-ownership-connector">
             <span className="widget-ownership-arrow">→</span>
-            <span className="widget-ownership-tx-badge" title={`${transferCount} transfers total`}>
-              {transferCount}
+            <span className="widget-ownership-tx-badge" title={`${txCount} on-chain transactions total`}>
+              {txCount}
             </span>
           </div>
 
@@ -84,7 +85,8 @@ export function OwnershipWidget({ events, genesisAddress }: Props) {
 
 function buildOwnershipChain(
   events: ChronicleEvent[],
-  genesisAddress?: string
+  genesisAddress?: string,
+  currentOwnerAddress?: string
 ): OwnershipNode[] {
   const chain: OwnershipNode[] = []
 
@@ -111,6 +113,23 @@ function buildOwnershipChain(
           type: event.event_type as "transfer" | "sale",
         })
       }
+    }
+  }
+
+  if (currentOwnerAddress) {
+    const currentDate = sorted
+      .filter((event) => event.event_type === "transfer" || event.event_type === "sale")
+      .at(-1)?.timestamp
+      ?? sorted.find((event) => event.event_type === "genesis")?.timestamp
+      ?? new Date(0).toISOString()
+
+    const lastAddr = chain.at(-1)?.address
+    if (lastAddr !== currentOwnerAddress) {
+      chain.push({
+        address: currentOwnerAddress,
+        date: currentDate,
+        type: "transfer",
+      })
     }
   }
 

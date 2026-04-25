@@ -113,6 +113,7 @@ export function Chronicle() {
     phase,
     elapsed,
     error: synthError,
+    lastInputMode,
     synthesize,
     cancel,
   } = useSynthesize()
@@ -160,6 +161,17 @@ export function Chronicle() {
   // No data yet
   if (!chronicle) return null
 
+  function handleShare() {
+    const text = `Inscription #${chronicle.meta.inscription_number} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
+    const url = window.location.href
+
+    if (navigator.share) {
+      navigator.share({ title: "Ordinal Mind Chronicle", text, url }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(`${text}\n${url}`).catch(() => {})
+    }
+  }
+
   // Chronicle loaded — render full view
   return (
     <div className="chronicle-page fade-in">
@@ -175,7 +187,13 @@ export function Chronicle() {
           <SatBadge rarity={chronicle.meta.sat_rarity} />
         </div>
         <div className="chronicle-header-right">
-          <OwnershipWidget events={chronicle.events} genesisAddress={chronicle.meta.owner_address} />
+          <button
+            className="btn btn-share-header"
+            onClick={handleShare}
+            title="Share this Chronicle"
+          >
+            ✦ Share
+          </button>
         </div>
       </div>
 
@@ -188,6 +206,7 @@ export function Chronicle() {
           phase={phase}
           elapsed={elapsed}
           synthError={synthError}
+          lastInputMode={lastInputMode}
           onSynthesize={() => synthesize(chronicle)}
           onCancel={cancel}
         />
@@ -195,10 +214,12 @@ export function Chronicle() {
         {/* Right: Timeline in its own scrollable panel */}
         <div className="timeline-panel">
           <div className="timeline-panel-title">
-            Temporal Timeline
-            <span className="timeline-panel-count">
-              {chronicle.events.length} events
-            </span>
+            <span>Temporal Timeline</span>
+            <OwnershipWidget
+              events={chronicle.events}
+              genesisAddress={chronicle.meta.genesis_owner_address}
+              currentOwnerAddress={chronicle.meta.owner_address}
+            />
           </div>
           <TemporalTree events={chronicle.events} />
         </div>

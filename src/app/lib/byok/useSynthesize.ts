@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react"
 import { createAdapter, KeyStore } from "./index"
 import { sanitizeNarrative } from "./sanitizer"
 import type { Chronicle } from "../types"
+import type { SynthesisMode } from "./context"
 
 export type SynthesisPhase =
   | "idle"
@@ -33,6 +34,7 @@ export function useSynthesize() {
   const [phase, setPhase] = useState<SynthesisPhase>("idle")
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [lastInputMode, setLastInputMode] = useState<SynthesisMode | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -58,6 +60,7 @@ export function useSynthesize() {
     clearTimer()
     setPhase("idle")
     setStreamingText("")
+    setLastInputMode(null)
   }, [clearTimer])
 
   const synthesize = useCallback(
@@ -84,6 +87,7 @@ export function useSynthesize() {
       setNarrative(null)
       setStreamingText("")
       setPhase("connecting")
+      setLastInputMode(null)
       startTimer()
 
       const controller = new AbortController()
@@ -93,9 +97,8 @@ export function useSynthesize() {
         setPhase("analyzing")
 
         let firstChunk = true
-        const fullText = await adapter.synthesizeStream(
-          chronicle.meta,
-          chronicle.events,
+        const result = await adapter.synthesizeStream(
+          chronicle,
           (chunk: string) => {
             if (firstChunk) {
               setPhase("streaming")
@@ -112,9 +115,10 @@ export function useSynthesize() {
         }
 
         setPhase("sanitizing")
+        setLastInputMode(result.inputMode)
 
         // Apply sanitizer to final accumulated text
-        const clean = sanitizeNarrative(fullText)
+        const clean = sanitizeNarrative(result.text)
 
         if (!clean) {
           setError("The AI returned an empty response. Try again or switch models.")
@@ -149,6 +153,7 @@ export function useSynthesize() {
     loading: phase !== "idle" && phase !== "done" && phase !== "error",
     error,
     elapsed,
+    lastInputMode,
     synthesize,
     cancel,
   }
