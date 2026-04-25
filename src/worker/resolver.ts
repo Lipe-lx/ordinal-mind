@@ -34,10 +34,17 @@ async function resolveNumberToId(num: number): Promise<string> {
   if (!res.ok) throw new Error(`inscription #${num} not found`)
   
   const html = await res.text()
-  const match = html.match(/\/content\/([a-f0-9]{64}i[0-9]+)/i)
-  
-  if (match && match[1]) {
-    return match[1]
+  const patterns = [
+    /\/content\/([a-f0-9]{64}i[0-9]+)/i,
+    /\/inscription\/([a-f0-9]{64}i[0-9]+)/i,
+    /<dt>\s*id\s*<\/dt>\s*<dd[^>]*>\s*([a-f0-9]{64}i[0-9]+)\s*<\/dd>/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern)
+    if (match?.[1]) {
+      return match[1].toLowerCase()
+    }
   }
   
   throw new Error(`inscription #${num} id could not be resolved`)

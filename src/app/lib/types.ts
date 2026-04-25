@@ -32,6 +32,8 @@ export type MediaKind =
   | "html"
   | "svg"
   | "text"
+  | "model"
+  | "document"
   | "unknown"
 
 export interface ChronicleEvent {
@@ -84,6 +86,7 @@ export interface MediaContext {
   kind: MediaKind
   content_type: string
   content_url: string
+  preview_url: string
   vision_eligible: boolean
   vision_transport: VisionTransport
   fallback_reason?: string

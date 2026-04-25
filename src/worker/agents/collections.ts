@@ -10,6 +10,11 @@ import type {
   RelatedInscriptionSummary,
   SourceCatalogItem,
 } from "../../app/lib/types"
+import {
+  buildOrdinalsPreviewUrl,
+  detectMediaKind,
+  getMediaFallbackReason,
+} from "../../app/lib/media"
 
 const ORDINALS_BASE_URL = "https://ordinals.com"
 const VERIFIED_REGISTRY_URL =
@@ -184,80 +189,28 @@ export async function fetchCollectionContext(
 }
 
 export function buildMediaContext(meta: InscriptionMeta): MediaContext {
-  const contentType = meta.content_type.toLowerCase()
+  const kind = detectMediaKind(meta.content_type)
+  const previewUrl = buildOrdinalsPreviewUrl(meta.inscription_id)
 
-  if (contentType === "image/svg+xml") {
+  if (kind === "image") {
     return {
-      kind: "svg",
+      kind,
       content_type: meta.content_type,
       content_url: meta.content_url,
-      vision_eligible: false,
-      vision_transport: "unsupported",
-      fallback_reason: "SVG inscriptions stay text-only until preview rendering is hardened.",
-    }
-  }
-
-  if (contentType.startsWith("image/")) {
-    return {
-      kind: "image",
-      content_type: meta.content_type,
-      content_url: meta.content_url,
+      preview_url: previewUrl,
       vision_eligible: true,
       vision_transport: "public_url",
     }
   }
 
-  if (contentType.includes("html")) {
-    return {
-      kind: "html",
-      content_type: meta.content_type,
-      content_url: meta.content_url,
-      vision_eligible: false,
-      vision_transport: "unsupported",
-      fallback_reason: "HTML inscriptions stay text-only until a safe preview pipeline exists.",
-    }
-  }
-
-  if (contentType.startsWith("audio/")) {
-    return {
-      kind: "audio",
-      content_type: meta.content_type,
-      content_url: meta.content_url,
-      vision_eligible: false,
-      vision_transport: "unsupported",
-      fallback_reason: "Audio inscriptions are not sent as visual inputs.",
-    }
-  }
-
-  if (contentType.startsWith("video/")) {
-    return {
-      kind: "video",
-      content_type: meta.content_type,
-      content_url: meta.content_url,
-      vision_eligible: false,
-      vision_transport: "unsupported",
-      fallback_reason: "Video inscriptions stay text-only in v1.",
-    }
-  }
-
-  if (contentType.startsWith("text/")) {
-    return {
-      kind: "text",
-      content_type: meta.content_type,
-      content_url: meta.content_url,
-      vision_eligible: false,
-      vision_transport: "unsupported",
-      fallback_reason: "Text inscriptions do not need image input.",
-    }
-  }
-
   return {
-    kind: "unknown",
+    kind,
     content_type: meta.content_type,
     content_url: meta.content_url,
+    preview_url: previewUrl,
     vision_eligible: false,
     vision_transport: "unsupported",
-    fallback_reason: "Content type is not currently supported for multimodal image input.",
+    fallback_reason: getMediaFallbackReason(kind),
   }
 }
 

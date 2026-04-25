@@ -64,6 +64,7 @@ function IssueBadge({ issue }: { issue: string }) {
 }
 
 export function CollectionContextWidget({ collectionContext }: Props) {
+  const [expanded, setExpanded] = useState(false)
   const { presentation, protocol, registry } = collectionContext
   const hasContent =
     presentation.facets.length > 0 ||
@@ -74,91 +75,96 @@ export function CollectionContextWidget({ collectionContext }: Props) {
 
   if (!hasContent) return null
 
+  // Derive the primary badge text from presentation or first curated facet
+  const primaryBadge = presentation.primary_label
+    ?? presentation.facets.find((f) => f.tone === "curated" || f.tone === "canonical")?.value
+    ?? null
+
+  // Remaining facets (skip the one already shown in the badge)
+  const detailFacets = primaryBadge
+    ? presentation.facets.filter((f) => f.value !== primaryBadge)
+    : presentation.facets
+
+  // Collect all relation groups into a flat structure for inline rendering
+  const relationGroups: { icon: string; label: string; items: RelatedInscriptionSummary[]; partial: boolean }[] = []
+  if ((protocol.parents?.items.length ?? 0) > 0) {
+    relationGroups.push({ icon: "⬆", label: "Parent", items: protocol.parents?.items ?? [], partial: protocol.parents?.partial ?? false })
+  }
+  if ((protocol.children?.items.length ?? 0) > 0) {
+    relationGroups.push({ icon: "⬇", label: "Children", items: protocol.children?.items ?? [], partial: protocol.children?.partial ?? false })
+  }
+  if ((protocol.gallery?.items.length ?? 0) > 0) {
+    relationGroups.push({ icon: "🖼", label: "Gallery", items: protocol.gallery?.items ?? [], partial: protocol.gallery?.partial ?? false })
+  }
+
+  const hasDetails = detailFacets.length > 0 || relationGroups.length > 0
+
   return (
-    <div className="widget-provenance">
-      <div className="widget-provenance-label">
-        <span>Provenance &amp; Collections</span>
-        <div className="widget-provenance-badges">
+    <div className={`widget-provenance ${expanded ? "expanded" : ""}`}>
+      <div
+        className="widget-provenance-header"
+        onClick={() => hasDetails && setExpanded(!expanded)}
+        style={{ cursor: hasDetails ? "pointer" : "default" }}
+      >
+        <div className="widget-provenance-header-left">
+          {primaryBadge && (
+            <span className="widget-provenance-badge">
+              <span className="widget-provenance-badge-icon">✓</span>
+              {primaryBadge}
+            </span>
+          )}
+          <span className="widget-provenance-title">Provenance &amp; Collections</span>
           {registry.issues.map((issue) => (
             <IssueBadge key={issue} issue={issue} />
           ))}
         </div>
+        {hasDetails && (
+          <span className="widget-provenance-expander">
+            {expanded ? "▲" : "▼"}
+          </span>
+        )}
       </div>
 
-      {presentation.facets.length > 0 && (
-        <div className="widget-provenance-facets">
-          {presentation.facets.map((facet) => (
+      {expanded && (
+        <div className="widget-provenance-flow">
+          {/* Detail facets as inline pills */}
+          {detailFacets.map((facet) => (
             <div
               key={`${facet.label}-${facet.value}`}
-              className={`widget-provenance-facet tone-${facet.tone}`}
+              className={`widget-provenance-pill tone-${facet.tone}`}
               title={facet.detail}
             >
-              <span className="widget-provenance-facet-label">{facet.label}</span>
-              <span className="widget-provenance-facet-value">{facet.value}</span>
-              {facet.detail && (
-                <span className="widget-provenance-facet-detail">{facet.detail}</span>
-              )}
+              <span className="widget-provenance-pill-label">{facet.label}</span>
+              <span className="widget-provenance-pill-value">{facet.value}</span>
+            </div>
+          ))}
+
+          {/* Relation groups as inline pills */}
+          {relationGroups.map((group) => (
+            <div key={group.label} className="widget-provenance-pill tone-canonical">
+              <span className="widget-provenance-pill-icon">{group.icon}</span>
+              <span className="widget-provenance-pill-label">{group.label}</span>
+              <span className="widget-provenance-pill-value">
+                {group.items.slice(0, 3).map((item, i) => (
+                  <a
+                    key={item.inscription_id}
+                    className="widget-provenance-pill-link"
+                    href={`https://ordinals.com/inscription/${item.inscription_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {item.inscription_number != null ? `#${item.inscription_number}` : "?"}
+                    {i < Math.min(group.items.length, 3) - 1 && ", "}
+                  </a>
+                ))}
+                {group.partial && <span className="widget-provenance-pill-partial">…</span>}
+              </span>
             </div>
           ))}
         </div>
       )}
-
-      {(protocol.parents?.items.length ?? 0) > 0 && (
-        <RelationList
-          title="Parent Sample"
-          items={protocol.parents?.items ?? []}
-          partial={protocol.parents?.partial ?? false}
-        />
-      )}
-
-      {(protocol.children?.items.length ?? 0) > 0 && (
-        <RelationList
-          title="Child Sample"
-          items={protocol.children?.items ?? []}
-          partial={protocol.children?.partial ?? false}
-        />
-      )}
-
-      {(protocol.gallery?.items.length ?? 0) > 0 && (
-        <RelationList
-          title="Gallery Sample"
-          items={protocol.gallery?.items ?? []}
-          partial={protocol.gallery?.partial ?? false}
-        />
-      )}
     </div>
   )
 }
 
-function RelationList({
-  title,
-  items,
-  partial,
-}: {
-  title: string
-  items: RelatedInscriptionSummary[]
-  partial: boolean
-}) {
-  return (
-    <div className="widget-provenance-list">
-      <div className="widget-provenance-list-title">
-        <span>{title}</span>
-        {partial && <span className="widget-provenance-partial">sampled</span>}
-      </div>
-      <div className="widget-provenance-list-items">
-        {items.slice(0, 4).map((item) => (
-          <a
-            key={item.inscription_id}
-            className="widget-provenance-item"
-            href={`https://ordinals.com/inscription/${item.inscription_id}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span>{item.inscription_number != null ? `#${item.inscription_number}` : "unknown"}</span>
-            <span>{item.content_type ?? "unknown type"}</span>
-          </a>
-        ))}
-      </div>
-    </div>
-  )
-}

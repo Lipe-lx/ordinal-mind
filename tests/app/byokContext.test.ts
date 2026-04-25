@@ -47,6 +47,7 @@ const chronicle: Chronicle = {
     kind: "image",
     content_type: "image/png",
     content_url: "https://ordinals.com/content/rooti0",
+    preview_url: "https://ordinals.com/preview/rooti0",
     vision_eligible: true,
     vision_transport: "public_url",
   },
@@ -184,9 +185,11 @@ describe("prepareSynthesisInput", () => {
           kind: "svg",
           content_type: "image/svg+xml",
           content_url: "https://ordinals.com/content/rooti0",
+          preview_url: "https://ordinals.com/preview/rooti0",
           vision_eligible: false,
           vision_transport: "unsupported",
-          fallback_reason: "SVG inscriptions stay text-only until preview rendering is hardened.",
+          fallback_reason:
+            "SVG inscriptions render through ordinals preview and stay text-only for synthesis.",
         },
       },
       {

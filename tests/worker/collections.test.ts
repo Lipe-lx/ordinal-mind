@@ -182,12 +182,13 @@ describe("media context", () => {
   it("marks image inscriptions as vision eligible", () => {
     expect(buildMediaContext(baseMeta)).toMatchObject({
       kind: "image",
+      preview_url: "https://ordinals.com/preview/meta123i0",
       vision_eligible: true,
       vision_transport: "public_url",
     })
   })
 
-  it("keeps SVG inscriptions in text-only mode", () => {
+  it("keeps SVG inscriptions in preview-backed text-only mode", () => {
     const media = buildMediaContext({
       ...baseMeta,
       content_type: "image/svg+xml",
@@ -195,7 +196,22 @@ describe("media context", () => {
 
     expect(media.vision_eligible).toBe(false)
     expect(media.kind).toBe("svg")
-    expect(media.fallback_reason).toContain("text-only")
+    expect(media.preview_url).toBe("https://ordinals.com/preview/meta123i0")
+    expect(media.fallback_reason).toContain("ordinals preview")
+  })
+
+  it("routes model inscriptions through ordinals preview", () => {
+    const media = buildMediaContext({
+      ...baseMeta,
+      content_type: "model/gltf+json",
+    })
+
+    expect(media).toMatchObject({
+      kind: "model",
+      preview_url: "https://ordinals.com/preview/meta123i0",
+      vision_eligible: false,
+      vision_transport: "unsupported",
+    })
   })
 })
 
