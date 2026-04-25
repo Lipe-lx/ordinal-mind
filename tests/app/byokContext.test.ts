@@ -120,6 +120,38 @@ const chronicle: Chronicle = {
         source_ref: "https://ord.net/inscription/rooti0",
       },
     },
+    profile: {
+      name: "Quantum Cats",
+      slug: "quantum_cats",
+      summary: "Quantum Cats is a collection profile used by this test.",
+      creators: [
+        {
+          label: "Creator",
+          value: "Taproot Wizards",
+          source_ref: "https://example.com/quantum-cats",
+        },
+      ],
+      milestones: [
+        {
+          label: "Collection match",
+          value: "Matched through public collection context.",
+          source_ref: "https://example.com/quantum-cats",
+        },
+      ],
+      collector_signals: [
+        {
+          label: "Provenance",
+          value: "Has an on-chain parent relation.",
+          source_ref: "https://ordinals.com/r/parents/rooti0/inscriptions",
+        },
+      ],
+      market_stats: {
+        source_ref: "https://www.satflow.com/ordinals/quantum-cats",
+        supply: "3.3K",
+        listed: "100",
+      },
+      sources: [],
+    },
     presentation: {
       primary_label: "Quantum Cats",
       facets: [
@@ -154,9 +186,12 @@ describe("buildSynthesisContext", () => {
 
     expect(context).toContain("Identity:")
     expect(context).toContain("Gallery sample:")
+    expect(context).toContain("Collector focus:")
+    expect(context).toContain("Collection profile:")
     expect(context).toContain("Curated collection match:")
     expect(context).toContain("Market overlay:")
     expect(context).toContain("Quantum Cats")
+    expect(context).toContain("Primary lens")
     expect(context).toContain("protocol_inscription")
   })
 })

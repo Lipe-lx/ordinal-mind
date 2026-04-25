@@ -1,6 +1,8 @@
 import type {
   CollectionContext,
+  CollectionMarketStats,
   CollectionPresentationFacet,
+  CollectionProfile,
   CuratedRegistryMatch,
   InscriptionMeta,
   MarketOverlayMatch,
@@ -15,6 +17,7 @@ import {
   detectMediaKind,
   getMediaFallbackReason,
 } from "../../app/lib/media"
+import { buildCuratedCollectionProfile } from "../collectionProfiles"
 
 const ORDINALS_BASE_URL = "https://ordinals.com"
 const VERIFIED_REGISTRY_URL =
@@ -24,6 +27,8 @@ const NEEDS_INFO_REGISTRY_URL =
 const LEGACY_COLLECTIONS_BASE_URL =
   "https://raw.githubusercontent.com/TheWizardsOfOrd/ordinals-collections/main/legacy/collections"
 const ORD_MARKET_BASE_URL = "https://ord.net"
+const SATFLOW_ORDINALS_BASE_URL = "https://www.satflow.com/ordinals"
+const SATFLOW_ORDINAL_BASE_URL = "https://www.satflow.com/ordinal"
 
 const MAX_PARENT_ITEMS = 10
 const MAX_CHILD_ITEMS = 20
@@ -81,6 +86,16 @@ interface LegacyCollectionItem {
   meta?: {
     name?: string
   }
+}
+
+export interface OrdNetCollectionDirectoryEntry {
+  name: string
+  slug: string
+  section: "popular" | "trending" | "recently_verified"
+  rank?: number
+  volume_24h?: string
+  supply?: string
+  source_ref: string
 }
 
 type RegistryEntry =
@@ -144,7 +159,16 @@ export async function fetchCollectionContext(
   ])
 
   const protocolGallery = await fetchProtocolGallery(inscriptionId, selfDetails, fetchedAt, sourceCatalog)
-  const marketOverlay = await fetchMarketOverlay(inscriptionId, fetchedAt, sourceCatalog)
+  const ordNetOverlay = await fetchMarketOverlay(inscriptionId, fetchedAt, sourceCatalog)
+  // Fallback: when ord.net doesn't classify the inscription, try Satflow's individual page
+  const marketOverlay = ordNetOverlay
+    ?? await fetchSatflowInscriptionOverlay(inscriptionId, fetchedAt, sourceCatalog)
+  const ordNetDirectoryMatch = marketOverlay
+    ? await fetchOrdNetCollectionDirectoryMatch(marketOverlay, fetchedAt, sourceCatalog)
+    : null
+  const satflowStats = marketOverlay?.collection_slug
+    ? await fetchSatflowCollectionStats(marketOverlay.collection_slug, fetchedAt, sourceCatalog)
+    : null
   const registry = await fetchRegistryOverlay(
     inscriptionId,
     selfDetails,
@@ -154,6 +178,8 @@ export async function fetchCollectionContext(
     fetchedAt,
     sourceCatalog
   )
+  const profile = buildCollectionProfile(registry.match, marketOverlay, satflowStats, ordNetDirectoryMatch, fetchedAt)
+  appendUniqueSourceCatalogItems(sourceCatalog, profile?.sources ?? [])
 
   const collectionContext: CollectionContext = {
     protocol: {
@@ -165,13 +191,16 @@ export async function fetchCollectionContext(
     market: {
       match: marketOverlay,
     },
+    profile,
     presentation: buildPresentation(
       selfDetails,
       parents,
       children,
       protocolGallery,
       registry.match,
-      marketOverlay
+      marketOverlay,
+      satflowStats,
+      ordNetDirectoryMatch
     ),
   }
 
@@ -185,6 +214,18 @@ export async function fetchCollectionContext(
     collectionContext,
     sourceCatalog,
     collectionName,
+  }
+}
+
+function appendUniqueSourceCatalogItems(
+  sourceCatalog: SourceCatalogItem[],
+  items: SourceCatalogItem[]
+): void {
+  for (const item of items) {
+    const exists = sourceCatalog.some((source) =>
+      source.source_type === item.source_type && source.url_or_ref === item.url_or_ref
+    )
+    if (!exists) sourceCatalog.push(item)
   }
 }
 
@@ -368,7 +409,9 @@ function buildPresentation(
   children: ProtocolRelationSet | null,
   gallery: ProtocolGalleryContext | null,
   registryMatch: CuratedRegistryMatch | null,
-  marketMatch: MarketOverlayMatch | null
+  marketMatch: MarketOverlayMatch | null,
+  satflowStats: CollectionMarketStats | null,
+  ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null
 ): CollectionContext["presentation"] {
   const facets: CollectionPresentationFacet[] = []
 
@@ -434,6 +477,35 @@ function buildPresentation(
     })
   }
 
+  if (satflowStats?.supply) {
+    facets.push({
+      label: "Market supply",
+      value: satflowStats.supply,
+      tone: "overlay",
+      detail: "Satflow public collection index",
+    })
+  }
+
+  if (satflowStats?.listed) {
+    facets.push({
+      label: "Listed",
+      value: satflowStats.listed,
+      tone: "overlay",
+      detail: satflowStats.floor_price ? `floor ${satflowStats.floor_price}` : "Satflow public listing data",
+    })
+  }
+
+  if (ordNetDirectoryMatch) {
+    facets.push({
+      label: "ord.net index",
+      value: formatOrdNetSection(ordNetDirectoryMatch.section),
+      tone: "overlay",
+      detail: ordNetDirectoryMatch.rank
+        ? `rank #${ordNetDirectoryMatch.rank}`
+        : "public marketplace collection directory",
+    })
+  }
+
   const mergedFacets: CollectionPresentationFacet[] = []
   for (const f of facets) {
     const existing = mergedFacets.find(m => m.label === f.label)
@@ -461,6 +533,167 @@ function buildPresentation(
   }
 }
 
+export function buildCollectionProfile(
+  registryMatch: CuratedRegistryMatch | null,
+  marketMatch: MarketOverlayMatch | null,
+  marketStats: CollectionMarketStats | null,
+  ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null,
+  fetchedAt: string
+): CollectionProfile | null {
+  const slug = marketMatch?.collection_slug ?? registryMatch?.slug
+  const name = registryMatch?.matched_collection ?? marketMatch?.collection_name
+
+  if (!slug || !name) return null
+
+  const sourceRef = marketStats?.source_ref ?? marketMatch?.source_ref ?? registryMatch?.source_ref ?? slug
+  const sources: SourceCatalogItem[] = []
+
+  if (marketStats) {
+    sources.push({
+      source_type: "market_collection_satflow",
+      url_or_ref: marketStats.source_ref,
+      trust_level: "market_overlay",
+      fetched_at: fetchedAt,
+      partial: false,
+      detail: "Satflow public collection stats",
+    })
+  }
+
+  const curated = buildCuratedCollectionProfile({
+    slug,
+    name,
+    fetchedAt,
+    fallbackSourceRef: sourceRef,
+    marketStats,
+  })
+  if (curated) {
+    return {
+      ...curated,
+      collector_signals: [
+        ...curated.collector_signals,
+        ...buildSatflowMarketSignals(marketStats),
+        ...buildOrdNetDirectorySignals(ordNetDirectoryMatch),
+      ],
+      sources: [...curated.sources, ...sources],
+    }
+  }
+
+  return {
+    name,
+    slug,
+    summary: "Collection context was found through public collection indexes. No curated historical profile is available yet.",
+    creators: [],
+    milestones: [],
+    collector_signals: [
+      {
+        label: "Collection match",
+        value: marketMatch?.verified
+          ? "Matched through a verified public market overlay."
+          : "Matched through public market or registry metadata.",
+        source_ref: sourceRef,
+      },
+      ...buildSatflowMarketSignals(marketStats),
+      ...buildOrdNetDirectorySignals(ordNetDirectoryMatch),
+    ],
+    market_stats: marketStats ?? undefined,
+    sources,
+  }
+}
+
+function buildSatflowMarketSignals(
+  stats: CollectionMarketStats | null
+): CollectionProfile["collector_signals"] {
+  if (!stats) return []
+
+  const values = [
+    stats.floor_price ? `floor ${stats.floor_price}` : null,
+    stats.change_7d ? `7D change ${stats.change_7d}` : null,
+    stats.volume_7d ? `7D volume ${stats.volume_7d}` : null,
+    stats.supply ? `supply ${stats.supply}` : null,
+    stats.listed ? `listed ${stats.listed}` : null,
+    stats.market_cap ? `market cap ${stats.market_cap}` : null,
+  ].filter(Boolean)
+
+  if (values.length === 0) return []
+
+  return [
+    {
+      label: "Satflow collection market",
+      value: values.join(" · "),
+      source_ref: stats.source_ref,
+    },
+  ]
+}
+
+function buildOrdNetDirectorySignals(
+  entry: OrdNetCollectionDirectoryEntry | null
+): CollectionProfile["collector_signals"] {
+  if (!entry) return []
+
+  return [
+    {
+      label: "ord.net collection directory",
+      value: [
+        `Appears in the ord.net ${formatOrdNetSection(entry.section)} collection index`,
+        entry.rank ? `rank #${entry.rank}` : null,
+        entry.volume_24h ? `24h volume ${entry.volume_24h}` : null,
+        entry.supply ? `supply ${entry.supply}` : null,
+      ].filter(Boolean).join(" · "),
+      source_ref: entry.source_ref,
+    },
+  ]
+}
+
+function formatOrdNetSection(section: OrdNetCollectionDirectoryEntry["section"]): string {
+  return section.replaceAll("_", " ")
+}
+
+async function fetchOrdNetCollectionDirectoryMatch(
+  marketOverlay: MarketOverlayMatch,
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[]
+): Promise<OrdNetCollectionDirectoryEntry | null> {
+  const html = await fetchOptionalText(ORD_MARKET_BASE_URL, {
+    sourceCatalog,
+    sourceType: "market_collection_directory_ord_net",
+    urlOrRef: ORD_MARKET_BASE_URL,
+    trustLevel: "market_overlay",
+    fetchedAt,
+    detail: "ord.net public collection directory",
+  })
+
+  if (!html) return null
+
+  const entries = parseOrdNetCollectionDirectory(html, ORD_MARKET_BASE_URL)
+  const targetSlug = normalizeCollectionSlug(marketOverlay.collection_slug)
+  const targetName = normalizeCollectionSlug(marketOverlay.collection_name)
+
+  return entries.find((entry) =>
+    normalizeCollectionSlug(entry.slug) === targetSlug ||
+    normalizeCollectionSlug(entry.name) === targetName
+  ) ?? null
+}
+
+async function fetchSatflowCollectionStats(
+  slug: string,
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[]
+): Promise<CollectionMarketStats | null> {
+  const normalizedSlug = slug.toLowerCase().replaceAll("_", "-")
+  const url = `${SATFLOW_ORDINALS_BASE_URL}/${encodeURIComponent(normalizedSlug)}`
+  const html = await fetchOptionalText(url, {
+    sourceCatalog,
+    sourceType: "market_collection_satflow",
+    urlOrRef: url,
+    trustLevel: "market_overlay",
+    fetchedAt,
+    detail: "Satflow public collection page",
+  })
+
+  if (!html) return null
+  return parseSatflowCollectionStats(html, url)
+}
+
 async function fetchMarketOverlay(
   inscriptionId: string,
   fetchedAt: string,
@@ -478,6 +711,69 @@ async function fetchMarketOverlay(
 
   if (!html) return null
   return parseOrdMarketOverlay(html, url)
+}
+
+async function fetchSatflowInscriptionOverlay(
+  inscriptionId: string,
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[]
+): Promise<MarketOverlayMatch | null> {
+  const url = `${SATFLOW_ORDINAL_BASE_URL}/${inscriptionId}`
+  const html = await fetchOptionalText(url, {
+    sourceCatalog,
+    sourceType: "market_overlay_satflow",
+    urlOrRef: url,
+    trustLevel: "market_overlay",
+    fetchedAt,
+    detail: "Satflow individual inscription overlay",
+  })
+
+  if (!html) return null
+  return parseSatflowInscriptionOverlay(html, url)
+}
+
+export function parseSatflowInscriptionOverlay(
+  html: string,
+  sourceRef: string
+): MarketOverlayMatch | null {
+  // Pattern 1: OG title — "{ItemName} - {CollectionName}" (when collection exists)
+  // When no collection: "Ordinal {id}" — skip this
+  const ogTitle = html.match(
+    /og:title["']?\s*content=["']([^"']+)["']/
+  )?.[1]
+
+  // If the OG title starts with "Ordinal " it means Satflow doesn't know the collection
+  if (!ogTitle || ogTitle.startsWith("Ordinal ")) return null
+
+  // Pattern 2: collection href — href="/ordinals/{slug}"
+  const collectionHrefMatch = html.match(
+    /href=["']\/ordinals\/([^"']+)["']/
+  )
+  const collectionSlug = collectionHrefMatch?.[1]
+  if (!collectionSlug) return null
+
+  // Parse the title: "{ItemName} - {CollectionName}"
+  const titleParts = ogTitle.split(" - ")
+  let collectionName: string
+  let itemName: string | undefined
+
+  if (titleParts.length >= 2) {
+    itemName = titleParts[0].trim()
+    collectionName = titleParts.slice(1).join(" - ").trim()
+  } else {
+    collectionName = ogTitle.trim()
+  }
+
+  if (!collectionName) return null
+
+  return {
+    collection_slug: collectionSlug,
+    collection_name: collectionName,
+    collection_href: `/ordinals/${collectionSlug}`,
+    item_name: itemName,
+    verified: false,
+    source_ref: sourceRef,
+  }
 }
 
 export async function selectRegistryMatchFromMarketOverlay(
@@ -620,6 +916,7 @@ export function parseOrdMarketOverlay(
     ?? (html.includes("verifiedCollections:[{") ? "true" : undefined)
 
   if (!collectionSlug || !collectionHref || !collectionName) return null
+  if (collectionName.toLowerCase() === "uncategorized" || collectionSlug.toLowerCase() === "uncategorized") return null
 
   return {
     collection_slug: collectionSlug,
@@ -630,6 +927,180 @@ export function parseOrdMarketOverlay(
     owner_address: ownerAddress,
     source_ref: sourceRef,
   }
+}
+
+export function parseSatflowCollectionStats(
+  html: string,
+  sourceRef: string
+): CollectionMarketStats | null {
+  const floorMatch = html.match(/\\?"floorPrice\\?":([0-9.]+)/i)
+  const change7dMatch = html.match(/\\?"priceChangePercent7d\\?":(-?[0-9.]+)/i)
+  const volume7dMatch = html.match(/\\?"volume7D\\?":([0-9.]+)/i)
+  const supplyMatch = html.match(/\\?"totalSupply\\?":(\d+)/i)
+  const marketCapMatch = html.match(/\\?"marketCap\\?":\\?"?([0-9.]+)\\?"?/i)
+
+  const formatBtc = (val: string | undefined) => {
+    if (!val) return undefined
+    const num = Number.parseFloat(val)
+    if (Number.isNaN(num)) return undefined
+    if (num < 0.0001) return num.toPrecision(2)
+    return Number.parseFloat(num.toFixed(4)).toString()
+  }
+
+  const formatCount = (val: string | undefined) => {
+    if (!val) return undefined
+    const num = Number.parseInt(val, 10)
+    if (Number.isNaN(num)) return undefined
+    if (num >= 1_000_000) return Number.parseFloat((num / 1_000_000).toFixed(1)).toString() + "M"
+    if (num >= 1_000) return Number.parseFloat((num / 1_000).toFixed(1)).toString() + "k"
+    return num.toString()
+  }
+
+  const formatPercent = (val: string | undefined) => {
+    if (!val) return undefined
+    const num = Number.parseFloat(val)
+    if (Number.isNaN(num)) return undefined
+    return (num > 0 ? "+" : "") + num.toFixed(2) + "%"
+  }
+
+  const stats: CollectionMarketStats = {
+    source_ref: sourceRef,
+    floor_price: formatBtc(floorMatch?.[1]),
+    change_7d: formatPercent(change7dMatch?.[1]),
+    volume_7d: formatBtc(volume7dMatch?.[1]),
+    supply: formatCount(supplyMatch?.[1]),
+    listed: undefined, // Listed count not exposed directly in payload
+    market_cap: formatBtc(marketCapMatch?.[1]),
+  }
+
+  const hasAnyValue = Object.entries(stats).some(
+    ([key, value]) => key !== "source_ref" && typeof value === "string" && value.length > 0
+  )
+
+  return hasAnyValue ? stats : null
+}
+
+export function parseOrdNetCollectionDirectory(
+  html: string,
+  sourceRef: string
+): OrdNetCollectionDirectoryEntry[] {
+  const text = toReadableText(html)
+  const entries = [
+    ...parseOrdNetNamedSection(text, "Popular", "Trending", "popular", sourceRef),
+    ...parseOrdNetTrendingSection(text, sourceRef),
+    ...parseOrdNetNamedSection(text, "Recently Verified", "Floor", "recently_verified", sourceRef),
+  ]
+
+  const unique = new Map<string, OrdNetCollectionDirectoryEntry>()
+  for (const entry of entries) {
+    const key = `${entry.section}:${normalizeCollectionSlug(entry.name)}`
+    if (!unique.has(key)) unique.set(key, entry)
+  }
+
+  return [...unique.values()]
+}
+
+function parseOrdNetNamedSection(
+  text: string,
+  startLabel: string,
+  endLabel: string,
+  section: OrdNetCollectionDirectoryEntry["section"],
+  sourceRef: string
+): OrdNetCollectionDirectoryEntry[] {
+  const sectionText = sliceBetweenLabels(text, startLabel, endLabel)
+  if (!sectionText) return []
+
+  const names = sectionText
+    .split(/\s+(?:Popular|Floor|Listed|24h|—)+\s+/)
+    .map((value) => value.trim())
+    .filter((value) => looksLikeCollectionName(value))
+
+  return names.map((name) => ({
+    name,
+    slug: slugifyCollectionName(name),
+    section,
+    source_ref: sourceRef,
+  }))
+}
+
+function parseOrdNetTrendingSection(
+  text: string,
+  sourceRef: string
+): OrdNetCollectionDirectoryEntry[] {
+  const sectionText = sliceBetweenLabels(text, "Collection Trend", "Recently Verified")
+  if (!sectionText) return []
+
+  const entries: OrdNetCollectionDirectoryEntry[] = []
+  const rows = sectionText
+    .split(/(?=\s+\d{1,3}\s+)/)
+    .map((row) => row.trim())
+    .filter(Boolean)
+
+  for (const row of rows) {
+    const match = row.match(/^(\d{1,3})\s+(.+?)\s+—\s+([0-9.]+|—)\s+—\s+—\s+([\d,]+|—)/)
+    if (!match) continue
+
+    const name = normalizeRepeatedCollectionName(match[2])
+    if (!looksLikeCollectionName(name)) continue
+
+    entries.push({
+      name,
+      slug: slugifyCollectionName(name),
+      section: "trending",
+      rank: Number.parseInt(match[1], 10),
+      volume_24h: match[3] !== "—" ? match[3] : undefined,
+      supply: match[4] !== "—" ? match[4] : undefined,
+      source_ref: sourceRef,
+    })
+  }
+
+  return entries
+}
+
+function sliceBetweenLabels(text: string, startLabel: string, endLabel: string): string | null {
+  const start = text.indexOf(startLabel)
+  if (start === -1) return null
+
+  const end = text.indexOf(endLabel, start + startLabel.length)
+  return text.slice(start + startLabel.length, end === -1 ? undefined : end)
+}
+
+function normalizeRepeatedCollectionName(name: string): string {
+  const trimmed = name.trim()
+  const half = Math.floor(trimmed.length / 2)
+  const left = trimmed.slice(0, half).trim()
+  const right = trimmed.slice(half).trim()
+  return left && left === right ? left : trimmed
+}
+
+function looksLikeCollectionName(value: string): boolean {
+  if (value.length < 2 || value.length > 80) return false
+  if (/^(Info|Mempool|Collection|Trend|Floor|Listed|Supply|Market Cap)$/i.test(value)) return false
+  return /[A-Za-z0-9]/.test(value)
+}
+
+function slugifyCollectionName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function normalizeCollectionSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+function toReadableText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#x2F;|&sol;/g, "/")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 export function parseRegistryEntries(

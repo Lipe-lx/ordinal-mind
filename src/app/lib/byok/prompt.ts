@@ -11,13 +11,17 @@ import type { Chronicle, ChronicleEvent, ProtocolRelationSet, RelatedInscription
 export function buildSystemPrompt(): string {
   return `You are a factual chronicler of digital Bitcoin artifacts.
 
-Your task is to write a concise, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
+Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
 
 Rules:
 - Write in the same language as the user's browser locale if detectable, otherwise default to English.
-- Tone: objective, with a slight sense of historical weight.
-- Maximum 4 short paragraphs.
+- Tone: objective, vivid, and historically aware. Avoid hype copy.
+- Maximum 5 short paragraphs.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
+- Do not repeat the visible metadata as a checklist. Use identity, block, owner, and transfers only when they explain why the artifact matters.
+- If collection profile data exists, lead with the collection's factual story, creators, milestones, and collector signals before zooming into this specific inscription.
+- Explain the relationship between this inscription and the collection: on-chain parent/provenance, curated registry match, and market overlay are separate evidence layers.
+- Prefer collector-relevant meaning: distribution method, creator roles, supply/index signals, provenance mechanism, notable milestones, and what remains uncertain.
 - Treat protocol-native relations as higher trust than curated registry matches.
 - Parent provenance and galleries are different mechanisms. Never imply that a gallery or curated match creates an on-chain parent-child relationship.
 - If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
@@ -69,6 +73,8 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
         ? `Fallback reason: ${media_context.fallback_reason}`
         : "Fallback reason: none",
     ]),
+    buildSection("Collector focus", buildCollectorFocus(chronicle)),
+    buildSection("Collection profile", buildCollectionProfileSection(chronicle)),
     buildSection("On-chain facts", buildTimelineSummary(events)),
     buildSection("Transfers", summarizeEvents(events, ["transfer", "sale"], 12)),
     buildSection(
@@ -134,6 +140,84 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
   ]
 
   return sections.join("\n\n")
+}
+
+function buildCollectorFocus(chronicle: Chronicle): string[] {
+  const { collection_context, events, meta } = chronicle
+  const collectionName =
+    collection_context.profile?.name ??
+    collection_context.registry.match?.matched_collection ??
+    collection_context.market.match?.collection_name
+
+  const transferCount = events.filter((event) => event.event_type === "transfer" || event.event_type === "sale").length
+  const focus = [
+    collectionName
+      ? `Primary lens: this inscription should be interpreted first as part of ${collectionName}, then as an individual inscription.`
+      : "Primary lens: no collection context was found, so focus on the inscription's own provenance and media.",
+    `Collector value cues available: ${[
+      collection_context.protocol.parents?.items.length ? "on-chain parent provenance" : null,
+      collection_context.registry.match ? "curated registry match" : null,
+      collection_context.market.match ? "market collection overlay" : null,
+      collection_context.profile ? "collection history profile" : null,
+      transferCount ? `${transferCount} transfer/sale event${transferCount === 1 ? "" : "s"}` : null,
+    ].filter(Boolean).join(", ") || "basic inscription metadata only"}.`,
+    `Do not spend the opening repeating #${meta.inscription_number}, content type, sat, and block unless tied to the collection or provenance story.`,
+  ]
+
+  return focus
+}
+
+function buildCollectionProfileSection(chronicle: Chronicle): string[] {
+  const profile = chronicle.collection_context.profile
+  if (!profile) return ["No collection story profile found."]
+
+  const lines = [
+    `Name: ${profile.name}`,
+    `Slug: ${profile.slug}`,
+    profile.summary ? `Summary: ${profile.summary}` : "Summary: unavailable",
+  ]
+
+  if (profile.creators.length > 0) {
+    lines.push("Creators and roles:")
+    for (const fact of profile.creators) {
+      lines.push(`- ${fact.label}: ${fact.value} (${fact.source_ref})`)
+    }
+  }
+
+  if (profile.milestones.length > 0) {
+    lines.push("Milestones:")
+    for (const fact of profile.milestones) {
+      lines.push(`- ${fact.label}: ${fact.value} (${fact.source_ref})`)
+    }
+  }
+
+  if (profile.collector_signals.length > 0) {
+    lines.push("Collector signals:")
+    for (const fact of profile.collector_signals) {
+      lines.push(`- ${fact.label}: ${fact.value} (${fact.source_ref})`)
+    }
+  }
+
+  if (profile.market_stats) {
+    lines.push("Market stats from public collection page:")
+    lines.push(...formatMarketStats(profile.market_stats))
+  }
+
+  return lines
+}
+
+function formatMarketStats(stats: NonNullable<Chronicle["collection_context"]["profile"]>["market_stats"]): string[] {
+  if (!stats) return []
+
+  return [
+    stats.floor_price ? `- Floor: ${stats.floor_price}` : null,
+    stats.change_7d ? `- 7D change: ${stats.change_7d}` : null,
+    stats.volume_7d ? `- 7D volume: ${stats.volume_7d}` : null,
+    stats.supply ? `- Supply: ${stats.supply}` : null,
+    stats.listed ? `- Listed: ${stats.listed}` : null,
+    stats.market_cap ? `- Market cap: ${stats.market_cap}` : null,
+    `- Source: ${stats.source_ref}`,
+  ].filter((line): line is string => Boolean(line))
 }
 
 function buildTimelineSummary(events: ChronicleEvent[]): string[] {

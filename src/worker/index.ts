@@ -129,6 +129,7 @@ async function handleStandardChronicle(id: string, env: Env): Promise<Response> 
           protocol: { parents: null, children: null, gallery: null },
           registry: { match: null, issues: [] },
           market: { match: null },
+          profile: null,
           presentation: { facets: [] },
         },
         sourceCatalog: [],

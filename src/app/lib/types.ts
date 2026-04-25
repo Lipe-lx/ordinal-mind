@@ -21,6 +21,7 @@ export type SourceTrustLevel =
   | "canonical_onchain"
   | "official_index"
   | "curated_public_registry"
+  | "curated_public_research"
   | "market_overlay"
 
 export type VisionTransport = "public_url" | "inline_data" | "unsupported"
@@ -145,6 +146,33 @@ export interface MarketOverlayMatch {
   source_ref: string
 }
 
+export interface CollectionMarketStats {
+  source_ref: string
+  floor_price?: string
+  change_7d?: string
+  volume_7d?: string
+  supply?: string
+  listed?: string
+  market_cap?: string
+}
+
+export interface CollectionProfileFact {
+  label: string
+  value: string
+  source_ref: string
+}
+
+export interface CollectionProfile {
+  name: string
+  slug: string
+  summary?: string
+  creators: CollectionProfileFact[]
+  milestones: CollectionProfileFact[]
+  collector_signals: CollectionProfileFact[]
+  market_stats?: CollectionMarketStats
+  sources: SourceCatalogItem[]
+}
+
 export interface CollectionContext {
   protocol: {
     parents: ProtocolRelationSet | null
@@ -158,6 +186,7 @@ export interface CollectionContext {
   market: {
     match: MarketOverlayMatch | null
   }
+  profile: CollectionProfile | null
   presentation: {
     primary_label?: string
     facets: CollectionPresentationFacet[]

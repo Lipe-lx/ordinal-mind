@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { InscriptionMeta } from "../../src/app/lib/types"
 import {
+  buildCollectionProfile,
   buildMediaContext,
   findLegacyCollectionMembership,
   parseOrdMarketOverlay,
+  parseOrdNetCollectionDirectory,
+  parseSatflowCollectionStats,
   parseRegistryEntries,
   selectRegistryMatch,
   selectRegistryMatchFromMarketOverlay,
@@ -228,6 +231,112 @@ describe("ord.net market overlay parsing", () => {
       owner_address: "bc1pqeuysaz8dfwd0479gpgk0nvuwnka52xhu8c6efn3vzcdfjhkrccsvrewnx",
       source_ref: "https://ord.net/inscription/11339504",
     })
+  })
+})
+
+describe("Satflow collection stats parsing", () => {
+  it("extracts public collection stats from a rendered collection page", () => {
+    const html = `
+      <h1>Runestone</h1>
+      <span>7D Change</span><strong>-18.1%</strong>
+      <span>7D Volume</span><strong>0.42</strong>
+      <span>Supply</span><strong>112.4K</strong>
+      <span>Listed</span><strong>288</strong>
+      <span>Market Cap</span><strong>126.97</strong>
+    `
+
+    expect(parseSatflowCollectionStats(html, "https://www.satflow.com/ordinals/runestone")).toMatchObject({
+      source_ref: "https://www.satflow.com/ordinals/runestone",
+      change_7d: "-18.1%",
+      volume_7d: "0.42",
+      supply: "112.4K",
+      listed: "288",
+      market_cap: "126.97",
+    })
+  })
+
+  it("ignores placeholder tokens that are not real metrics", () => {
+    const html = `
+      <span>7D Change</span><strong>7D</strong>
+      <span>7D Volume</span><strong>Supply</strong>
+      <span>Supply</span><strong>Range</strong>
+      <span>Listed</span><strong>Market</strong>
+      <span>Market Cap</span><strong>Lowest</strong>
+    `
+
+    expect(parseSatflowCollectionStats(html, "https://www.satflow.com/ordinals/runestone")).toBeNull()
+  })
+})
+
+describe("collection profile marketplace signals", () => {
+  it("adds Satflow as collector-facing market evidence when stats are available", () => {
+    const profile = buildCollectionProfile(
+      null,
+      {
+        collection_slug: "bitcoin-puppets",
+        collection_name: "Bitcoin Puppets",
+        collection_href: "/collection/bitcoin-puppets",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      {
+        source_ref: "https://www.satflow.com/ordinals/bitcoin-puppets",
+        floor_price: "0.3870",
+        volume_7d: "1.23",
+        supply: "10K",
+        listed: "420",
+      },
+      null,
+      "2026-04-25T00:00:00.000Z"
+    )
+
+    expect(profile?.collector_signals).toContainEqual(expect.objectContaining({
+      label: "Satflow collection market",
+      source_ref: "https://www.satflow.com/ordinals/bitcoin-puppets",
+    }))
+    expect(profile?.collector_signals.find((signal) => signal.label === "Satflow collection market")?.value)
+      .toContain("supply 10K")
+  })
+})
+
+describe("ord.net collection directory parsing", () => {
+  it("extracts popular, trending, and recently verified collections", () => {
+    const html = `
+      <main>
+        <h2>Popular</h2>
+        <a>Ordinal Maxi Biz (OMB)</a><span>Popular</span>
+        <a>Bitcoin Puppets</a><span>Popular</span>
+        <a>Runestone</a><span>Popular</span>
+        <h2>Trending</h2>
+        <h1>Collection Trend (24h)</h1>
+        1 Ordinal Maxi Biz (OMB) Ordinal Maxi Biz (OMB) — 0.8787 — — 9,000
+        2 Bitcoin Puppets Bitcoin Puppets — 0.3870 — — 10,001
+        3 Runestone Runestone — 0.1462 — — 112,383
+        <h2>Recently Verified</h2>
+        <a>Ordinal Punks</a><span>Floor — Listed — 24h —</span>
+        <a>Bitcoin Punks</a><span>Floor — Listed — 24h —</span>
+      </main>
+    `
+
+    const entries = parseOrdNetCollectionDirectory(html, "https://ord.net/")
+
+    expect(entries).toContainEqual(expect.objectContaining({
+      name: "Runestone",
+      slug: "runestone",
+      section: "popular",
+    }))
+    expect(entries).toContainEqual(expect.objectContaining({
+      name: "Runestone",
+      section: "trending",
+      rank: 3,
+      volume_24h: "0.1462",
+      supply: "112,383",
+    }))
+    expect(entries).toContainEqual(expect.objectContaining({
+      name: "Ordinal Punks",
+      slug: "ordinal-punks",
+      section: "recently_verified",
+    }))
   })
 })
 

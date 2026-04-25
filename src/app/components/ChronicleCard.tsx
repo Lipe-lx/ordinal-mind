@@ -167,11 +167,14 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
   }
 
   if (marketEntries.length > 0) {
+    const marketMatch = chronicle.collection_context.market.match
+    const isSatflowSource = marketMatch?.source_ref.includes("satflow.com")
+    const marketSourceName = isSatflowSource ? "satflow.com" : "ord.net"
     sources.push({
-      name: "ord.net",
+      name: marketSourceName,
       status: marketEntries.some((entry) => !entry.partial) ? "success" : "partial",
-      detail: chronicle.collection_context.market.match
-        ? `${chronicle.collection_context.market.match.collection_name} · ${chronicle.collection_context.market.match.verified ? "verified" : "overlay"}`
+      detail: marketMatch
+        ? `${marketMatch.collection_name} · ${marketMatch.verified ? "verified" : "overlay"}`
         : "Public market overlay",
       cached: chronicle.from_cache,
       count: marketEntries.length,
