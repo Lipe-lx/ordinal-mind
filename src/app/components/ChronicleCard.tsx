@@ -1,3 +1,4 @@
+import { useRef, useState } from "react"
 import { KeyStore } from "../lib/byok"
 import { InscriptionMetaWidget } from "./widgets/InscriptionMetaWidget"
 import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
@@ -30,6 +31,82 @@ export function ChronicleCard({
   onSynthesize,
   onCancel,
 }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current || !imgRef.current) return
+
+    const rect = containerRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    const centerX = rect.width / 2
+    const centerY = rect.height / 2
+    
+    // Base rotation
+    let rotateX = ((y - centerY) / centerY) * -15
+    let rotateY = ((x - centerX) / centerX) * 15
+    let scale = 1.05
+    let skewX = 0
+    let skewY = 0
+
+    // If dragging, intensify and add deformation
+    if (isDragging) {
+      rotateX *= 2.5
+      rotateY *= 2.5
+      scale = 0.95 // Slightly compress while "squeezing"
+      skewX = (x - centerX) / 20
+      skewY = (y - centerY) / 20
+      
+      imgRef.current.style.transition = "transform 0.05s linear" // Instant follow
+    } else {
+      imgRef.current.style.transition = "transform 0.1s ease-out"
+    }
+    
+    imgRef.current.style.transform = `
+      rotateX(${rotateX}deg) 
+      rotateY(${rotateY}deg) 
+      scale(${scale}) 
+      skew(${skewX}deg, ${skewY}deg)
+    `
+
+    if (isDragging) {
+      imgRef.current.style.filter = `brightness(${1 + Math.abs(rotateX + rotateY) / 1000}) contrast(1.1)`
+    } else {
+      imgRef.current.style.filter = "none"
+    }
+    
+    // Set mouse position for glare effect
+    const px = (x / rect.width) * 100
+    const py = (y / rect.height) * 100
+    containerRef.current.style.setProperty("--mouse-x", `${px}%`)
+    containerRef.current.style.setProperty("--mouse-y", `${py}%`)
+  }
+
+  const handleMouseDown = () => {
+    setIsDragging(true)
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+    resetTransform()
+  }
+
+  const handleMouseLeave = () => {
+    setIsDragging(false)
+    resetTransform()
+  }
+
+  const resetTransform = () => {
+    if (!imgRef.current) return
+    // Use an elastic transition for the snap back
+    imgRef.current.style.transition = "transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease"
+    imgRef.current.style.transform = "rotateX(0deg) rotateY(0deg) scale(1) skew(0deg, 0deg)"
+    imgRef.current.style.filter = "none"
+  }
+
   const { meta, events } = chronicle
   const hasKey = KeyStore.has()
   const config = KeyStore.get()
@@ -41,8 +118,16 @@ export function ChronicleCard({
     <div className="chronicle-card glass-card">
       {/* Left Column */}
       <div className="chronicle-card-left">
-        <div className="chronicle-card-content-preview">
+        <div 
+          className="chronicle-card-content-preview"
+          ref={containerRef}
+          onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+        >
           <img
+            ref={imgRef}
             src={meta.content_url}
             alt={`Inscription #${meta.inscription_number}`}
             loading="lazy"

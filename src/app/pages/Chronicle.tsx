@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useCallback } from "react"
-import { useLoaderData, Link } from "react-router"
+import { useLoaderData, Link, useNavigate } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
 import { SatBadge } from "../components/SatBadge"
@@ -117,13 +117,14 @@ export function Chronicle() {
     synthesize,
     cancel,
   } = useSynthesize()
+  const navigate = useNavigate()
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
     return (
       <div className="fade-in" style={{ maxWidth: "480px", margin: "0 auto" }}>
         <div className="chronicle-header" style={{ marginBottom: "1.5rem" }}>
-          <Link to="/" className="btn btn-ghost">← Back</Link>
+          <button onClick={() => navigate("/")} className="btn btn-ghost">← Back</button>
         </div>
         {progress ? (
           <ScanProgress progress={progress} inscriptionId={id} />
@@ -144,7 +145,7 @@ export function Chronicle() {
     return (
       <div className="fade-in" style={{ textAlign: "center" }}>
         <div className="chronicle-header" style={{ marginBottom: "1.5rem" }}>
-          <Link to="/" className="btn btn-ghost">← Back</Link>
+          <button onClick={() => navigate("/")} className="btn btn-ghost">← Back</button>
         </div>
         <div className="glass-card" style={{ padding: "2rem" }}>
           <p style={{ color: "var(--danger)", marginBottom: "1rem" }}>
@@ -177,7 +178,7 @@ export function Chronicle() {
     <div className="chronicle-page fade-in">
       <div className="chronicle-header">
         <div className="chronicle-header-left">
-          <Link to="/" className="btn btn-ghost">← Back</Link>
+          <button onClick={() => navigate("/")} className="btn btn-ghost">← Back</button>
           <h1>
             Inscription{" "}
             <span className="chronicle-header-number">

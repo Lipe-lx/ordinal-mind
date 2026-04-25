@@ -77,10 +77,12 @@ export function CollectionContextWidget({ collectionContext }: Props) {
   return (
     <div className="widget-provenance">
       <div className="widget-provenance-label">
-        Provenance &amp; Collections
-        {registry.issues.map((issue) => (
-          <IssueBadge key={issue} issue={issue} />
-        ))}
+        <span>Provenance &amp; Collections</span>
+        <div className="widget-provenance-badges">
+          {registry.issues.map((issue) => (
+            <IssueBadge key={issue} issue={issue} />
+          ))}
+        </div>
       </div>
 
       {presentation.facets.length > 0 && (
@@ -140,7 +142,7 @@ function RelationList({
   return (
     <div className="widget-provenance-list">
       <div className="widget-provenance-list-title">
-        {title}
+        <span>{title}</span>
         {partial && <span className="widget-provenance-partial">sampled</span>}
       </div>
       <div className="widget-provenance-list-items">
