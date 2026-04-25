@@ -30,17 +30,17 @@ export function InscriptionMetaWidget({ meta, events }: Props) {
     <div className="widget-meta-grid">
       <MetricCell
         label="Inscription"
-        value={`#${meta.inscription_number.toLocaleString()}`}
+        value={`#${meta.inscription_number?.toLocaleString() ?? "—"}`}
       />
       <MetricCell
         label="Sat"
-        value={meta.sat.toLocaleString("en-US")}
+        value={meta.sat?.toLocaleString("en-US") ?? "—"}
         badge={meta.sat_rarity}
         badgeClass={`rarity-badge rarity-${meta.sat_rarity}`}
       />
       <MetricCell
         label="Genesis Block"
-        value={meta.genesis_block.toLocaleString()}
+        value={meta.genesis_block?.toLocaleString() ?? "—"}
         sub={genesisDate}
       />
       <MetricCell

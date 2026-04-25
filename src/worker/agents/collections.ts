@@ -121,9 +121,15 @@ export interface CollectionContextFetchResult {
   collectionName?: string
 }
 
+interface CollectionDiagnosticsOptions {
+  debug?: boolean
+  requestId?: string
+}
+
 export async function fetchCollectionContext(
   inscriptionId: string,
-  meta: InscriptionMeta
+  meta: InscriptionMeta,
+  diagnostics?: CollectionDiagnosticsOptions
 ): Promise<CollectionContextFetchResult> {
   const fetchedAt = new Date().toISOString()
   const sourceCatalog: SourceCatalogItem[] = []
@@ -158,17 +164,45 @@ export async function fetchCollectionContext(
     ),
   ])
 
-  const protocolGallery = await fetchProtocolGallery(inscriptionId, selfDetails, fetchedAt, sourceCatalog)
-  const ordNetOverlay = await fetchMarketOverlay(inscriptionId, fetchedAt, sourceCatalog)
-  // Fallback: when ord.net doesn't classify the inscription, try Satflow's individual page
-  const marketOverlay = ordNetOverlay
-    ?? await fetchSatflowInscriptionOverlay(inscriptionId, fetchedAt, sourceCatalog)
+  const [protocolGallery, ordNetOverlay, satflowOverlay] = await Promise.all([
+    fetchProtocolGallery(inscriptionId, selfDetails, fetchedAt, sourceCatalog),
+    fetchMarketOverlay(inscriptionId, fetchedAt, sourceCatalog, diagnostics),
+    fetchSatflowInscriptionOverlay(inscriptionId, fetchedAt, sourceCatalog, diagnostics)
+  ])
+  
+  const marketOverlay = mergeMarketOverlays(satflowOverlay, ordNetOverlay)
+  debugCollection(diagnostics, inscriptionId, "overlay_resolution", {
+    satflow_overlay: Boolean(satflowOverlay),
+    ord_net_overlay: Boolean(ordNetOverlay),
+    selected_overlay: marketOverlay?.source_ref.includes("satflow.com")
+      ? "satflow"
+      : marketOverlay
+        ? "ord_net"
+        : "none",
+    selected_slug: marketOverlay?.collection_slug ?? null,
+    satflow_rarity_rank: satflowOverlay?.satflow_rarity?.rank ?? null,
+    satflow_rarity_trait_count: satflowOverlay?.satflow_rarity?.traits.length ?? 0,
+    ord_net_rarity_trait_count: ordNetOverlay?.satflow_rarity?.traits.length ?? 0,
+    selected_rarity_source:
+      marketOverlay?.satflow_rarity?.source_ref?.includes("satflow.com")
+        ? "satflow"
+        : marketOverlay?.satflow_rarity
+          ? "ord_net"
+          : "none",
+    selected_rarity_trait_count: marketOverlay?.satflow_rarity?.traits.length ?? 0,
+  })
   const ordNetDirectoryMatch = marketOverlay
     ? await fetchOrdNetCollectionDirectoryMatch(marketOverlay, fetchedAt, sourceCatalog)
     : null
   const satflowStats = marketOverlay?.collection_slug
-    ? await fetchSatflowCollectionStats(marketOverlay.collection_slug, fetchedAt, sourceCatalog)
+    ? await fetchSatflowCollectionStats(marketOverlay.collection_slug, fetchedAt, sourceCatalog, diagnostics)
     : null
+  debugCollection(diagnostics, inscriptionId, "market_stats_resolution", {
+    has_satflow_stats: Boolean(satflowStats),
+    satflow_stats_supply: satflowStats?.supply ?? null,
+    satflow_stats_listed: satflowStats?.listed ?? null,
+    has_ord_net_directory_match: Boolean(ordNetDirectoryMatch),
+  })
   const registry = await fetchRegistryOverlay(
     inscriptionId,
     selfDetails,
@@ -180,6 +214,14 @@ export async function fetchCollectionContext(
   )
   const profile = buildCollectionProfile(registry.match, marketOverlay, satflowStats, ordNetDirectoryMatch, fetchedAt)
   appendUniqueSourceCatalogItems(sourceCatalog, profile?.sources ?? [])
+  const partialSources = sourceCatalog.filter((source) => source.partial)
+  debugCollection(diagnostics, inscriptionId, "collection_context_assembled", {
+    has_registry_match: Boolean(registry.match),
+    has_profile: Boolean(profile),
+    source_count: sourceCatalog.length,
+    partial_source_count: partialSources.length,
+    partial_sources: partialSources.map((source) => source.source_type),
+  })
 
   const collectionContext: CollectionContext = {
     protocol: {
@@ -215,6 +257,22 @@ export async function fetchCollectionContext(
     sourceCatalog,
     collectionName,
   }
+}
+
+function debugCollection(
+  diagnostics: CollectionDiagnosticsOptions | undefined,
+  inscriptionId: string,
+  event: string,
+  data: Record<string, unknown>
+): void {
+  if (!diagnostics?.debug) return
+  console.info(`[CollectionDiag] ${JSON.stringify({
+    at: new Date().toISOString(),
+    request_id: diagnostics.requestId ?? null,
+    inscription_id: inscriptionId,
+    event,
+    ...data,
+  })}`)
 }
 
 function appendUniqueSourceCatalogItems(
@@ -677,7 +735,8 @@ async function fetchOrdNetCollectionDirectoryMatch(
 async function fetchSatflowCollectionStats(
   slug: string,
   fetchedAt: string,
-  sourceCatalog: SourceCatalogItem[]
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
 ): Promise<CollectionMarketStats | null> {
   const normalizedSlug = slug.toLowerCase().replaceAll("_", "-")
   const url = `${SATFLOW_ORDINALS_BASE_URL}/${encodeURIComponent(normalizedSlug)}`
@@ -690,14 +749,29 @@ async function fetchSatflowCollectionStats(
     detail: "Satflow public collection page",
   })
 
-  if (!html) return null
-  return parseSatflowCollectionStats(html, url)
+  if (!html) {
+    debugCollection(diagnostics, slug, "satflow_collection_stats_missing", {
+      collection_slug: normalizedSlug,
+    })
+    return null
+  }
+
+  const stats = parseSatflowCollectionStats(html, url)
+  debugCollection(diagnostics, slug, "satflow_collection_stats_parsed", {
+    collection_slug: normalizedSlug,
+    has_stats: Boolean(stats),
+    supply: stats?.supply ?? null,
+    listed: stats?.listed ?? null,
+    floor_price: stats?.floor_price ?? null,
+  })
+  return stats
 }
 
 async function fetchMarketOverlay(
   inscriptionId: string,
   fetchedAt: string,
-  sourceCatalog: SourceCatalogItem[]
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
 ): Promise<MarketOverlayMatch | null> {
   const url = `${ORD_MARKET_BASE_URL}/inscription/${inscriptionId}`
   const html = await fetchOptionalText(url, {
@@ -709,14 +783,26 @@ async function fetchMarketOverlay(
     detail: "ord.net inscription overlay",
   })
 
-  if (!html) return null
-  return parseOrdMarketOverlay(html, url)
+  if (!html) {
+    debugCollection(diagnostics, inscriptionId, "ord_net_overlay_missing", {})
+    return null
+  }
+
+  const overlay = parseOrdMarketOverlay(html, url)
+  debugCollection(diagnostics, inscriptionId, "ord_net_overlay_parsed", {
+    has_overlay: Boolean(overlay),
+    collection_slug: overlay?.collection_slug ?? null,
+    rarity_trait_count: overlay?.satflow_rarity?.traits.length ?? 0,
+    rarity_supply: overlay?.satflow_rarity?.supply ?? null,
+  })
+  return overlay
 }
 
 async function fetchSatflowInscriptionOverlay(
   inscriptionId: string,
   fetchedAt: string,
-  sourceCatalog: SourceCatalogItem[]
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
 ): Promise<MarketOverlayMatch | null> {
   const url = `${SATFLOW_ORDINAL_BASE_URL}/${inscriptionId}`
   const html = await fetchOptionalText(url, {
@@ -728,31 +814,32 @@ async function fetchSatflowInscriptionOverlay(
     detail: "Satflow individual inscription overlay",
   })
 
-  if (!html) return null
-  return parseSatflowInscriptionOverlay(html, url)
+  if (!html) {
+    debugCollection(diagnostics, inscriptionId, "satflow_overlay_missing", {})
+    return null
+  }
+
+  const overlay = parseSatflowInscriptionOverlay(html, url)
+  debugCollection(diagnostics, inscriptionId, "satflow_overlay_parsed", {
+    has_overlay: Boolean(overlay),
+    collection_slug: overlay?.collection_slug ?? null,
+    rarity_rank: overlay?.satflow_rarity?.rank ?? null,
+    rarity_trait_count: overlay?.satflow_rarity?.traits.length ?? 0,
+    rarity_supply: overlay?.satflow_rarity?.supply ?? null,
+  })
+  return overlay
 }
 
 export function parseSatflowInscriptionOverlay(
   html: string,
   sourceRef: string
 ): MarketOverlayMatch | null {
-  // Pattern 1: OG title — "{ItemName} - {CollectionName}" (when collection exists)
-  // When no collection: "Ordinal {id}" — skip this
   const ogTitle = html.match(
     /og:title["']?\s*content=["']([^"']+)["']/
   )?.[1]
 
-  // If the OG title starts with "Ordinal " it means Satflow doesn't know the collection
   if (!ogTitle || ogTitle.startsWith("Ordinal ")) return null
 
-  // Pattern 2: collection href — href="/ordinals/{slug}"
-  const collectionHrefMatch = html.match(
-    /href=["']\/ordinals\/([^"']+)["']/
-  )
-  const collectionSlug = collectionHrefMatch?.[1]
-  if (!collectionSlug) return null
-
-  // Parse the title: "{ItemName} - {CollectionName}"
   const titleParts = ogTitle.split(" - ")
   let collectionName: string
   let itemName: string | undefined
@@ -766,6 +853,14 @@ export function parseSatflowInscriptionOverlay(
 
   if (!collectionName) return null
 
+  const collectionSlug = extractSatflowCollectionSlug(html, collectionName)
+  if (!collectionSlug) return null
+
+  const satflow_rarity = extractSatflowRarity(html)
+  if (satflow_rarity) {
+    satflow_rarity.source_ref = sourceRef
+  }
+
   return {
     collection_slug: collectionSlug,
     collection_name: collectionName,
@@ -773,6 +868,7 @@ export function parseSatflowInscriptionOverlay(
     item_name: itemName,
     verified: false,
     source_ref: sourceRef,
+    satflow_rarity,
   }
 }
 
@@ -914,6 +1010,7 @@ export function parseOrdMarketOverlay(
   const ownerAddress = html.match(/item:\{[\s\S]*?owner:"([^"]+)"/)?.[1]
   const verifiedMatch = html.match(/collection:\{[\s\S]*?verified:(true|false)/)?.[1]
     ?? (html.includes("verifiedCollections:[{") ? "true" : undefined)
+  const ordNetRarity = extractOrdNetVerifiedGalleryTraits(html, sourceRef)
 
   if (!collectionSlug || !collectionHref || !collectionName) return null
   if (collectionName.toLowerCase() === "uncategorized" || collectionSlug.toLowerCase() === "uncategorized") return null
@@ -926,6 +1023,7 @@ export function parseOrdMarketOverlay(
     verified: verifiedMatch === "true",
     owner_address: ownerAddress,
     source_ref: sourceRef,
+    satflow_rarity: ordNetRarity,
   }
 }
 
@@ -933,44 +1031,27 @@ export function parseSatflowCollectionStats(
   html: string,
   sourceRef: string
 ): CollectionMarketStats | null {
-  const floorMatch = html.match(/\\?"floorPrice\\?":([0-9.]+)/i)
-  const change7dMatch = html.match(/\\?"priceChangePercent7d\\?":(-?[0-9.]+)/i)
-  const volume7dMatch = html.match(/\\?"volume7D\\?":([0-9.]+)/i)
-  const supplyMatch = html.match(/\\?"totalSupply\\?":(\d+)/i)
-  const marketCapMatch = html.match(/\\?"marketCap\\?":\\?"?([0-9.]+)\\?"?/i)
+  const floorPriceRaw = extractMetricNumber(html, ["floorPrice", "floor_price"])
+  const change7dRaw = extractMetricNumber(html, ["priceChangePercent7d", "change7d"])
+  const volume7dRaw = extractMetricNumber(html, ["volume7D", "volume_7d"])
+  const supplyRaw = extractMetricNumber(html, ["totalSupply", "supply"])
+  const listedRaw = extractMetricNumber(html, ["listedCount", "listed", "activeListings"])
+  const marketCapRaw = extractMetricNumber(html, ["marketCap", "market_cap"])
 
-  const formatBtc = (val: string | undefined) => {
-    if (!val) return undefined
-    const num = Number.parseFloat(val)
-    if (Number.isNaN(num)) return undefined
-    if (num < 0.0001) return num.toPrecision(2)
-    return Number.parseFloat(num.toFixed(4)).toString()
-  }
-
-  const formatCount = (val: string | undefined) => {
-    if (!val) return undefined
-    const num = Number.parseInt(val, 10)
-    if (Number.isNaN(num)) return undefined
-    if (num >= 1_000_000) return Number.parseFloat((num / 1_000_000).toFixed(1)).toString() + "M"
-    if (num >= 1_000) return Number.parseFloat((num / 1_000).toFixed(1)).toString() + "k"
-    return num.toString()
-  }
-
-  const formatPercent = (val: string | undefined) => {
-    if (!val) return undefined
-    const num = Number.parseFloat(val)
-    if (Number.isNaN(num)) return undefined
-    return (num > 0 ? "+" : "") + num.toFixed(2) + "%"
-  }
+  const labelChange = extractLabeledStatValue(html, "7D Change")
+  const labelVolume = extractLabeledStatValue(html, "7D Volume")
+  const labelSupply = extractLabeledStatValue(html, "Supply")
+  const labelListed = extractLabeledStatValue(html, "Listed")
+  const labelMarketCap = extractLabeledStatValue(html, "Market Cap")
 
   const stats: CollectionMarketStats = {
     source_ref: sourceRef,
-    floor_price: formatBtc(floorMatch?.[1]),
-    change_7d: formatPercent(change7dMatch?.[1]),
-    volume_7d: formatBtc(volume7dMatch?.[1]),
-    supply: formatCount(supplyMatch?.[1]),
-    listed: undefined, // Listed count not exposed directly in payload
-    market_cap: formatBtc(marketCapMatch?.[1]),
+    floor_price: floorPriceRaw != null ? formatBtc(floorPriceRaw) : undefined,
+    change_7d: change7dRaw != null ? formatPercent(change7dRaw) : normalizePercentString(labelChange),
+    volume_7d: volume7dRaw != null ? formatBtc(volume7dRaw) : normalizeNumericLabel(labelVolume),
+    supply: supplyRaw != null ? formatCompactCount(supplyRaw) : normalizeNumericLabel(labelSupply),
+    listed: listedRaw != null ? formatIntegerCount(listedRaw) : normalizeNumericLabel(labelListed),
+    market_cap: marketCapRaw != null ? formatBtc(marketCapRaw) : normalizeNumericLabel(labelMarketCap),
   }
 
   const hasAnyValue = Object.entries(stats).some(
@@ -978,6 +1059,377 @@ export function parseSatflowCollectionStats(
   )
 
   return hasAnyValue ? stats : null
+}
+
+function extractSatflowRarity(
+  html: string
+): MarketOverlayMatch["satflow_rarity"] | undefined {
+  try {
+    const rank = extractMetricInteger(html, ["rarityRank"]) ?? 0
+    const rawAttributes = selectBestSatflowAttributeArray(html)
+
+    const traits = (rawAttributes ?? [])
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null
+        const candidate = entry as Record<string, unknown>
+        const key = typeof candidate.key === "string" ? candidate.key : null
+        const value = candidate.value
+        const tokenCount =
+          typeof candidate.tokenCount === "number"
+            ? candidate.tokenCount
+            : typeof candidate.count === "number"
+              ? candidate.count
+              : null
+
+        if (!key || value === undefined || value === null) return null
+
+        return {
+          key,
+          value: String(value),
+          tokenCount: tokenCount ?? 0,
+        }
+      })
+      .filter((trait): trait is { key: string; value: string; tokenCount: number } => Boolean(trait))
+
+    const explicitSupply = extractMetricInteger(html, ["totalSupply"])
+    const supplyFromAttributes = traits.find(
+      (trait) => trait.key.toLowerCase() === "attributes" && trait.tokenCount > 0
+    )?.tokenCount
+    const supply = explicitSupply ?? supplyFromAttributes
+    const usefulTraits = traits.filter((trait) => trait.key.trim().length > 0)
+
+    if (rank === 0 && usefulTraits.length === 0 && supply == null) return undefined
+
+    return {
+      rank,
+      supply,
+      source_ref: undefined,
+      traits: usefulTraits,
+    }
+  } catch (e) {
+    console.error("[Satflow] Failed to parse rarity from HTML", e)
+    return undefined
+  }
+}
+
+function selectBestSatflowAttributeArray(html: string): unknown[] | null {
+  const candidates = extractJsonArraysForKey(html, "attributes")
+  if (candidates.length === 0) return null
+
+  const scored = candidates
+    .map((candidate) => ({
+      candidate,
+      score: scoreSatflowAttributeArray(candidate),
+    }))
+    .sort((left, right) => right.score - left.score)
+
+  return scored[0]?.candidate ?? null
+}
+
+function scoreSatflowAttributeArray(candidate: unknown[]): number {
+  let populatedTraits = 0
+  let countedTraits = 0
+
+  for (const entry of candidate) {
+    if (!entry || typeof entry !== "object") continue
+    const item = entry as Record<string, unknown>
+    const key = typeof item.key === "string" ? item.key : null
+    const value = item.value
+    const count =
+      typeof item.tokenCount === "number"
+        ? item.tokenCount
+        : typeof item.count === "number"
+          ? item.count
+          : null
+
+    if (key && value !== undefined && value !== null) populatedTraits += 1
+    if (count != null && count > 0) countedTraits += 1
+  }
+
+  return countedTraits * 100 + populatedTraits
+}
+
+function extractSatflowCollectionSlug(html: string, collectionName: string): string | null {
+  const slugFromPayload = extractMetricString(html, ["collectionSlug"])
+  if (slugFromPayload) return slugFromPayload
+
+  const hrefMatches = [...html.matchAll(/\/ordinals\/([a-z0-9][a-z0-9-_]{1,80})/gi)]
+    .map((match) => match[1])
+    .filter(Boolean)
+
+  if (hrefMatches.length === 0) return null
+
+  const uniqueCandidates = [...new Set(hrefMatches)]
+  const targetSlug = slugifyCollectionName(collectionName)
+  const normalizedTarget = normalizeCollectionSlug(targetSlug)
+
+  const exactMatch = uniqueCandidates.find(
+    (candidate) => normalizeCollectionSlug(candidate) === normalizedTarget
+  )
+  if (exactMatch) return exactMatch
+
+  const blocked = new Set(["ordinals", "ordinal", "collections", "trending", "new", "activity"])
+  return uniqueCandidates.find((candidate) => !blocked.has(candidate.toLowerCase())) ?? uniqueCandidates[0] ?? null
+}
+
+function extractJsonArraysForKey(html: string, key: string): unknown[][] {
+  const keyPatterns = [`"${key}":`, `\\"${key}\\":`]
+  const matches: unknown[][] = []
+
+  for (const marker of keyPatterns) {
+    let cursor = 0
+    while (cursor < html.length) {
+      const markerIndex = html.indexOf(marker, cursor)
+      if (markerIndex === -1) break
+
+      const openBracket = html.indexOf("[", markerIndex + marker.length)
+      if (openBracket === -1) break
+
+      const arrayLiteral = extractBalancedJsonArray(html, openBracket)
+      if (arrayLiteral) {
+        const parsed = parseJsonArrayLiteral(arrayLiteral)
+        if (parsed) matches.push(parsed)
+      }
+
+      cursor = openBracket + 1
+    }
+  }
+
+  return matches
+}
+
+function extractOrdNetVerifiedGalleryTraits(
+  html: string,
+  sourceRef: string
+): MarketOverlayMatch["satflow_rarity"] | undefined {
+  const marker = "verifiedGalleryTraitGroups:"
+  const markerIndex = html.indexOf(marker)
+  if (markerIndex === -1) return undefined
+
+  const openBracket = html.indexOf("[", markerIndex + marker.length)
+  if (openBracket === -1) return undefined
+
+  const arrayLiteral = extractBalancedJsonArray(html, openBracket)
+  if (!arrayLiteral) return undefined
+
+  const traits: Array<{ key: string; value: string; tokenCount: number }> = []
+  for (const match of arrayLiteral.matchAll(/type:"([^"]+)",value:"([^"]+)",count:(\d+)/g)) {
+    const [, key, value, countRaw] = match
+    const tokenCount = Number.parseInt(countRaw, 10)
+    if (!key || !value || Number.isNaN(tokenCount)) continue
+    traits.push({ key, value, tokenCount })
+  }
+
+  if (traits.length === 0) return undefined
+
+  return {
+    rank: 0,
+    supply: extractLooseIntegerMetric(html, ["totalSupply", "items"]) ?? undefined,
+    source_ref: sourceRef,
+    traits,
+  }
+}
+
+function extractLooseIntegerMetric(html: string, keys: string[]): number | null {
+  for (const key of keys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const patterns = [
+      new RegExp(`"${escaped}"\\s*:\\s*"?(-?\\d+)"?`, "i"),
+      new RegExp(`\\\\"${escaped}\\\\"\\s*:\\s*\\\\"?(-?\\d+)\\\\"?`, "i"),
+      new RegExp(`${escaped}:\\s*(-?\\d+)`, "i"),
+    ]
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern)
+      if (!match?.[1]) continue
+      const value = Number.parseInt(match[1], 10)
+      if (!Number.isNaN(value)) return value
+    }
+  }
+
+  return null
+}
+
+function mergeMarketOverlays(
+  satflowOverlay: MarketOverlayMatch | null,
+  ordNetOverlay: MarketOverlayMatch | null
+): MarketOverlayMatch | null {
+  if (!satflowOverlay) return ordNetOverlay
+  if (!ordNetOverlay) return satflowOverlay
+
+  const satflowTraits = satflowOverlay.satflow_rarity?.traits.length ?? 0
+  const ordNetTraits = ordNetOverlay.satflow_rarity?.traits.length ?? 0
+  const rarity =
+    satflowTraits > 0
+      ? satflowOverlay.satflow_rarity
+      : ordNetTraits > 0
+        ? ordNetOverlay.satflow_rarity
+        : satflowOverlay.satflow_rarity ?? ordNetOverlay.satflow_rarity
+
+  return {
+    collection_slug: satflowOverlay.collection_slug || ordNetOverlay.collection_slug,
+    collection_name: satflowOverlay.collection_name || ordNetOverlay.collection_name,
+    collection_href: satflowOverlay.collection_href || ordNetOverlay.collection_href,
+    item_name: satflowOverlay.item_name || ordNetOverlay.item_name,
+    verified: satflowOverlay.verified || ordNetOverlay.verified,
+    owner_address: satflowOverlay.owner_address || ordNetOverlay.owner_address,
+    source_ref: satflowOverlay.source_ref,
+    satflow_rarity: rarity,
+  }
+}
+
+function extractBalancedJsonArray(text: string, startIndex: number): string | null {
+  if (text[startIndex] !== "[") return null
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = startIndex; i < text.length; i++) {
+    const ch = text[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === "\\") {
+        escaped = true
+        continue
+      }
+      if (ch === "\"") {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === "\"") {
+      inString = true
+      continue
+    }
+
+    if (ch === "[") {
+      depth += 1
+      continue
+    }
+
+    if (ch === "]") {
+      depth -= 1
+      if (depth === 0) {
+        return text.slice(startIndex, i + 1)
+      }
+    }
+  }
+
+  return null
+}
+
+function parseJsonArrayLiteral(arrayLiteral: string): unknown[] | null {
+  const candidates = [
+    arrayLiteral,
+    arrayLiteral.replace(/\\"/g, "\""),
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      // keep trying fallbacks
+    }
+  }
+
+  return null
+}
+
+function extractMetricNumber(html: string, keys: string[]): number | null {
+  for (const key of keys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const patterns = [
+      new RegExp(`"${escaped}"\\s*:\\s*"?(-?\\d+(?:\\.\\d+)?)"?`, "i"),
+      new RegExp(`\\\\"${escaped}\\\\"\\s*:\\s*\\\\"?(-?\\d+(?:\\.\\d+)?)\\\\"?`, "i"),
+    ]
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern)
+      if (!match?.[1]) continue
+      const value = Number.parseFloat(match[1])
+      if (!Number.isNaN(value)) return value
+    }
+  }
+  return null
+}
+
+function extractMetricInteger(html: string, keys: string[]): number | null {
+  const value = extractMetricNumber(html, keys)
+  if (value == null) return null
+  return Math.trunc(value)
+}
+
+function extractMetricString(html: string, keys: string[]): string | null {
+  for (const key of keys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const patterns = [
+      new RegExp(`"${escaped}"\\s*:\\s*"([^"]+)"`, "i"),
+      new RegExp(`\\\\"${escaped}\\\\"\\s*:\\s*\\\\"([^\\\\"]+)\\\\"`, "i"),
+    ]
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern)
+      if (match?.[1]) return match[1]
+    }
+  }
+  return null
+}
+
+function extractLabeledStatValue(html: string, label: string): string | undefined {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const directRegex = new RegExp(
+    `<span[^>]*>\\s*${escapedLabel}\\s*<\\/span>\\s*<[^>]*>\\s*([^<]+?)\\s*<\\/[^>]+>`,
+    "i"
+  )
+  const directMatch = html.match(directRegex)?.[1]?.trim()
+  if (directMatch) return directMatch
+
+  const readable = toReadableText(html)
+  const textRegex = new RegExp(`${escapedLabel}\\s+([A-Za-z0-9.+%\\-]+)`, "i")
+  return readable.match(textRegex)?.[1]?.trim()
+}
+
+function normalizeNumericLabel(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!/^-?\d[\d,.]*([KMB])?$/i.test(trimmed)) return undefined
+  return trimmed.toUpperCase()
+}
+
+function normalizePercentString(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (/^-?\d+(\.\d+)?%$/.test(trimmed)) return trimmed
+  const normalized = normalizeNumericLabel(trimmed)
+  if (!normalized) return undefined
+  return `${normalized}%`
+}
+
+function formatBtc(value: number): string {
+  if (value < 0.0001) return value.toPrecision(2)
+  return Number.parseFloat(value.toFixed(4)).toString()
+}
+
+function formatPercent(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+function formatCompactCount(value: number): string {
+  if (value >= 1_000_000_000) return `${Number.parseFloat((value / 1_000_000_000).toFixed(1))}B`
+  if (value >= 1_000_000) return `${Number.parseFloat((value / 1_000_000).toFixed(1))}M`
+  if (value >= 1_000) return `${Number.parseFloat((value / 1_000).toFixed(1))}K`
+  return Math.trunc(value).toString()
+}
+
+function formatIntegerCount(value: number): string {
+  return Math.trunc(value).toString()
 }
 
 export function parseOrdNetCollectionDirectory(

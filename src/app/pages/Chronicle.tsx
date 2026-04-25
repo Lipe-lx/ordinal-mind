@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useCallback } from "react"
-import { useLoaderData, Link, useNavigate } from "react-router"
+import { useLoaderData, useLocation, useNavigate } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
 import { SatBadge } from "../components/SatBadge"
@@ -53,13 +53,17 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
  * Hook to consume SSE stream from the Worker.
  * Uses useReducer to avoid calling setState synchronously within the effect body.
  */
-function useChronicleStream(id: string) {
+function useChronicleStream(id: string, debug: boolean) {
   const [state, dispatch] = useReducer(streamReducer, initialState)
 
   useEffect(() => {
-    const eventSource = new EventSource(
-      `/api/chronicle?id=${encodeURIComponent(id)}&stream=1`
-    )
+    const params = new URLSearchParams({
+      id,
+      stream: "1",
+    })
+    if (debug) params.set("debug", "1")
+
+    const eventSource = new EventSource(`/api/chronicle?${params.toString()}`)
 
     eventSource.addEventListener("progress", (e) => {
       try {
@@ -95,7 +99,7 @@ function useChronicleStream(id: string) {
     return () => {
       eventSource.close()
     }
-  }, [id, state.attempt])
+  }, [debug, id, state.attempt])
 
   const retry = useCallback(() => {
     dispatch({ type: "RESET" })
@@ -106,7 +110,9 @@ function useChronicleStream(id: string) {
 
 export function Chronicle() {
   const { id } = useLoaderData() as LoaderData
-  const { chronicle, progress, error, isScanning, retry } = useChronicleStream(id)
+  const location = useLocation()
+  const debug = new URLSearchParams(location.search).get("debug") === "1"
+  const { chronicle, progress, error, isScanning, retry } = useChronicleStream(id, debug)
   const {
     narrative,
     streamingText,
@@ -118,13 +124,14 @@ export function Chronicle() {
     cancel,
   } = useSynthesize()
   const navigate = useNavigate()
+  const homePath = `/${location.search}`
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
     return (
       <div className="fade-in" style={{ maxWidth: "480px", margin: "0 auto" }}>
         <div className="chronicle-header" style={{ marginBottom: "1.5rem" }}>
-          <button onClick={() => navigate("/")} className="btn btn-ghost">← Back</button>
+          <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
         </div>
         {progress ? (
           <ScanProgress progress={progress} inscriptionId={id} />
@@ -145,7 +152,7 @@ export function Chronicle() {
     return (
       <div className="fade-in" style={{ textAlign: "center" }}>
         <div className="chronicle-header" style={{ marginBottom: "1.5rem" }}>
-          <button onClick={() => navigate("/")} className="btn btn-ghost">← Back</button>
+          <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
         </div>
         <div className="glass-card" style={{ padding: "2rem" }}>
           <p style={{ color: "var(--danger)", marginBottom: "1rem" }}>
@@ -161,9 +168,10 @@ export function Chronicle() {
 
   // No data yet
   if (!chronicle) return null
+  const loadedChronicle = chronicle
 
   function handleShare() {
-    const text = `Inscription #${chronicle.meta.inscription_number} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
+    const text = `Inscription #${loadedChronicle.meta.inscription_number} — ${loadedChronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
     const url = window.location.href
 
     if (navigator.share) {
@@ -178,7 +186,7 @@ export function Chronicle() {
     <div className="chronicle-page fade-in">
       <div className="chronicle-header">
         <div className="chronicle-header-left">
-          <button onClick={() => navigate("/")} className="btn btn-ghost">← Back</button>
+          <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
           <h1>
             Inscription{" "}
             <span className="chronicle-header-number">

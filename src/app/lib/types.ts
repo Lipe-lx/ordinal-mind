@@ -8,6 +8,7 @@ export type EventType =
   | "collection_link" // belongs to a collection (parent inscription)
   | "recursive_ref"   // references another inscription
   | "sat_context"     // sat rarity data
+  | "trait_context"   // trait-based rarity data from UniSat
 
 export type SatRarity =
   | "common"
@@ -23,6 +24,7 @@ export type SourceTrustLevel =
   | "curated_public_registry"
   | "curated_public_research"
   | "market_overlay"
+  | "unisat_indexer"
 
 export type VisionTransport = "public_url" | "inline_data" | "unsupported"
 
@@ -72,6 +74,8 @@ export interface InscriptionMeta {
     name?: string
   }
   recursive_refs?: string[]            // other inscription IDs referenced
+  // UniSat enrichment
+  charms?: string[]                    // e.g., ["vintage", "cursed", "nineball"]
 }
 
 export interface SourceCatalogItem {
@@ -144,6 +148,12 @@ export interface MarketOverlayMatch {
   verified: boolean
   owner_address?: string
   source_ref: string
+  satflow_rarity?: {
+    rank: number
+    supply?: number
+    source_ref?: string
+    traits: Array<{ key: string, value: string, tokenCount: number }>
+  }
 }
 
 export interface CollectionMarketStats {
@@ -202,6 +212,8 @@ export interface Chronicle {
   source_catalog: SourceCatalogItem[]
   cached_at: string
   narrative?: string                    // filled client-side by LLM
+  unisat_enrichment?: UnisatEnrichment
+  validation?: DataValidationResult
 }
 
 export interface ChronicleResponse extends Chronicle {
@@ -222,8 +234,70 @@ export type ApiResponse = ChronicleResponse | AddressResponse | ErrorResponse
 // --- Scan Progress (SSE streaming) ---
 
 export interface ScanProgress {
-  phase: "metadata" | "transfers" | "mentions" | "complete"
+  phase: "metadata" | "transfers" | "mentions" | "unisat" | "complete"
   step: number
   total?: number
   description: string
+}
+
+// --- UniSat Enrichment Types ---
+
+export interface TraitAttribute {
+  trait_type: string
+  value: string
+}
+
+export interface TraitRarityBreakdown {
+  trait_type: string
+  value: string
+  frequency?: number              // how many items in collection have this value
+  frequency_pct?: number          // percentage (0-100)
+  rarity_contribution?: number    // this trait's contribution to the total score
+}
+
+export interface InscriptionRarity {
+  rarity_score: number | null
+  rarity_rank: number | null
+  rarity_percentile: number | null // e.g., 1.6 means top 1.6%
+  total_supply: number | null
+  traits: TraitAttribute[]
+  trait_breakdown: TraitRarityBreakdown[]
+  computed_at: string
+}
+
+export interface UnisatEnrichment {
+  inscription_info: {
+    charms: string[]
+    sat: number
+    metaprotocol: string | null
+    content_length: number
+  } | null
+  collection_context: {
+    collection_id: string
+    collection_name: string
+    floor_price_sats: number | null
+    listed_count: number | null
+    total_supply: number | null
+    verified: boolean
+  } | null
+  rarity: InscriptionRarity | null
+  market_info: {
+    listed: boolean
+    price_sats: number | null
+    item_name: string | null
+  } | null
+  source_catalog: SourceCatalogItem[]
+}
+
+export interface DataValidationCheck {
+  field: string
+  sources_agree: boolean
+  values: { source: string; value: string }[]
+  note?: string
+}
+
+export interface DataValidationResult {
+  confidence: "high" | "medium" | "low"
+  checks: DataValidationCheck[]
+  validated_at: string
 }

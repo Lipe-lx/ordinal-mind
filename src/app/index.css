@@ -1032,7 +1032,7 @@ select.input-field option {
   gap: var(--space-sm);
 }
 
-/* --- Sat Badge --- */
+/* --- Sat Badge (legacy inline, kept for metadata widget) --- */
 .sat-badge {
   display: inline-flex;
   align-items: center;
@@ -1079,6 +1079,230 @@ select.input-field option {
 
 @keyframes mythic-rotate {
   to { transform: rotate(360deg); }
+}
+
+/* --- Sat Rarity Overlay (on inscription image) --- */
+
+.sat-rarity-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.sat-rarity-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.688rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: auto;
+  cursor: default;
+  transition: all var(--duration-normal) var(--ease-smooth);
+  width: fit-content;
+}
+
+.sat-rarity-icon:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.sat-rarity-icon-symbol {
+  font-size: 0.813rem;
+  line-height: 1;
+}
+
+.sat-rarity-icon-label {
+  line-height: 1;
+}
+
+/* Tier-specific overlay styles */
+
+.sat-rarity-icon--uncommon {
+  color: var(--rarity-uncommon);
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
+}
+
+.sat-rarity-icon--rare {
+  color: var(--rarity-rare);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+  animation: overlay-pulse-rare 3s ease-in-out infinite;
+}
+
+.sat-rarity-icon--epic {
+  color: var(--rarity-epic);
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.25);
+  animation: overlay-pulse-epic 2.5s ease-in-out infinite;
+}
+
+.sat-rarity-icon--legendary {
+  color: var(--rarity-legendary);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+  animation: overlay-shimmer-legendary 3s ease-in-out infinite;
+}
+
+.sat-rarity-icon--mythic {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.sat-rarity-icon--mythic::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    135deg,
+    rgba(244, 63, 94, 0.15),
+    rgba(168, 85, 247, 0.15),
+    rgba(59, 130, 246, 0.15),
+    rgba(16, 185, 129, 0.15),
+    rgba(234, 179, 8, 0.15)
+  );
+  background-size: 300% 300%;
+  animation: mythic-gradient-sweep 4s ease-in-out infinite;
+  z-index: -1;
+}
+
+.sat-rarity-icon--mythic::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--radius-full);
+  background: var(--rarity-mythic);
+  background-size: 400% 400%;
+  animation: mythic-border-glow 4s linear infinite;
+  z-index: -2;
+  opacity: 0.5;
+  filter: blur(3px);
+}
+
+@keyframes overlay-pulse-rare {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.15); }
+  50% { box-shadow: 0 0 18px rgba(59, 130, 246, 0.35); }
+}
+
+@keyframes overlay-pulse-epic {
+  0%, 100% { box-shadow: 0 0 10px rgba(139, 92, 246, 0.2); }
+  50% { box-shadow: 0 0 24px rgba(139, 92, 246, 0.45); }
+}
+
+@keyframes overlay-shimmer-legendary {
+  0%, 100% { box-shadow: 0 0 14px rgba(245, 158, 11, 0.25); }
+  50% { box-shadow: 0 0 32px rgba(245, 158, 11, 0.55); }
+}
+
+@keyframes mythic-gradient-sweep {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes mythic-border-glow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 400% 50%; }
+}
+
+/* --- Charm Badges (overlay) --- */
+
+.charm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  pointer-events: auto;
+  cursor: default;
+  transition: all var(--duration-normal) var(--ease-smooth);
+  width: fit-content;
+}
+
+.charm-badge:hover {
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--text-primary);
+}
+
+.charm-badge-icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.charm-badge-label {
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+/* --- Rarity Widget --- */
+
+/* --- Refactored Rarity Grid Styles --- */
+
+.widget-rarity-grid-wrapper {
+  margin-top: 4px;
+}
+
+.widget-rarity-grid-label {
+  font-size: 0.688rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+  padding-left: 4px;
+}
+
+.widget-rarity-grid-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+.widget-rarity-confidence-mini {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.widget-rarity-confidence-mini.tone-high { color: var(--rarity-uncommon); }
+.widget-rarity-confidence-mini.tone-medium { color: var(--rarity-legendary); }
+.widget-rarity-confidence-mini.tone-low { color: var(--danger); }
+
+.widget-rarity-source-mini {
+  font-size: 0.625rem;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+/* Override meta grid for traits to be even more compact */
+.widget-rarity-grid-wrapper .widget-meta-cell {
+  padding: 4px 10px;
 }
 
 /* --- BYOK Modal --- */

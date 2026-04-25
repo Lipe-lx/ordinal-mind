@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { getMediaPreviewMode } from "../lib/media"
+import { SatRarityBadge, CharmBadge } from "./SatBadge"
 import type { ChronicleResponse } from "../lib/types"
 
 interface Props {
@@ -11,6 +12,9 @@ const MAX_TEXT_PREVIEW_BYTES = 24 * 1024
 export function InscriptionPreview({ chronicle }: Props) {
   const { meta, media_context } = chronicle
   const previewMode = getMediaPreviewMode(media_context)
+  const previewSandbox = media_context.preview_url.startsWith("https://ordinals.com/preview/")
+    ? "allow-scripts allow-same-origin"
+    : "allow-scripts"
   const [renderFallback, setRenderFallback] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -109,7 +113,7 @@ export function InscriptionPreview({ chronicle }: Props) {
           title={`Inscription #${meta.inscription_number} preview`}
           src={media_context.preview_url}
           loading="lazy"
-          sandbox="allow-scripts"
+          sandbox={previewSandbox}
           referrerPolicy="no-referrer"
         />
       ) : previewMode === "audio" ? (
@@ -141,6 +145,16 @@ export function InscriptionPreview({ chronicle }: Props) {
           loading="lazy"
           onError={() => setRenderFallback(true)}
         />
+      )}
+
+      {/* Sat rarity & charm badges — overlaid on preview */}
+      {(meta.sat_rarity !== "common" || (meta.charms && meta.charms.length > 0)) && (
+        <div className="sat-rarity-overlay">
+          <SatRarityBadge rarity={meta.sat_rarity} />
+          {meta.charms?.map(charm => (
+            <CharmBadge key={charm} charm={charm} />
+          ))}
+        </div>
       )}
     </div>
   )

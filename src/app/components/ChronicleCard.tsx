@@ -1,6 +1,7 @@
 import { KeyStore } from "../lib/byok"
 import { InscriptionMetaWidget } from "./widgets/InscriptionMetaWidget"
 import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
+import { RarityWidget } from "./widgets/RarityWidget"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
 import { NarrativeRenderer } from "./NarrativeRenderer"
 import { InscriptionPreview } from "./InscriptionPreview"
@@ -45,7 +46,10 @@ export function ChronicleCard({
         <InscriptionPreview chronicle={chronicle} />
 
         <InscriptionMetaWidget meta={meta} events={events} />
-
+        <RarityWidget
+          unisatEnrichment={chronicle.unisat_enrichment}
+          validation={chronicle.validation}
+        />
       </div>
 
       {/* Right Column */}
@@ -179,6 +183,24 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
       cached: chronicle.from_cache,
       count: marketEntries.length,
       links: marketEntries.map((e) => ({ label: e.source_type, url: e.url_or_ref }))
+    })
+  }
+
+  // UniSat enrichment
+  const unisatEntries = sourceCatalog.filter(
+    (source) => source.trust_level === "unisat_indexer"
+  )
+  if (unisatEntries.length > 0) {
+    const rarity = chronicle.unisat_enrichment?.rarity
+    sources.push({
+      name: "unisat.io",
+      status: unisatEntries.some((entry) => !entry.partial) ? "success" : "partial",
+      detail: rarity
+        ? `Rarity #${rarity.rarity_rank} of ${rarity.total_supply} · ${rarity.traits.length} traits`
+        : "Inscription indexer data",
+      cached: chronicle.from_cache,
+      count: unisatEntries.length,
+      links: unisatEntries.map((e) => ({ label: e.source_type, url: e.url_or_ref }))
     })
   }
 

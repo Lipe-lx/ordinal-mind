@@ -54,10 +54,10 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
   const sections = [
     buildSection("Identity", [
       `ID: ${meta.inscription_id}`,
-      `Number: #${meta.inscription_number}`,
-      `Sat: ${meta.sat.toLocaleString("en-US")} (${meta.sat_rarity})`,
+      `Number: #${meta.inscription_number?.toLocaleString() ?? "—"}`,
+      `Sat: ${meta.sat?.toLocaleString("en-US") ?? "—"} (${meta.sat_rarity})`,
       `Content type: ${meta.content_type}`,
-      `Genesis block: ${meta.genesis_block}`,
+      `Genesis block: ${meta.genesis_block?.toLocaleString() ?? "—"}`,
       `Genesis timestamp: ${meta.genesis_timestamp}`,
       `Genesis owner: ${meta.genesis_owner_address ?? "unknown"}`,
       `Current owner: ${meta.owner_address}`,

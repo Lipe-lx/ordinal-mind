@@ -1,7 +1,7 @@
 // Timeline builder — deterministic merge and chronological sort of all events.
 // Same input + same upstream data = same output.
 
-import type { ChronicleEvent, InscriptionMeta } from "../app/lib/types"
+import type { ChronicleEvent, InscriptionMeta, UnisatEnrichment } from "../app/lib/types"
 import type { XMention } from "./agents/xsearch"
 import type { EnrichedTransfer } from "./agents/mempool"
 
@@ -11,7 +11,8 @@ const uid = () => `ev_${Date.now()}_${_seq++}`
 export function buildTimeline(
   meta: InscriptionMeta,
   transfers: EnrichedTransfer[],
-  xMentions: XMention[]
+  xMentions: XMention[],
+  unisatEnrichment?: UnisatEnrichment
 ): ChronicleEvent[] {
   const events: ChronicleEvent[] = []
 
@@ -22,7 +23,7 @@ export function buildTimeline(
     block_height: meta.genesis_block,
     event_type: "genesis",
     source: { type: "onchain", ref: meta.genesis_txid },
-    description: `Inscribed at block ${meta.genesis_block} · sat #${meta.sat.toLocaleString("en-US")}`,
+    description: `Inscribed at block ${meta.genesis_block} · sat #${meta.sat?.toLocaleString("en-US") ?? "0"}`,
     metadata: {
       sat: meta.sat,
       content_type: meta.content_type,
@@ -33,14 +34,44 @@ export function buildTimeline(
 
   // Sat rarity context (only if non-common)
   if (meta.sat_rarity !== "common") {
+    const charms = meta.charms ?? (unisatEnrichment?.inscription_info?.charms ?? [])
     events.push({
       id: uid(),
       timestamp: meta.genesis_timestamp,
       block_height: meta.genesis_block,
       event_type: "sat_context",
       source: { type: "onchain", ref: `sat:${meta.sat}` },
-      description: `Sat rarity: ${meta.sat_rarity}`,
-      metadata: { sat_rarity: meta.sat_rarity },
+      description: `Sat rarity: ${meta.sat_rarity}${charms.length > 0 ? ` · Charms: ${charms.join(", ")}` : ""}`,
+      metadata: { sat_rarity: meta.sat_rarity, charms },
+    })
+  }
+
+  if (unisatEnrichment?.rarity) {
+    const r = unisatEnrichment.rarity
+    const traitCount = r.traits.length
+
+    let desc = `${traitCount} trait${traitCount !== 1 ? "s" : ""} detected`
+    if (r.rarity_rank != null && r.total_supply != null) {
+      desc += ` · rarity rank #${r.rarity_rank} of ${r.total_supply.toLocaleString("en-US")}`
+      if (r.rarity_percentile != null) {
+        desc += ` (top ${r.rarity_percentile}%)`
+      }
+    }
+
+    events.push({
+      id: uid(),
+      timestamp: meta.genesis_timestamp,
+      block_height: meta.genesis_block,
+      event_type: "trait_context",
+      source: { type: "web", ref: "ordinals.com" },
+      description: desc,
+      metadata: {
+        rarity_rank: r.rarity_rank,
+        rarity_score: r.rarity_score,
+        rarity_percentile: r.rarity_percentile,
+        total_supply: r.total_supply,
+        trait_count: traitCount,
+      },
     })
   }
 
@@ -80,7 +111,7 @@ export function buildTimeline(
       event_type: t.is_sale ? "sale" : "transfer",
       source: { type: "onchain", ref: t.tx_id },
       description: t.is_sale
-        ? `Sold for ${(t.value! / 1e8).toFixed(8)} BTC · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`
+        ? `Sold for ${t.value ? (t.value / 1e8).toFixed(8) : "—"} BTC · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`
         : `Transferred · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`,
       metadata: {
         from: t.from_address,

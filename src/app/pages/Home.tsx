@@ -1,5 +1,5 @@
 import { useState, useTransition } from "react"
-import { useNavigate } from "react-router"
+import { useLocation, useNavigate } from "react-router"
 
 const TAPROOT_RE = /^bc1p[a-z0-9]{38,62}$/i
 const HEX_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
@@ -14,6 +14,7 @@ export function Home() {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const navigate = useNavigate()
+  const location = useLocation()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -31,7 +32,7 @@ export function Home() {
 
     setError(null)
     startTransition(() => {
-      navigate(`/chronicle/${encodeURIComponent(trimmed)}`)
+      navigate(`/chronicle/${encodeURIComponent(trimmed)}${location.search}`)
     })
   }
 

@@ -6,6 +6,7 @@ import {
   findLegacyCollectionMembership,
   parseOrdMarketOverlay,
   parseOrdNetCollectionDirectory,
+  parseSatflowInscriptionOverlay,
   parseSatflowCollectionStats,
   parseRegistryEntries,
   selectRegistryMatch,
@@ -232,6 +233,29 @@ describe("ord.net market overlay parsing", () => {
       source_ref: "https://ord.net/inscription/11339504",
     })
   })
+
+  it("extracts verified gallery traits when ord.net exposes the collection payload", () => {
+    const html = `
+      item:{name:"Wizard #2983",collection:"wizards",collectionHref:"/collection/wizards"}
+      collection:{slug:"wizards",href:"/collection/wizards",name:"The Wizards of Ord",verified:true,items:3333}
+      verifiedGalleryTraitGroups:[{gallery:{id:"gallery-1",slug:"wizards",href:"/collection/wizards",name:"The Wizards of Ord"},traits:[{type:"Clothes",value:"Starry Blue Robe",count:252,percentage:7.6},{type:"Eyes",value:"Wide Open",count:338,percentage:10.1},{type:"Head",value:"Starry Blue Wizard Hat",count:255,percentage:7.7}]}]
+    `
+
+    expect(parseOrdMarketOverlay(html, "https://ord.net/inscription/11337510")).toMatchObject({
+      collection_slug: "wizards",
+      collection_name: "The Wizards of Ord",
+      satflow_rarity: {
+        rank: 0,
+        supply: 3333,
+        source_ref: "https://ord.net/inscription/11337510",
+        traits: [
+          { key: "Clothes", value: "Starry Blue Robe", tokenCount: 252 },
+          { key: "Eyes", value: "Wide Open", tokenCount: 338 },
+          { key: "Head", value: "Starry Blue Wizard Hat", tokenCount: 255 },
+        ],
+      },
+    })
+  })
 })
 
 describe("Satflow collection stats parsing", () => {
@@ -265,6 +289,75 @@ describe("Satflow collection stats parsing", () => {
     `
 
     expect(parseSatflowCollectionStats(html, "https://www.satflow.com/ordinals/runestone")).toBeNull()
+  })
+})
+
+describe("Satflow inscription overlay parsing", () => {
+  it("keeps trait frequencies when Satflow exposes `count` and rank is zero", () => {
+    const html = `
+      <meta property="og:title" content="Bitcoin Puppet #2971 - Bitcoin Puppets" />
+      <a href="/ordinals/bitcoin-puppets">Bitcoin Puppets</a>
+      <script>
+        window.__DATA__ = {
+          "rarityRank":0,
+          "totalSupply":5159,
+          "attributes":[
+            {"key":"Attributes","value":"None","count":5159},
+            {"key":"Background","value":"Dark Grey","count":800}
+          ]
+        }
+      </script>
+    `
+
+    expect(parseSatflowInscriptionOverlay(html, "https://www.satflow.com/ordinal/abc")).toMatchObject({
+      collection_slug: "bitcoin-puppets",
+      collection_name: "Bitcoin Puppets",
+      item_name: "Bitcoin Puppet #2971",
+      satflow_rarity: {
+        rank: 0,
+        supply: 5159,
+        traits: [
+          { key: "Attributes", value: "None", tokenCount: 5159 },
+          { key: "Background", value: "Dark Grey", tokenCount: 800 },
+        ],
+      },
+    })
+  })
+
+  it("prefers the richest attributes block when Satflow emits multiple copies", () => {
+    const html = `
+      <meta property="og:title" content="Wizard #2983 - The Wizards of Ord" />
+      <script>
+        window.__DATA__ = {
+          "collectionSlug":"wizards",
+          "rarityRank":0,
+          "attributes":[
+            {"key":"Type","value":"Ape"},
+            {"key":"Eyes","value":"Wide Open"}
+          ],
+          "attributes":[
+            {"key":"Type","value":"Ape","tokenCount":436},
+            {"key":"Eyes","value":"Wide Open","tokenCount":338},
+            {"key":"Weapon","value":"Dagger","tokenCount":266}
+          ],
+          "attributes":[
+            {"key":"Type","value":"Ape","count":436}
+          ]
+        }
+      </script>
+    `
+
+    expect(parseSatflowInscriptionOverlay(html, "https://www.satflow.com/ordinal/wizard")).toMatchObject({
+      collection_slug: "wizards",
+      satflow_rarity: {
+        source_ref: "https://www.satflow.com/ordinal/wizard",
+        traits: [
+          { key: "Type", value: "Ape", tokenCount: 436 },
+          { key: "Eyes", value: "Wide Open", tokenCount: 338 },
+          { key: "Weapon", value: "Dagger", tokenCount: 266 },
+        ],
+      },
+    })
   })
 })
 

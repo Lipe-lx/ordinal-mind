@@ -127,7 +127,7 @@ export const fetchMempool = {
         onProgress(
           depth + 1,
           transfer.is_sale
-            ? `Found sale: ${(transfer.value! / 1e8).toFixed(4)} BTC`
+            ? `Found sale: ${transfer.value ? (transfer.value / 1e8).toFixed(4) : "—"} BTC`
             : `Transfer ${depth + 1}: ${truncAddr(transfer.from_address)} → ${truncAddr(transfer.to_address)}`
         )
       }
