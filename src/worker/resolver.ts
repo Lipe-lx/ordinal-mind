@@ -1,5 +1,5 @@
 // Detects whether the input is an inscription number, hex ID, or taproot address.
-// Normalizes the input and resolves inscription numbers to hex IDs via Xverse.
+// Normalizes the input and resolves inscription numbers to hex IDs via ordinals.com.
 
 export interface ResolvedInput {
   type: "inscription" | "address"
@@ -34,7 +34,7 @@ async function resolveNumberToId(num: number): Promise<string> {
   if (!res.ok) throw new Error(`inscription #${num} not found`)
   
   const html = await res.text()
-  const match = html.match(/\/inscription\/([a-f0-9]{64}i[0-9]+)/i)
+  const match = html.match(/\/content\/([a-f0-9]{64}i[0-9]+)/i)
   
   if (match && match[1]) {
     return match[1]
