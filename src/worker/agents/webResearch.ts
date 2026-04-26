@@ -22,6 +22,9 @@ const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 let discoveredInstances: string[] = []
 let lastDiscoveryTime = 0
 const DISCOVERY_CACHE_TTL = 1000 * 60 * 60 * 12 // 12 hours
+const deadInstances = new Set<string>()
+let lastBlacklistClear = Date.now()
+const BLACKLIST_TTL = 1000 * 60 * 30 // 30 minutes
 
 interface SearXNGInstanceInfo {
   http?: {
@@ -97,6 +100,11 @@ interface SearXNGResponse {
   results?: SearXNGResult[]
 }
 
+interface WikipediaResult {
+  title: string
+  snippet: string
+}
+
 export async function fetchLoreContext(collectionName: string): Promise<WebResearchContext | null> {
   if (!collectionName) return null
 
@@ -152,13 +160,28 @@ export async function fetchLoreContext(collectionName: string): Promise<WebResea
 }
 
 async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
+  const now = Date.now()
+  if (now - lastBlacklistClear > BLACKLIST_TTL) {
+    deadInstances.clear()
+    lastBlacklistClear = now
+  }
+
   const pool = await discoverInstances()
-  // Shuffle and try up to 20 instances
-  const instances = [...pool].sort(() => Math.random() - 0.5).slice(0, 20)
+  // Filter out known dead instances and shuffle
+  const instances = pool
+    .filter(url => !deadInstances.has(url))
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 20)
 
-  console.log(`[WebResearch] Attempting search with ${instances.length} instances in batches of 5`)
+  if (instances.length === 0) {
+    console.warn("[WebResearch] All discovered instances are blacklisted, clearing blacklist.")
+    deadInstances.clear()
+    return []
+  }
 
-  // Race in batches of 2 with a small delay to avoid triggering CDN rate limits
+  console.log(`[WebResearch] Attempting search with ${instances.length} active instances in batches of 2`)
+
+  // Race in batches of 2 to find a working instance without hitting global rate limits
   const batchSize = 2
   for (let i = 0; i < instances.length; i += batchSize) {
     const batch = instances.slice(i, i + batchSize)
@@ -166,18 +189,16 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
       const result = await Promise.any(
         batch.map(instance => searchSingleSearXNG(instance, query))
       )
-      if (result && result.length > 0) {
-        console.log(`[WebResearch] Search successful with an instance from batch ${i / batchSize + 1}`)
-        return result
-      }
+      if (result && result.length > 0) return result
     } catch (e) {
-      // AggregateError contains errors from all batchSize promises
-      const errors = (e as any).errors || [e]
-      const statuses = errors.map((err: any) => err.message || String(err)).join(", ")
-      console.warn(`[WebResearch] Batch ${i / batchSize + 1} failed: ${statuses}`)
+      // Mark all instances in this batch as potentially dead for this isolate
+      batch.forEach(instance => deadInstances.add(instance))
       
-      // Wait a bit before next batch to be gentle
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const errors = (e as AggregateError).errors || [e]
+      const statuses = errors.map((err: Error | unknown) => (err instanceof Error ? err.message : String(err))).join(", ")
+      console.warn(`[WebResearch] Batch ${i / batchSize + 1} failed (marking ${batch.length} instances as dead): ${statuses}`)
+      
+      await new Promise(resolve => setTimeout(resolve, 300))
       continue
     }
   }
@@ -226,9 +247,9 @@ async function searchWikipedia(term: string): Promise<SearXNGResult[]> {
       signal: AbortSignal.timeout(5000),
     })
     if (!res.ok) return []
-    const data = await res.json() as any
+    const data = await res.json() as { query?: { search?: WikipediaResult[] } }
     const search = data.query?.search || []
-    return search.map((r: any) => ({
+    return search.map((r: WikipediaResult) => ({
       title: r.title,
       url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
       content: r.snippet.replace(/<[^>]*>/g, ""), // Strip HTML tags from snippet
@@ -260,11 +281,11 @@ async function searchSwisscows(query: string): Promise<SearXNGResult[]> {
         const linkMatch = article.match(/href="(.*?)"/)
         const snippetMatch = article.match(/<p.*?>([\s\S]*?)<\/p>/)
         
-        if (titleMatch && linkMatch) {
+        if (titleMatch?.[1] && linkMatch?.[1]) {
           results.push({
             title: titleMatch[1].replace(/<[^>]*>/g, "").trim(),
             url: linkMatch[1],
-            content: snippetMatch ? snippetMatch[1].replace(/<[^>]*>/g, "").trim() : "",
+            content: snippetMatch?.[1] ? snippetMatch[1].replace(/<[^>]*>/g, "").trim() : "",
           })
         }
       }
@@ -277,11 +298,12 @@ async function searchSwisscows(query: string): Promise<SearXNGResult[]> {
 
 async function searchDuckDuckGoLite(query: string): Promise<SearXNGResult[]> {
   try {
-    const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`
+    // Try /html/ first as it's often more stable than /lite/
+    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`
     const res = await fetch(url, {
       headers: { 
         "User-Agent": USER_AGENT,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://duckduckgo.com/",
       },
@@ -289,48 +311,42 @@ async function searchDuckDuckGoLite(query: string): Promise<SearXNGResult[]> {
     })
 
     if (!res.ok) return []
+    const text = await res.text()
+    
+    // Detect CAPTCHA/Block
+    if (text.includes("Making sure you're not a bot") || text.includes("anomaly-modal")) {
+      console.warn("[WebResearch] DDG blocked our request with a captcha")
+      return []
+    }
 
     const results: SearXNGResult[] = []
-    let currentResult: Partial<SearXNGResult> = {}
+    // DDG HTML results are in .result.results_links
+    const linkMatches = text.match(/<a class="result__a" href="(.*?)">([\s\S]*?)<\/a>/g)
+    const snippetMatches = text.match(/<a class="result__snippet"[\s\S]*?>([\s\S]*?)<\/a>/g)
 
-    const rewriter = new HTMLRewriter()
-      .on("a.result-link", {
-        element(el) {
-          const href = el.getAttribute("href")
-          if (href) {
-            // DDG Lite URLs are proxied: //duckduckgo.com/l/?uddg=URL...
-            const match = href.match(/[?&]uddg=([^&]+)/)
-            const actualUrl = match ? decodeURIComponent(match[1]) : href
-            currentResult.url = actualUrl.startsWith("//") ? "https:" + actualUrl : actualUrl
-          }
-        },
-        text(chunk) {
-          currentResult.title = (currentResult.title || "") + chunk.text
-        }
-      })
-      .on("td.result-snippet", {
-        text(chunk) {
-          currentResult.content = (currentResult.content || "") + chunk.text
-        }
-      })
-      // The snippet is usually the last part of a result block in DDG Lite
-      .on("span.link-text", {
-        element() {
-          if (currentResult.title && currentResult.url) {
-            results.push({
-              title: currentResult.title.trim(),
-              url: currentResult.url,
-              content: (currentResult.content || "").trim(),
-            })
-          }
-          currentResult = {} // Reset for next result
-        }
-      })
+    if (linkMatches) {
+      linkMatches.slice(0, 5).forEach((link, idx) => {
+        const urlMatch = link.match(/href="(.*?)"/)
+        const titleMatch = link.match(/>([\s\S]*?)<\/a>/)
+        const snippetMatch = snippetMatches?.[idx]?.match(/>([\s\S]*?)<\/a>/)
 
-    await rewriter.transform(res).text()
+        if (urlMatch?.[1] && titleMatch?.[1]) {
+          // DDG HTML links are proxied: //duckduckgo.com/l/?uddg=URL...
+          const rawUrl = urlMatch[1]
+          const uddgMatch = rawUrl.match(/[?&]uddg=([^&]+)/)
+          const actualUrl = uddgMatch?.[1] ? decodeURIComponent(uddgMatch[1]) : rawUrl
+          
+          results.push({
+            title: titleMatch[1].replace(/<[^>]*>/g, "").trim(),
+            url: actualUrl.startsWith("//") ? "https:" + actualUrl : actualUrl,
+            content: snippetMatch?.[1] ? snippetMatch[1].replace(/<[^>]*>/g, "").trim() : "",
+          })
+        }
+      })
+    }
     return results
   } catch (e) {
-    console.error("[WebResearch] DDG Lite search failed:", e)
+    console.error("[WebResearch] DDG search failed:", e)
     return []
   }
 }

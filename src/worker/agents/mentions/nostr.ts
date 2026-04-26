@@ -3,11 +3,11 @@ import type { MentionProviderContext, MentionProviderResult } from "./types"
 import { recordAttempt } from "./types"
 
 const DEFAULT_NOSTR_RELAYS = [
+  "wss://relay.nostr.band",
+  "wss://search.nos.today",
   "wss://relay.damus.io",
   "wss://nos.lol",
-  "wss://relay.nostr.band",
   "wss://relay.snort.social",
-  "wss://purplepag.es",
 ] as const
 
 type RelayMode = "search" | "recent_scan"
@@ -150,7 +150,7 @@ async function searchRelayQuery(
   const timeoutMs = 3800
   const results: SocialMention[] = []
   const discoveredAt = new Date().toISOString()
-  const sinceDays = mode === "search" ? 365 : 7
+  const sinceDays = mode === "search" ? 1000 : 7
   const since = Math.floor((Date.now() - sinceDays * 24 * 60 * 60 * 1000) / 1000)
   const subscriptionId = `om_${Math.random().toString(36).slice(2, 10)}`
   const limit = mode === "search"
