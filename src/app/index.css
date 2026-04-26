@@ -3009,3 +3009,88 @@ select.input-field option {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* --- Inscription Hierarchy Navigation (Overlay) --- */
+
+.inscription-nav-overlay {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  right: var(--space-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+  pointer-events: none; /* Allow mouse moves to pass to preview by default */
+}
+
+.inscription-nav-group {
+  display: flex;
+  gap: var(--space-xs);
+  pointer-events: auto; /* Re-enable for buttons */
+}
+
+.nav-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-smooth);
+  opacity: 0; /* Hidden by default, shown on preview hover */
+  transform: translateY(-4px);
+}
+
+.chronicle-card-content-preview:hover .nav-btn {
+  opacity: 0.8;
+  transform: translateY(0);
+}
+
+.nav-btn:hover {
+  opacity: 1 !important;
+  background: rgba(0, 0, 0, 0.65);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 0 15px var(--accent-glow);
+  transform: translateY(-1px) !important;
+}
+
+.nav-btn:active {
+  transform: translateY(0) scale(0.95) !important;
+}
+
+.nav-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.nav-btn-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(247, 147, 26, 0.2);
+  color: var(--accent-primary);
+}
+
+.nav-btn:hover .nav-btn-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(4px);
+}

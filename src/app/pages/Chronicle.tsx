@@ -60,6 +60,10 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
 function useChronicleStream(id: string, debug: boolean) {
   const [state, dispatch] = useReducer(streamReducer, initialState)
 
+
+  useEffect(() => {
+    dispatch({ type: "RESET" })
+  }, [id])
   useEffect(() => {
     const params = new URLSearchParams({
       id,
@@ -215,6 +219,12 @@ export function Chronicle() {
     autoSynthesizedRef.current = autoKey
     synthesize(chronicle)
   }, [chronicle, narrative, phase, streamingText, synthesize])
+
+  // Reset narrative and cancel synthesis when ID changes (navigation)
+  useEffect(() => {
+    cancel()
+    autoSynthesizedRef.current = null
+  }, [id, cancel])
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {

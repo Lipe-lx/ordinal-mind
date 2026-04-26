@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router"
 import { getMediaPreviewMode } from "../lib/media"
 import { SatRarityBadge, CharmBadge } from "./SatBadge"
 import type { ChronicleResponse } from "../lib/types"
@@ -10,6 +11,7 @@ interface Props {
 const MAX_TEXT_PREVIEW_BYTES = 24 * 1024
 
 export function InscriptionPreview({ chronicle }: Props) {
+  const navigate = useNavigate()
   const { meta, media_context } = chronicle
   const previewMode = getMediaPreviewMode(media_context)
   const previewSandbox = media_context.preview_url.startsWith("https://ordinals.com/preview/")
@@ -142,6 +144,51 @@ export function InscriptionPreview({ chronicle }: Props) {
           onError={() => setRenderFallback(true)}
         />
       )}
+
+      {/* Hierarchy Navigation Overlay */}
+      <div className="inscription-nav-overlay">
+        <div className="inscription-nav-group">
+          {chronicle.collection_context.protocol.parents?.items.map((parent) => (
+            <button
+              key={parent.inscription_id}
+              className="nav-btn nav-btn--parent"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate(`/${parent.inscription_id}${window.location.search}`)
+              }}
+              title={`Parent: #${parent.inscription_number ?? parent.inscription_id}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m18 15-6-6-6 6"/>
+              </svg>
+              <span className="nav-btn-label">
+                Parent {parent.inscription_number ? `#${parent.inscription_number}` : "Inscription"}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="inscription-nav-group">
+          {chronicle.collection_context.protocol.children?.items.slice(0, 3).map((child) => (
+            <button
+              key={child.inscription_id}
+              className="nav-btn nav-btn--child"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate(`/${child.inscription_id}${window.location.search}`)
+              }}
+              title={`Child: #${child.inscription_number ?? child.inscription_id}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+              <span className="nav-btn-label">
+                Child {child.inscription_number ? `#${child.inscription_number}` : "Inscription"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Sat rarity & charm badges — overlaid on preview */}
       {(meta.sat_rarity !== "common" || (meta.charms && meta.charms.length > 0)) && (
