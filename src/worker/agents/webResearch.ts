@@ -1,6 +1,6 @@
 import type { WebResearchContext, WebResearchItem } from "../../app/lib/types"
 
-const SEARXNG_INSTANCES = [
+const FALLBACK_INSTANCES = [
   "https://searx.be",
   "https://searx.tiekoetter.com",
   "https://searx.monocles.de",
@@ -12,6 +12,69 @@ const SEARXNG_INSTANCES = [
 ]
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+// Cache discovery in memory (persists within the same isolate)
+let discoveredInstances: string[] = []
+let lastDiscoveryTime = 0
+const DISCOVERY_CACHE_TTL = 1000 * 60 * 60 * 12 // 12 hours
+
+interface SearXNGInstanceInfo {
+  http?: {
+    status_code: number
+  }
+  timing?: {
+    search?: {
+      success_percentage: number
+      all?: {
+        median: number
+      }
+    }
+  }
+}
+
+interface SearXNGInstancesData {
+  instances: Record<string, SearXNGInstanceInfo>
+}
+
+async function discoverInstances(): Promise<string[]> {
+  const now = Date.now()
+  if (discoveredInstances.length > 0 && now - lastDiscoveryTime < DISCOVERY_CACHE_TTL) {
+    return discoveredInstances
+  }
+
+  try {
+    const res = await fetch("https://searx.space/data/instances.json", {
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error("Failed to fetch instances")
+
+    const data = (await res.json()) as SearXNGInstancesData
+    if (!data.instances) throw new Error("Invalid instances.json format")
+
+    const candidates = Object.entries(data.instances)
+      .filter(([_url, info]) => {
+        // High quality criteria: 200 OK, >95% success rate, <2s response time
+        return (
+          info.http?.status_code === 200 &&
+          (info.timing?.search?.success_percentage ?? 0) > 95 &&
+          (info.timing?.search?.all?.median ?? 99) < 2.0
+        )
+      })
+      .map(([url]) => url.replace(/\/$/, "")) // Remove trailing slash
+      .filter((url) => !url.includes(".onion") && url.startsWith("https://"))
+
+    if (candidates.length > 5) {
+      discoveredInstances = candidates.sort(() => Math.random() - 0.5).slice(0, 15)
+      lastDiscoveryTime = now
+      console.log(`[WebResearch] Discovered ${discoveredInstances.length} fresh SearXNG instances`)
+      return discoveredInstances
+    }
+  } catch (e) {
+    console.warn("[WebResearch] Discovery failed, using fallback list", e)
+  }
+
+  return FALLBACK_INSTANCES
+}
 
 interface SearXNGResult {
   title: string
@@ -59,8 +122,8 @@ export async function fetchLoreContext(collectionName: string): Promise<WebResea
 }
 
 async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
-  // Shuffle instances for basic load balancing
-  const instances = [...SEARXNG_INSTANCES].sort(() => Math.random() - 0.5)
+  const pool = await discoverInstances()
+  const instances = [...pool].sort(() => Math.random() - 0.5)
 
   for (const instance of instances) {
     try {
