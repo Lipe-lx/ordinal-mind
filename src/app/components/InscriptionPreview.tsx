@@ -27,34 +27,36 @@ export function InscriptionPreview({
     : "allow-scripts"
   const [renderFallback, setRenderFallback] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [zoom, setZoom] = useState(1)
   const containerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
+  const lastMousePos = useRef({ x: 0, y: 0 })
   const isInteractiveImage = previewMode === "image" && !renderFallback
 
   const isMain = activeChronicle.meta.inscription_id === initialChronicle.meta.inscription_id
 
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isInteractiveImage || !containerRef.current || !imgRef.current) return
+  const updateTransform = (x: number, y: number, dragging: boolean, currentZoom: number) => {
+    if (!containerRef.current || !imgRef.current) return
 
     const rect = containerRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const relX = x - rect.left
+    const relY = y - rect.top
     const centerX = rect.width / 2
     const centerY = rect.height / 2
 
-    let rotateX = ((y - centerY) / centerY) * -15
-    let rotateY = ((x - centerX) / centerX) * 15
-    let scale = 1.05
+    let rotateX = ((relY - centerY) / centerY) * -15
+    let rotateY = ((relX - centerX) / centerX) * 15
+    let scale = (dragging ? 0.95 : 1.05) * currentZoom
     let skewX = 0
     let skewY = 0
 
-    if (isDragging) {
+    if (dragging) {
       rotateX *= 2.5
       rotateY *= 2.5
-      scale = 0.95
-      skewX = (x - centerX) / 20
-      skewY = (y - centerY) / 20
+      scale = 0.95 * currentZoom
+      skewX = (relX - centerX) / 20
+      skewY = (relY - centerY) / 20
       imgRef.current.style.transition = "transform 0.05s linear"
     } else {
       imgRef.current.style.transition = "transform 0.1s ease-out"
@@ -67,19 +69,45 @@ export function InscriptionPreview({
       skew(${skewX}deg, ${skewY}deg)
     `
 
-    imgRef.current.style.filter = isDragging
+    imgRef.current.style.filter = dragging
       ? `brightness(${1 + Math.abs(rotateX + rotateY) / 1000}) contrast(1.1)`
       : "none"
 
-    const px = (x / rect.width) * 100
-    const py = (y / rect.height) * 100
+    const px = (relX / rect.width) * 100
+    const py = (relY / rect.height) * 100
     containerRef.current.style.setProperty("--mouse-x", `${px}%`)
     containerRef.current.style.setProperty("--mouse-y", `${py}%`)
   }
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isInteractiveImage) return
+    lastMousePos.current = { x: e.clientX, y: e.clientY }
+    updateTransform(e.clientX, e.clientY, isDragging, zoom)
+  }
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !isInteractiveImage) return
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const delta = e.deltaY * -0.001
+      setZoom(prev => {
+        const nextZoom = Math.min(Math.max(0.5, prev + delta), 5)
+        // Immediately update transform for smooth feedback
+        updateTransform(lastMousePos.current.x, lastMousePos.current.y, isDragging, nextZoom)
+        return nextZoom
+      })
+    }
+
+    container.addEventListener("wheel", onWheel, { passive: false })
+    return () => container.removeEventListener("wheel", onWheel)
+  }, [isInteractiveImage, isDragging]) // Re-bind if interactivity or dragging state changes to ensure correct capture
+
   const resetTransform = () => {
     if (!imgRef.current) return
 
+    setZoom(1)
     imgRef.current.style.transition =
       "transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease"
     imgRef.current.style.transform =
