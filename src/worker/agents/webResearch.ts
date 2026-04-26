@@ -2,12 +2,13 @@ import type { WebResearchContext, WebResearchItem } from "../../app/lib/types"
 
 const SEARXNG_INSTANCES = [
   "https://searx.be",
-  "https://priv.au",
-  "https://searx.work",
-  "https://search.privacytools.io/searx",
-  "https://searx.cat",
-  "https://baresearch.org",
   "https://searx.tiekoetter.com",
+  "https://searx.monocles.de",
+  "https://searx.divided-by-zero.eu",
+  "https://search.ononoki.org",
+  "https://searx.nixnet.services",
+  "https://searx.fmac.xyz",
+  "https://priv.au",
 ]
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -68,7 +69,7 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
         headers: {
           "User-Agent": USER_AGENT,
         },
-        signal: AbortSignal.timeout(4000), // Fast timeout for search
+        signal: AbortSignal.timeout(6000), // Fast timeout for search
       })
 
       if (res.ok) {
@@ -88,9 +89,9 @@ async function extractContent(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; ordinal-mind/1.0)",
+        "User-Agent": USER_AGENT,
       },
-      signal: AbortSignal.timeout(6000), // Slightly longer for content fetch
+      signal: AbortSignal.timeout(8000), // Slightly longer for content fetch
     })
 
     if (!res.ok) return null
