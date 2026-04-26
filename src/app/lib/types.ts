@@ -4,7 +4,7 @@ export type EventType =
   | "genesis"         // inscription created
   | "transfer"        // moved to another wallet
   | "sale"            // sold on a marketplace
-  | "x_mention"       // post found on X via DDG scrape
+  | "social_mention"  // post or community reference found on public social sources
   | "collection_link" // belongs to a collection (parent inscription)
   | "recursive_ref"   // references another inscription
   | "sat_context"     // sat rarity data
@@ -25,7 +25,20 @@ export type SourceTrustLevel =
   | "curated_public_research"
   | "market_overlay"
   | "bitcoin_indexer"
+  | "public_social"
   | "unisat_indexer"
+
+export type SocialPlatform = "nostr" | "x" | "google_trends"
+export type SocialSignalProvider = "nostr" | "x_fallback" | "google_trends"
+export type SocialMatchType =
+  | "collection_only"
+  | "item_plus_collection"
+  | "item_only"
+  | "inscription_number"
+  | "inscription_id"
+export type SocialScope = "inscription_level" | "collection_level" | "mixed"
+export type SentimentLabel = "positive" | "neutral" | "negative" | "mixed" | "insufficient_data"
+export type CollectorSignalConfidence = "low" | "medium" | "high"
 
 export type VisionTransport = "public_url" | "inline_data" | "unsupported"
 
@@ -41,6 +54,8 @@ export type MediaKind =
   | "unknown"
 
 export interface ChronicleEvent {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any
   id: string
   timestamp: string                    // ISO8601 derived from BTC block
   block_height: number
@@ -51,6 +66,30 @@ export interface ChronicleEvent {
   }
   description: string                  // short factual phrase
   metadata: Record<string, unknown>
+}
+
+export interface SocialMentionEngagement {
+  likes?: number
+  replies?: number
+  reposts?: number
+  quotes?: number
+}
+
+export interface SocialMention {
+  platform: SocialPlatform
+  provider: SocialSignalProvider
+  canonical_url: string
+  title: string
+  excerpt: string
+  text: string
+  author_handle?: string
+  author_url?: string
+  published_at: string
+  discovered_at: string
+  scope: SocialScope
+  match_type: SocialMatchType
+  provider_confidence: number
+  engagement?: SocialMentionEngagement
 }
 
 export interface InscriptionMeta {
@@ -205,6 +244,12 @@ export interface CollectionContext {
     ord_net_match?: MarketOverlayMatch | null
   }
   profile: CollectionProfile | null
+  socials: {
+    official_x_profiles: Array<{
+      url: string
+      source_ref: string
+    }>
+  }
   presentation: {
     primary_label?: string
     item_label?: string
@@ -217,6 +262,7 @@ export interface Chronicle {
   inscription_id: string
   meta: InscriptionMeta
   events: ChronicleEvent[]
+  collector_signals: CollectorSignals
   media_context: MediaContext
   collection_context: CollectionContext
   source_catalog: SourceCatalogItem[]
@@ -224,10 +270,96 @@ export interface Chronicle {
   narrative?: string                    // filled client-side by LLM
   unisat_enrichment?: UnisatEnrichment
   validation?: DataValidationResult
+  debug_info?: ChronicleDebugInfo
 }
 
 export interface ChronicleResponse extends Chronicle {
   from_cache?: boolean
+}
+
+export interface ChronicleDebugInfo {
+  mention_providers?: Partial<Record<SocialSignalProvider, MentionProviderDebug>>
+}
+
+export interface MentionProviderAttempt {
+  target?: string
+  query: string
+  outcome:
+    | "query_completed"
+    | "non_ok"
+    | "fetch_failed"
+    | "transport_unavailable"
+    | "timeout"
+    | "unsupported"
+    | "skipped"
+  status?: number
+  result_count?: number
+  detail?: string
+}
+
+export interface MentionProviderDebug {
+  provider: SocialSignalProvider
+  collection_name?: string
+  item_name?: string
+  official_x_urls?: string[]
+  candidate_handles?: string[]
+  queries: string[]
+  attempts: MentionProviderAttempt[]
+  notes: string[]
+}
+
+export interface CollectorSignalsTopEvidence {
+  platform: SocialPlatform
+  provider: SocialSignalProvider
+  url: string
+  title: string
+  excerpt: string
+  author_handle?: string
+  published_at: string
+  scope: SocialScope
+  match_type: SocialMatchType
+}
+
+export interface CollectorSignalsWindow {
+  evidence_count: number
+  provider_count: number
+  attention_score: number
+  sentiment_label: SentimentLabel
+}
+
+export interface CollectorSignals {
+  attention_score: number
+  sentiment_label: SentimentLabel
+  confidence: CollectorSignalConfidence
+  evidence_count: number
+  provider_breakdown: Record<SocialSignalProvider, number>
+  scope_breakdown: {
+    inscription_level: number
+    collection_level: number
+    mixed: number
+    dominant_scope: SocialScope | "none"
+  }
+  top_evidence: CollectorSignalsTopEvidence[]
+  windows: {
+    current_7d: CollectorSignalsWindow
+    context_30d: CollectorSignalsWindow
+  }
+}
+
+export interface LegacyXMentionDebugInfo {
+  collection_name?: string
+  item_name?: string
+  official_x_urls: string[]
+  candidate_handles: string[]
+  queries: string[]
+  attempts: Array<{
+    provider: "ddg" | "bing"
+    transport: "POST" | "GET"
+    query: string
+    outcome: "query_completed" | "non_ok" | "fetch_failed" | "transport_unavailable"
+    status?: number
+    mention_count?: number
+  }>
 }
 
 export interface AddressResponse {

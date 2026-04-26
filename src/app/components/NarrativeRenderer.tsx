@@ -21,6 +21,10 @@ interface Props {
   inputMode?: SynthesisMode | null
   /** Called when user clicks Generate */
   onGenerate?: () => void
+  /** Primary button label for empty/error states */
+  actionLabel?: string
+  /** Empty state helper copy */
+  emptyMessage?: string
   /** Called when user clicks Cancel */
   onCancel?: () => void
 }
@@ -43,6 +47,8 @@ export function NarrativeRenderer({
   error,
   inputMode,
   onGenerate,
+  actionLabel = "✨ Generative Chronicle",
+  emptyMessage = "Generate an AI-powered Chronicle narrative from the factual timeline above.",
   onCancel,
 }: Props) {
   // Error state
@@ -54,7 +60,7 @@ export function NarrativeRenderer({
           <p>{error}</p>
           {onGenerate && (
             <button className="btn btn-secondary btn-sm" onClick={onGenerate}>
-              Try again
+              {actionLabel}
             </button>
           )}
         </div>
@@ -127,11 +133,11 @@ export function NarrativeRenderer({
       <div className="narrative-section">
         <div className="narrative-empty">
           <p className="narrative-empty-text">
-            Generate an AI-powered Chronicle narrative from the factual timeline above.
+            {emptyMessage}
           </p>
           {onGenerate && (
             <button className="btn btn-primary btn-sm" onClick={onGenerate}>
-              ✨ Generate Chronicle
+              {actionLabel}
             </button>
           )}
         </div>

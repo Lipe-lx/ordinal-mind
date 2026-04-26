@@ -2,7 +2,7 @@
 // Same input + same upstream data = same output.
 
 import type { ChronicleEvent, InscriptionMeta, UnisatEnrichment } from "../app/lib/types"
-import type { XMention } from "./agents/xsearch"
+import type { SocialMention } from "../app/lib/types"
 import type { EnrichedTransfer } from "./agents/mempool"
 
 let _seq = 0
@@ -11,7 +11,7 @@ const uid = () => `ev_${Date.now()}_${_seq++}`
 export function buildTimeline(
   meta: InscriptionMeta,
   transfers: EnrichedTransfer[],
-  xMentions: XMention[],
+  socialMentions: SocialMention[],
   unisatEnrichment?: UnisatEnrichment
 ): ChronicleEvent[] {
   const events: ChronicleEvent[] = []
@@ -126,16 +126,28 @@ export function buildTimeline(
     })
   }
 
-  // X mentions
-  for (const m of xMentions) {
+  // Social mentions
+  for (const mention of socialMentions) {
     events.push({
       id: uid(),
-      timestamp: m.found_at,
+      timestamp: mention.published_at,
       block_height: 0,
-      event_type: "x_mention",
-      source: { type: "web", ref: m.url },
-      description: m.title ? m.title.substring(0, 100) : "Mention found on X",
-      metadata: { url: m.url, snippet: m.snippet },
+      event_type: "social_mention",
+      source: { type: "web", ref: mention.canonical_url },
+      description: `${platformLabel(mention.platform)} · ${mention.title ? mention.title.substring(0, 100) : "Collector signal found"}`,
+      metadata: {
+        platform: mention.platform,
+        scope: mention.scope,
+        match_type: mention.match_type,
+        canonical_url: mention.canonical_url,
+        excerpt: mention.excerpt,
+        author_handle: mention.author_handle,
+        author_url: mention.author_url,
+        published_at: mention.published_at,
+        discovered_at: mention.discovered_at,
+        provider_confidence: mention.provider_confidence,
+        engagement: mention.engagement,
+      },
     })
   }
 
@@ -156,3 +168,18 @@ const truncAddr = (addr: string) =>
   addr && addr !== "?"
     ? `${addr.substring(0, 8)}…${addr.substring(addr.length - 6)}`
     : "?"
+
+function platformLabel(platform: SocialMention["platform"]): string {
+  switch (platform) {
+    case "nostr":
+      return "Nostr"
+    case "bluesky":
+      return "Bluesky"
+    case "x":
+      return "X"
+    case "google_trends":
+      return "Google Trends"
+    default:
+      return "Social"
+  }
+}

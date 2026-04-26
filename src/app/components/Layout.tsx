@@ -7,6 +7,7 @@ import type { ReactNode } from "react"
 export interface LayoutOutletContext {
   setHeaderCenter: (node: ReactNode) => void
   setHeaderRight: (node: ReactNode) => void
+  openBYOK: () => void
 }
 
 export function Layout() {
@@ -21,6 +22,10 @@ export function Layout() {
 
   const setHeaderRight = useCallback((node: ReactNode) => {
     setHeaderRightState(node)
+  }, [])
+
+  const openBYOK = useCallback(() => {
+    setShowBYOK(true)
   }, [])
 
   return (
@@ -45,7 +50,7 @@ export function Layout() {
           <div className="layout-actions">
             <button
               className="btn btn-ghost"
-              onClick={() => setShowBYOK(true)}
+              onClick={openBYOK}
               id="byok-trigger"
             >
               {hasKey ? "🔑 Key Set" : "🔑 BYOK"}
@@ -55,7 +60,7 @@ export function Layout() {
       </header>
 
       <main className="layout-main">
-        <Outlet context={{ setHeaderCenter, setHeaderRight } satisfies LayoutOutletContext} />
+        <Outlet context={{ setHeaderCenter, setHeaderRight, openBYOK } satisfies LayoutOutletContext} />
       </main>
 
       {showBYOK && <BYOKModal onClose={() => setShowBYOK(false)} />}

@@ -10,14 +10,14 @@ const PHASE_ORDER = ["metadata", "transfers", "mentions", "unisat", "complete"] 
 const PHASE_LABELS: Record<string, string> = {
   metadata: "Inscription Data",
   transfers: "Transfer History",
-  mentions: "X Mentions",
+  mentions: "Collector Signals",
   unisat: "UniSat Enrichment",
   complete: "Building Timeline",
 }
 const PHASE_ICONS: Record<string, string> = {
   metadata: "🔍",
   transfers: "⛓️",
-  mentions: "𝕏",
+  mentions: "✦",
   unisat: "🔶",
   complete: "✨",
 }

@@ -72,7 +72,8 @@ export function CollectionContextWidget({ collectionContext }: Props) {
     (protocol.children?.items.length ?? 0) > 0 ||
     (protocol.gallery?.items.length ?? 0) > 0 ||
     registry.issues.length > 0 ||
-    Boolean(profile)
+    Boolean(profile) ||
+    collectionContext.socials.official_x_profiles.length > 0
 
   if (!hasContent) return null
 
@@ -143,13 +144,15 @@ export function CollectionContextWidget({ collectionContext }: Props) {
   const hasDetails =
     detailFacets.length > 0 ||
     relationGroups.length > 0 ||
-    Boolean(profile?.collector_signals.length)
+    Boolean(profile?.collector_signals.length) ||
+    collectionContext.socials.official_x_profiles.length > 0
 
   const evidenceCount = [
     registry.match ? "registry" : null,
     relationGroups.length > 0 ? "on-chain relations" : null,
     market.match ? "market overlay" : null,
     profile ? "collection profile" : null,
+    collectionContext.socials.official_x_profiles.length > 0 ? "official social" : null,
   ].filter(Boolean).length
 
   const summaryText = buildSummaryText({
@@ -247,7 +250,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
             </section>
           )}
 
-          {(marketFacets.length > 0 || market.match || marketSignals.length > 0) && (
+          {(marketFacets.length > 0 || market.match || marketSignals.length > 0 || collectionContext.socials.official_x_profiles.length > 0) && (
             <section className="widget-provenance-section">
               <span className="widget-provenance-section-label">Market &amp; collector signals</span>
               {market.ord_net_match && (
@@ -279,6 +282,17 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                   href={signal.source_ref}
                 />
               ))}
+              {collectionContext.socials.official_x_profiles.map((profileLink) => (
+                <EvidenceRow
+                  key={profileLink.url}
+                  label="Official X account"
+                  value={formatXHandle(profileLink.url)}
+                  detail={`Used as a public seed for X mention discovery · found via ${shortenSource(profileLink.source_ref)}`}
+                  tone="overlay"
+                  href={profileLink.url}
+                  ctaLabel="Open X profile"
+                />
+              ))}
             </section>
           )}
 
@@ -304,7 +318,14 @@ interface RelationGroup {
   sourceRef?: string
 }
 
-function EvidenceRow({ label, value, detail, tone, href }: CollectionPresentationFacet & { href?: string }) {
+function EvidenceRow({
+  label,
+  value,
+  detail,
+  tone,
+  href,
+  ctaLabel = "Open collection",
+}: CollectionPresentationFacet & { href?: string; ctaLabel?: string }) {
   return (
     <div className={`widget-provenance-row tone-${tone}`}>
       <span className="widget-provenance-row-marker" />
@@ -333,7 +354,7 @@ function EvidenceRow({ label, value, detail, tone, href }: CollectionPresentatio
                 transition: "background 0.2s"
               }}
             >
-              Open collection <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              {ctaLabel} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
             </a>
           </div>
         )}
@@ -403,4 +424,14 @@ function shortenSource(source: string): string {
 
 function shortenInscription(id: string): string {
   return `${id.slice(0, 8)}...${id.slice(-3)}`
+}
+
+function formatXHandle(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const handle = parsed.pathname.split("/").filter(Boolean)[0]
+    return handle ? `@${handle}` : url
+  } catch {
+    return url
+  }
 }

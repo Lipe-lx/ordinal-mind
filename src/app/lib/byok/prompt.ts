@@ -125,6 +125,9 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
             `Verified: ${collection_context.market.match.verified ? "yes" : "no"}`,
             `Item name: ${collection_context.market.match.item_name ?? "unknown"}`,
             `Collection href: ${collection_context.market.match.collection_href}`,
+            collection_context.socials.official_x_profiles.length > 0
+              ? `Official X accounts: ${collection_context.socials.official_x_profiles.map((profile) => profile.url).join(", ")}`
+              : "Official X accounts: none found",
           ]
         : ["No market overlay match found."],
     ),

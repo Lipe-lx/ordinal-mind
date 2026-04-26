@@ -29,6 +29,7 @@ const LEGACY_COLLECTIONS_BASE_URL =
 const ORD_MARKET_BASE_URL = "https://ord.net"
 const SATFLOW_ORDINALS_BASE_URL = "https://www.satflow.com/ordinals"
 const SATFLOW_ORDINAL_BASE_URL = "https://www.satflow.com/ordinal"
+const COINGECKO_NFT_API_BASE_URL = "https://api.coingecko.com/api/v3/nfts"
 
 const MAX_PARENT_ITEMS = 10
 const MAX_CHILD_ITEMS = 20
@@ -88,6 +89,16 @@ interface LegacyCollectionItem {
   }
 }
 
+interface CoinGeckoNftResponse {
+  id?: string
+  name?: string
+  links?: {
+    homepage?: string
+    twitter?: string
+    discord?: string
+  }
+}
+
 export interface OrdNetCollectionDirectoryEntry {
   name: string
   slug: string
@@ -119,6 +130,11 @@ export interface CollectionContextFetchResult {
   collectionContext: CollectionContext
   sourceCatalog: SourceCatalogItem[]
   collectionName?: string
+  mentionSearchHints: {
+    collectionName?: string
+    itemName?: string
+    officialXUrls: string[]
+  }
 }
 
 interface CollectionDiagnosticsOptions {
@@ -190,9 +206,37 @@ export async function fetchCollectionContext(
   const ordNetDirectoryMatch = marketOverlay
     ? await fetchOrdNetCollectionDirectoryMatch(marketOverlay, fetchedAt, sourceCatalog)
     : null
-  const satflowStats = marketOverlay?.collection_slug
-    ? await fetchSatflowCollectionStats(marketOverlay.collection_slug, fetchedAt, sourceCatalog, diagnostics)
-    : null
+  const [satflowPageData, ordNetOfficialXProfiles, coinGeckoOfficialXProfiles] = await Promise.all([
+    marketOverlay?.collection_slug
+      ? fetchSatflowCollectionPageData(marketOverlay.collection_slug, fetchedAt, sourceCatalog, diagnostics)
+      : Promise.resolve({ stats: null, officialXProfiles: [] as Array<{ url: string; source_ref: string }> }),
+    marketOverlay?.collection_href
+      ? fetchOrdNetCollectionOfficialXUrls(
+          marketOverlay.collection_href,
+          {
+            collectionSlug: marketOverlay.collection_slug,
+            collectionName: marketOverlay.collection_name,
+          },
+          fetchedAt,
+          sourceCatalog,
+          diagnostics
+        )
+      : Promise.resolve([] as Array<{ url: string; source_ref: string }>),
+    marketOverlay?.collection_slug
+      ? fetchCoinGeckoCollectionOfficialXUrls(
+          marketOverlay.collection_slug,
+          fetchedAt,
+          sourceCatalog,
+          diagnostics
+        )
+      : Promise.resolve([] as Array<{ url: string; source_ref: string }>),
+  ])
+  const satflowStats = satflowPageData.stats
+  const officialXProfiles = dedupeOfficialXProfiles([
+    ...satflowPageData.officialXProfiles,
+    ...ordNetOfficialXProfiles,
+    ...coinGeckoOfficialXProfiles,
+  ])
   debugCollection(diagnostics, inscriptionId, "market_stats_resolution", {
     has_satflow_stats: Boolean(satflowStats),
     satflow_stats_supply: satflowStats?.supply ?? null,
@@ -232,6 +276,9 @@ export async function fetchCollectionContext(
       ord_net_match: ordNetOverlay,
     },
     profile,
+    socials: {
+      official_x_profiles: officialXProfiles,
+    },
     presentation: buildPresentation(
       selfDetails,
       parents,
@@ -256,6 +303,15 @@ export async function fetchCollectionContext(
     collectionContext,
     sourceCatalog,
     collectionName,
+    mentionSearchHints: {
+      collectionName: resolvedCollectionNameForMentions(
+        registry.match?.matched_collection,
+        marketOverlay?.collection_name,
+        selfDetails?.properties?.attributes?.title
+      ),
+      itemName: marketOverlay?.item_name ?? selfDetails?.properties?.attributes?.title,
+      officialXUrls: officialXProfiles.map((profile) => profile.url),
+    },
   }
 }
 
@@ -626,6 +682,14 @@ function buildPresentation(
   }
 }
 
+function resolvedCollectionNameForMentions(
+  registryName: string | undefined,
+  marketName: string | undefined,
+  fallbackTitle: string | undefined
+): string | undefined {
+  return registryName ?? marketName ?? fallbackTitle
+}
+
 /**
  * Returns the most human-readable collection name between two overlay sources.
  * ord.net sometimes returns a parent inscription ref like "#124517225" or
@@ -640,6 +704,25 @@ function pickReadableCollectionName(
   if (ordNetName && !isParentRef(ordNetName)) return ordNetName
   if (satflowName && !isParentRef(satflowName)) return satflowName
   return ordNetName ?? satflowName
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))]
+}
+
+function dedupeOfficialXProfiles(
+  profiles: Array<{ url: string; source_ref: string }>
+): Array<{ url: string; source_ref: string }> {
+  const seen = new Set<string>()
+  const result: Array<{ url: string; source_ref: string }> = []
+
+  for (const profile of profiles) {
+    if (!profile.url || seen.has(profile.url)) continue
+    seen.add(profile.url)
+    result.push(profile)
+  }
+
+  return result
 }
 
 
@@ -784,12 +867,16 @@ async function fetchOrdNetCollectionDirectoryMatch(
   ) ?? null
 }
 
-async function fetchSatflowCollectionStats(
+
+async function fetchSatflowCollectionPageData(
   slug: string,
   fetchedAt: string,
   sourceCatalog: SourceCatalogItem[],
   diagnostics?: CollectionDiagnosticsOptions
-): Promise<CollectionMarketStats | null> {
+): Promise<{
+  stats: CollectionMarketStats | null
+  officialXProfiles: Array<{ url: string; source_ref: string }>
+}> {
   const normalizedSlug = slug.toLowerCase().replaceAll("_", "-")
   const url = `${SATFLOW_ORDINALS_BASE_URL}/${encodeURIComponent(normalizedSlug)}`
   const html = await fetchOptionalText(url, {
@@ -805,18 +892,103 @@ async function fetchSatflowCollectionStats(
     debugCollection(diagnostics, slug, "satflow_collection_stats_missing", {
       collection_slug: normalizedSlug,
     })
-    return null
+    return { stats: null, officialXProfiles: [] }
   }
 
   const stats = parseSatflowCollectionStats(html, url)
+  const officialXProfiles = parseOfficialXProfileLinks(html, {
+    collectionSlug: normalizedSlug,
+    collectionName: slug,
+  }).map((profileUrl) => ({
+    url: profileUrl,
+    source_ref: url,
+  }))
   debugCollection(diagnostics, slug, "satflow_collection_stats_parsed", {
     collection_slug: normalizedSlug,
     has_stats: Boolean(stats),
     supply: stats?.supply ?? null,
     listed: stats?.listed ?? null,
     floor_price: stats?.floor_price ?? null,
+    official_x_count: officialXProfiles.length,
   })
-  return stats
+  return { stats, officialXProfiles }
+}
+
+async function fetchOrdNetCollectionOfficialXUrls(
+  collectionHref: string,
+  hints: {
+    collectionSlug?: string
+    collectionName?: string
+  },
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
+): Promise<Array<{ url: string; source_ref: string }>> {
+  const url = toAbsoluteOrdNetUrl(collectionHref)
+  if (!url) return []
+
+  const html = await fetchOptionalText(url, {
+    sourceCatalog,
+    sourceType: "market_collection_ord_net",
+    urlOrRef: url,
+    trustLevel: "market_overlay",
+    fetchedAt,
+    detail: "ord.net collection page",
+  })
+
+  if (!html) return []
+
+  const officialXProfiles = parseOfficialXProfileLinks(html, {
+    collectionSlug: hints.collectionSlug,
+    collectionName: hints.collectionName,
+  }).map((profileUrl) => ({
+    url: profileUrl,
+    source_ref: url,
+  }))
+  debugCollection(diagnostics, collectionHref, "ord_net_collection_page_parsed", {
+    source_ref: url,
+    official_x_count: officialXProfiles.length,
+  })
+  return officialXProfiles
+}
+
+async function fetchCoinGeckoCollectionOfficialXUrls(
+  collectionSlug: string,
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
+): Promise<Array<{ url: string; source_ref: string }>> {
+  const normalizedSlug = collectionSlug.toLowerCase().replaceAll("_", "-")
+  const url = `${COINGECKO_NFT_API_BASE_URL}/${encodeURIComponent(normalizedSlug)}`
+  const payload = await fetchOptionalJson<CoinGeckoNftResponse>(url, {
+    sourceCatalog,
+    sourceType: "public_collection_coingecko",
+    urlOrRef: url,
+    trustLevel: "curated_public_research",
+    fetchedAt,
+    detail: "CoinGecko public NFT collection metadata",
+  })
+
+  const officialXProfiles = payload
+    ? parseCoinGeckoNftOfficialXProfiles(payload, url)
+    : []
+
+  debugCollection(diagnostics, collectionSlug, "coingecko_collection_metadata_parsed", {
+    source_ref: url,
+    has_payload: Boolean(payload),
+    official_x_count: officialXProfiles.length,
+  })
+
+  return officialXProfiles
+}
+
+export function parseCoinGeckoNftOfficialXProfiles(
+  payload: CoinGeckoNftResponse,
+  sourceRef: string
+): Array<{ url: string; source_ref: string }> {
+  const twitterUrl = payload.links?.twitter
+  const normalized = twitterUrl ? normalizeXProfileUrl(twitterUrl) : null
+  return normalized ? [{ url: normalized, source_ref: sourceRef }] : []
 }
 
 async function fetchMarketOverlay(
@@ -1231,6 +1403,122 @@ function extractSatflowCollectionSlug(html: string, collectionName: string): str
 
   const blocked = new Set(["ordinals", "ordinal", "collections", "trending", "new", "activity"])
   return uniqueCandidates.find((candidate) => !blocked.has(candidate.toLowerCase())) ?? uniqueCandidates[0] ?? null
+}
+
+export function parseOfficialXProfileLinks(
+  html: string,
+  hints?: {
+    collectionSlug?: string
+    collectionName?: string
+  }
+): string[] {
+  const hrefLinks = [...html.matchAll(/href=["']([^"']+)["']/gi)]
+    .map((match) => decodeHtmlHref(match[1] ?? ""))
+  const rawLinks = [...html.matchAll(/https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}(?:[/?#"'\\<\s]|$)/gi)]
+    .map((match) => match[0].replace(/["'\\<\s]+$/g, ""))
+
+  const links = [...new Set([...hrefLinks, ...rawLinks])]
+    .map((raw) => normalizeXProfileUrl(raw, hints))
+    .filter((value): value is string => Boolean(value))
+
+  return uniqueStrings(links)
+}
+
+function decodeHtmlHref(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&#x2F;/gi, "/")
+    .replace(/&#47;/g, "/")
+}
+
+function normalizeXProfileUrl(
+  rawUrl: string,
+  hints?: {
+    collectionSlug?: string
+    collectionName?: string
+  }
+): string | null {
+  try {
+    if (!rawUrl) return null
+    const url = rawUrl.startsWith("//")
+      ? new URL(`https:${rawUrl}`)
+      : rawUrl.startsWith("/")
+        ? null
+        : new URL(rawUrl)
+    if (!url) return null
+
+    const hostname = url.hostname.replace(/^www\./i, "").replace(/^mobile\./i, "").toLowerCase()
+    if (hostname !== "x.com" && hostname !== "twitter.com") return null
+
+    const parts = url.pathname.split("/").filter(Boolean)
+    if (parts.length === 0) return null
+
+    const username = parts[0]
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(username)) return null
+    if (["home", "search", "explore", "intent", "share", "i", "hashtag"].includes(username.toLowerCase())) {
+      return null
+    }
+    if (isPlatformHandle(username)) return null
+    if (hints && !matchesCollectionIdentity(username, hints)) return null
+
+    return `https://x.com/${username}`
+  } catch {
+    return null
+  }
+}
+
+function isPlatformHandle(username: string): boolean {
+  return new Set([
+    "satflow",
+    "ordnet",
+    "ord_net",
+    "ordinals",
+    "ordinalscom",
+    "thewizardsoford",
+    "ordinalswallet",
+  ]).has(username.toLowerCase())
+}
+
+function matchesCollectionIdentity(
+  username: string,
+  hints: {
+    collectionSlug?: string
+    collectionName?: string
+  }
+): boolean {
+  const normalizedHandle = normalizeSocialIdentity(username)
+  const normalizedSlug = normalizeSocialIdentity(hints.collectionSlug)
+  const normalizedName = normalizeSocialIdentity(hints.collectionName)
+
+  if (normalizedSlug && normalizedHandle === normalizedSlug) return true
+  if (normalizedName && normalizedHandle === normalizedName) return true
+  if (normalizedSlug && normalizedHandle.includes(normalizedSlug)) return true
+  if (normalizedName && normalizedHandle.includes(normalizedName)) return true
+
+  const tokens = tokenizeSocialIdentity([
+    hints.collectionSlug ?? "",
+    hints.collectionName ?? "",
+  ].join(" "))
+  return tokens.some((token) => token.length >= 5 && normalizedHandle.includes(token))
+}
+
+function normalizeSocialIdentity(value: string | undefined): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function tokenizeSocialIdentity(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean)
+}
+
+function toAbsoluteOrdNetUrl(collectionHref: string): string | null {
+  try {
+    return new URL(collectionHref, ORD_MARKET_BASE_URL).toString()
+  } catch {
+    return null
+  }
 }
 
 function extractJsonArraysForKey(html: string, key: string): unknown[][] {

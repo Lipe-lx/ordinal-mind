@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useCallback } from "react"
+import { useEffect, useReducer, useCallback, useRef } from "react"
 import { useLoaderData, useLocation, useNavigate, useOutletContext } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
@@ -7,6 +7,7 @@ import { InscriptionMetaWidget } from "../components/widgets/InscriptionMetaWidg
 import { RarityWidget } from "../components/widgets/RarityWidget"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
+import { KeyStore } from "../lib/byok"
 import { useSynthesize } from "../lib/byok/useSynthesize"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ChronicleResponse, ScanProgress as ScanProgressType } from "../lib/types"
@@ -128,7 +129,8 @@ export function Chronicle() {
   } = useSynthesize()
   const navigate = useNavigate()
   const homePath = `/${location.search}`
-  const { setHeaderCenter, setHeaderRight } = useOutletContext<LayoutOutletContext>()
+  const { setHeaderCenter, setHeaderRight, openBYOK } = useOutletContext<LayoutOutletContext>()
+  const autoSynthesizedRef = useRef<string | null>(null)
 
   // Inject inscription title + share into Layout header when chronicle loads
   useEffect(() => {
@@ -200,6 +202,19 @@ export function Chronicle() {
     }
   }, [chronicle, setHeaderCenter, setHeaderRight])
 
+  useEffect(() => {
+    if (!chronicle) return
+    if (!KeyStore.has()) return
+    if (narrative || streamingText) return
+    if (phase !== "idle") return
+
+    const autoKey = chronicle.meta.inscription_id
+    if (autoSynthesizedRef.current === autoKey) return
+
+    autoSynthesizedRef.current = autoKey
+    synthesize(chronicle)
+  }, [chronicle, narrative, phase, streamingText, synthesize])
+
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
     return (
@@ -267,6 +282,7 @@ export function Chronicle() {
           synthError={synthError}
           lastInputMode={lastInputMode}
           onSynthesize={() => synthesize(chronicle)}
+          onOpenBYOK={openBYOK}
           onCancel={cancel}
         />
 

@@ -10,7 +10,7 @@ import { fetchMempool } from "./agents/mempool"
 import { fetchOrdinals } from "./agents/ordinals"
 import { fetchUnisat } from "./agents/unisat"
 import { buildMediaContext, fetchCollectionContext } from "./agents/collections"
-import { scrapeXMentions } from "./agents/xsearch"
+import { collectSignals } from "./agents/mentions"
 import { buildTimeline } from "./timeline"
 import { cacheGet, cachePut } from "./cache"
 import { buildInscriptionRarity } from "./rarity"
@@ -23,6 +23,7 @@ export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   ENVIRONMENT: string
   UNISAT_API_KEY?: string
+  NOSTR_RELAYS?: string
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -106,6 +107,15 @@ function buildMempoolSourceCatalog(options: {
         : "Forward transfer trace unavailable from mempool.space",
     },
   ]
+}
+
+function parseNostrRelays(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined
+  const relays = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  return relays.length > 0 ? relays : undefined
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -265,10 +275,10 @@ async function handleStandardChronicle(
     return jsonResponse({ error: "Inscription not found" }, 404)
   }
 
-  // 2. Parallel fetch for transfers, mentions, collection context, genesis tx, and UniSat
-  const [transfers, xMentions, collectionContext, genesisTx, unisatInfo] = await Promise.allSettled([
+  // 2. Parallel fetch for transfers, collection context, genesis tx, and UniSat.
+  // Collector signals run after collection context so queries can prioritize collection/item labels.
+  const [transfers, collectionContext, genesisTx, unisatInfo] = await Promise.allSettled([
     fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, { limit: 30 }),
-    scrapeXMentions(id),
     fetchCollectionContext(id, meta, {
       debug: diagnostics?.debug,
       requestId: diagnostics?.requestId,
@@ -276,16 +286,6 @@ async function handleStandardChronicle(
     fetchMempool.tx(meta.genesis_txid),
     fetchUnisatInfo(id, env, diagnostics),
   ])
-  diagLog(diagnostics, "parallel_fetch_status", {
-    transfers: transfers.status,
-    x_mentions: xMentions.status,
-    collection_context: collectionContext.status,
-    genesis_tx: genesisTx.status,
-    unisat: unisatInfo.status,
-  })
-
-  const enrichedTransfers = transfers.status === "fulfilled" ? transfers.value : []
-  const mentions = xMentions.status === "fulfilled" ? xMentions.value : []
   const collectionData = collectionContext.status === "fulfilled"
     ? collectionContext.value
     : {
@@ -295,10 +295,65 @@ async function handleStandardChronicle(
           registry: { match: null, issues: [] },
           market: { match: null, satflow_match: null, ord_net_match: null },
           profile: null,
+          socials: { official_x_profiles: [] },
           presentation: { facets: [] },
         },
         sourceCatalog: [],
         collectionName: undefined,
+        mentionSearchHints: {
+          collectionName: undefined,
+          itemName: undefined,
+          officialXUrls: [],
+        },
+      }
+  const mentionSignals = await Promise.resolve(
+    collectSignals({
+      inscriptionId: id,
+      inscriptionNumber: meta.inscription_number,
+      collectionName:
+        collectionData.collectionContext.market.match?.collection_name
+        ?? collectionData.mentionSearchHints.collectionName
+        ?? collectionData.collectionContext.presentation.primary_label,
+      itemName:
+        collectionData.collectionContext.presentation.item_label
+        ?? collectionData.mentionSearchHints.itemName,
+      fullLabel: collectionData.collectionContext.presentation.full_label,
+      officialXUrls: collectionData.mentionSearchHints.officialXUrls,
+      nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
+      debug: diagnostics?.debug,
+      requestId: diagnostics?.requestId,
+    })
+  ).then((value) => ({ status: "fulfilled" as const, value }))
+    .catch((reason) => ({ status: "rejected" as const, reason }))
+  diagLog(diagnostics, "parallel_fetch_status", {
+    transfers: transfers.status,
+    collector_signals: mentionSignals.status,
+    collection_context: collectionContext.status,
+    genesis_tx: genesisTx.status,
+    unisat: unisatInfo.status,
+  })
+
+  const enrichedTransfers = transfers.status === "fulfilled" ? transfers.value : []
+  const socialMentions = mentionSignals.status === "fulfilled" ? mentionSignals.value.mentions : []
+  const collectorSignals = mentionSignals.status === "fulfilled"
+    ? mentionSignals.value.collectorSignals
+    : {
+        attention_score: 0,
+        sentiment_label: "insufficient_data" as const,
+        confidence: "low" as const,
+        evidence_count: 0,
+        provider_breakdown: { nostr: 0, bluesky: 0, x_fallback: 0, google_trends: 0 },
+        scope_breakdown: {
+          inscription_level: 0,
+          collection_level: 0,
+          mixed: 0,
+          dominant_scope: "none" as const,
+        },
+        top_evidence: [],
+        windows: {
+          current_7d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" as const },
+          context_30d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" as const },
+        },
       }
 
   const info = unisatInfo.status === "fulfilled" ? unisatInfo.value : null
@@ -418,7 +473,7 @@ async function handleStandardChronicle(
   }
 
   // 3. Build timeline (now with UniSat enrichment)
-  const events = buildTimeline(meta, enrichedTransfers, mentions, unisatEnrichment ?? undefined)
+  const events = buildTimeline(meta, enrichedTransfers, socialMentions, unisatEnrichment ?? undefined)
 
   // Merge source catalogs
   const fetchedAt = new Date().toISOString()
@@ -432,6 +487,7 @@ async function handleStandardChronicle(
   const sourceCatalog = [
     ...collectionData.sourceCatalog,
     ...mempoolSourceCatalog,
+    ...(mentionSignals.status === "fulfilled" ? mentionSignals.value.sourceCatalog : []),
     ...(unisatEnrichment?.source_catalog ?? []),
   ]
   const sourceSummary = summarizeSourceCatalog(sourceCatalog)
@@ -441,12 +497,18 @@ async function handleStandardChronicle(
     inscription_id: id,
     meta,
     events,
+    collector_signals: collectorSignals,
     media_context: collectionData.mediaContext,
     collection_context: collectionData.collectionContext,
     source_catalog: sourceCatalog,
     cached_at: fetchedAt,
     unisat_enrichment: unisatEnrichment ?? undefined,
     validation,
+    debug_info: diagnostics?.debug
+      ? mentionSignals.status === "fulfilled"
+        ? mentionSignals.value.debugInfo
+        : undefined
+      : undefined,
   }
 
   // Cache (fire-and-forget)
@@ -553,18 +615,57 @@ async function handleStreamingChronicle(
         description: `Found ${transfers.length} transfer${transfers.length !== 1 ? "s" : ""} (${transfers.filter(t => t.is_sale).length} sale${transfers.filter(t => t.is_sale).length !== 1 ? "s" : ""})`,
       })
 
-      // Phase 3: X mentions
+      // Phase 3: Collector signals
       await sendEvent("progress", {
         phase: "mentions",
         step: 1,
-        description: "Searching for X mentions…",
+        description: "Collecting public social signals…",
       })
 
-      let mentions: Awaited<ReturnType<typeof scrapeXMentions>> = []
+      let socialMentions: Awaited<ReturnType<typeof collectSignals>>["mentions"] = []
+      let collectorSignals: Awaited<ReturnType<typeof collectSignals>>["collectorSignals"] = {
+        attention_score: 0,
+        sentiment_label: "insufficient_data",
+        confidence: "low",
+        evidence_count: 0,
+        provider_breakdown: { nostr: 0, bluesky: 0, x_fallback: 0, google_trends: 0 },
+        scope_breakdown: {
+          inscription_level: 0,
+          collection_level: 0,
+          mixed: 0,
+          dominant_scope: "none",
+        },
+        top_evidence: [],
+        windows: {
+          current_7d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
+          context_30d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
+        },
+      }
+      let mentionSourceCatalog: SourceCatalogItem[] = []
+      let mentionDebugInfo: { mention_providers: Record<string, unknown> } | undefined
       try {
-        mentions = await scrapeXMentions(id)
+        const signalResult = await collectSignals({
+          inscriptionId: id,
+          inscriptionNumber: meta.inscription_number,
+          collectionName:
+            collectionContext.collectionContext.market.match?.collection_name
+            ?? collectionContext.mentionSearchHints.collectionName
+            ?? collectionContext.collectionContext.presentation.primary_label,
+          itemName:
+            collectionContext.collectionContext.presentation.item_label
+            ?? collectionContext.mentionSearchHints.itemName,
+          fullLabel: collectionContext.collectionContext.presentation.full_label,
+          officialXUrls: collectionContext.mentionSearchHints.officialXUrls,
+          nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
+          debug: diagnostics?.debug,
+          requestId: diagnostics?.requestId,
+        })
+        socialMentions = signalResult.mentions
+        collectorSignals = signalResult.collectorSignals
+        mentionSourceCatalog = signalResult.sourceCatalog
+        mentionDebugInfo = signalResult.debugInfo as { mention_providers: Record<string, unknown> } | undefined
       } catch {
-        // X mentions failure is non-blocking
+        // Collector signal failure is non-blocking
       }
 
       // Phase 4: UniSat indexer & Rarity Engine
@@ -713,7 +814,7 @@ async function handleStreamingChronicle(
         : null
       const validation = validateAcrossSources(meta, validationUnisatInfo)
 
-      const events = buildTimeline(meta, transfers, mentions, unisatEnrichment ?? undefined)
+      const events = buildTimeline(meta, transfers, socialMentions, unisatEnrichment ?? undefined)
 
       // Merge source catalogs
       const fetchedAt = new Date().toISOString()
@@ -727,6 +828,7 @@ async function handleStreamingChronicle(
       const sourceCatalog = [
         ...collectionContext.sourceCatalog,
         ...mempoolSourceCatalog,
+        ...mentionSourceCatalog,
         ...(unisatEnrichment?.source_catalog ?? []),
       ]
       diagLog(diagnostics, "stream_source_catalog_summary", summarizeSourceCatalog(sourceCatalog))
@@ -735,12 +837,16 @@ async function handleStreamingChronicle(
         inscription_id: id,
         meta,
         events,
+        collector_signals: collectorSignals,
         media_context: collectionContext.mediaContext,
         collection_context: collectionContext.collectionContext,
         source_catalog: sourceCatalog,
         cached_at: fetchedAt,
         unisat_enrichment: unisatEnrichment ?? undefined,
         validation,
+        debug_info: diagnostics?.debug
+          ? mentionDebugInfo
+          : undefined,
       }
 
       // Cache (fire-and-forget)

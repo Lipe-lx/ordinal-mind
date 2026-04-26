@@ -162,6 +162,7 @@ function decodeTextPayload(raw: Uint8Array): string | null {
   const text = new TextDecoder().decode(raw).trim()
   if (!text) return null
   if (text.includes("\uFFFD")) return null
+  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x08\x0E-\x1F]/.test(text)) return null
   return text
 }

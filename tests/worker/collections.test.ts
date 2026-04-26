@@ -4,8 +4,10 @@ import {
   buildCollectionProfile,
   buildMediaContext,
   findLegacyCollectionMembership,
+  parseCoinGeckoNftOfficialXProfiles,
   parseOrdMarketOverlay,
   parseOrdNetCollectionDirectory,
+  parseOfficialXProfileLinks,
   parseSatflowInscriptionOverlay,
   parseSatflowCollectionStats,
   parseRegistryEntries,
@@ -307,6 +309,55 @@ describe("Satflow collection stats parsing", () => {
     `
 
     expect(parseSatflowCollectionStats(html, "https://www.satflow.com/ordinals/runestone")).toBeNull()
+  })
+})
+
+describe("official X link parsing", () => {
+  it("extracts canonical profile urls from public collection pages", () => {
+    const html = `
+      <a href="https://twitter.com/bitcoinpuppets?ref_src=twsrc%5Egoogle">X</a>
+      <a href="https://x.com/bitcoinpuppets/status/1234567890">Latest post</a>
+      <a href="https://x.com/share?text=Bitcoin%20Puppets">Share</a>
+      <a href="https://x.com/bitcoinpuppets">Official handle</a>
+    `
+
+    expect(parseOfficialXProfileLinks(html, {
+      collectionSlug: "bitcoin-puppets",
+      collectionName: "Bitcoin Puppets",
+    })).toEqual([
+      "https://x.com/bitcoinpuppets",
+    ])
+  })
+
+  it("filters platform accounts that do not match the collection identity", () => {
+    const html = `
+      <a href="https://x.com/Satflow">Satflow</a>
+      <a href="https://x.com/TheWizardsOfOrd">The Wizards of Ord</a>
+      <a href="https://x.com/bitcoinpuppets">Bitcoin Puppets</a>
+      <script>window.__COMMUNITY__ = {"x":"https://x.com/bitcoinpuppets"}</script>
+    `
+
+    expect(parseOfficialXProfileLinks(html, {
+      collectionSlug: "bitcoin-puppets",
+      collectionName: "Bitcoin Puppets",
+    })).toEqual([
+      "https://x.com/bitcoinpuppets",
+    ])
+  })
+
+  it("accepts CoinGecko collection twitter links as social seeds", () => {
+    expect(parseCoinGeckoNftOfficialXProfiles({
+      id: "bitcoin-weirdos",
+      name: "Bitcoin Weirdos",
+      links: {
+        twitter: "https://twitter.com/F___T___W",
+      },
+    }, "https://api.coingecko.com/api/v3/nfts/bitcoin-weirdos")).toEqual([
+      {
+        url: "https://x.com/F___T___W",
+        source_ref: "https://api.coingecko.com/api/v3/nfts/bitcoin-weirdos",
+      },
+    ])
   })
 })
 

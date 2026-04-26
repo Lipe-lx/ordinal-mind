@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { buildTimeline } from "../../src/worker/timeline"
-import type { InscriptionMeta } from "../../src/app/lib/types"
-import type { XMention } from "../../src/worker/agents/xsearch"
+import type { InscriptionMeta, SocialMention } from "../../src/app/lib/types"
 
 const baseMeta: InscriptionMeta = {
   inscription_id: "abc123def456abc123def456abc123def456abc123def456abc123def456abc1i0",
@@ -118,22 +117,30 @@ describe("buildTimeline", () => {
     })
   })
 
-  describe("x mentions", () => {
-    it("should create x_mention events", () => {
-      const mentions: XMention[] = [
+  describe("social mentions", () => {
+    it("should create social_mention events", () => {
+      const mentions: SocialMention[] = [
         {
-          url: "https://x.com/user/status/123",
+          platform: "nostr",
+          provider: "nostr",
+          canonical_url: "https://njump.me/note123",
           title: "Check out this inscription!",
-          snippet: "Amazing ordinal art",
-          found_at: "2024-01-15T12:00:00.000Z",
+          excerpt: "Amazing ordinal art",
+          text: "Check out this inscription! Amazing ordinal art",
+          published_at: "2024-01-15T12:00:00.000Z",
+          discovered_at: "2024-01-15T12:05:00.000Z",
+          scope: "mixed",
+          match_type: "item_plus_collection",
+          provider_confidence: 0.95,
         },
       ]
       const events = buildTimeline(baseMeta, [], mentions)
-      const xEvent = events.find((e) => e.event_type === "x_mention")
+      const socialEvent = events.find((e) => e.event_type === "social_mention")
 
-      expect(xEvent).toBeDefined()
-      expect(xEvent?.source.type).toBe("web")
-      expect(xEvent?.source.ref).toBe("https://x.com/user/status/123")
+      expect(socialEvent).toBeDefined()
+      expect(socialEvent?.source.type).toBe("web")
+      expect(socialEvent?.source.ref).toBe("https://njump.me/note123")
+      expect(socialEvent?.metadata.platform).toBe("nostr")
     })
   })
 
@@ -224,12 +231,19 @@ describe("buildTimeline", () => {
           output_count: 2,
         },
       ]
-      const mentions: XMention[] = [
+      const mentions: SocialMention[] = [
         {
-          url: "https://x.com/test",
+          platform: "x",
+          provider: "x_fallback",
+          canonical_url: "https://x.com/test",
           title: "Test",
-          snippet: "Test snippet",
-          found_at: "2024-02-01T00:00:00.000Z",
+          excerpt: "Test snippet",
+          text: "Test Test snippet",
+          published_at: "2024-02-01T00:00:00.000Z",
+          discovered_at: "2024-02-01T00:01:00.000Z",
+          scope: "collection_level",
+          match_type: "collection_only",
+          provider_confidence: 0.35,
         },
       ]
 

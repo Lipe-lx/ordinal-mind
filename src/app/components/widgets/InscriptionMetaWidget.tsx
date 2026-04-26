@@ -18,7 +18,7 @@ export function InscriptionMetaWidget({ meta, events }: Props) {
 
   const eventCount = events.length
   const transferCount = events.filter((e) => e.event_type === "transfer" || e.event_type === "sale").length
-  const mentionCount = events.filter((e) => e.event_type === "x_mention").length
+  const mentionCount = events.filter((e) => e.event_type === "social_mention").length
 
   const eventSummary = [
     transferCount > 0 ? `${transferCount} transfer${transferCount > 1 ? "s" : ""}` : null,

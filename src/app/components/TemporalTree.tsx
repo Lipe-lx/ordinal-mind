@@ -9,20 +9,22 @@ const EVENT_ICONS: Record<string, string> = {
   genesis: "⛏️",
   transfer: "↗️",
   sale: "💰",
-  x_mention: "𝕏",
+  social_mention: "✦",
   collection_link: "📂",
   recursive_ref: "🔗",
   sat_context: "💎",
+  trait_context: "🧬",
 }
 
 const EVENT_LABELS: Record<string, string> = {
   genesis: "Genesis",
   transfer: "Transfer",
   sale: "Sale",
-  x_mention: "X Mention",
+  social_mention: "Social Mention",
   collection_link: "Collection",
   recursive_ref: "Recursive Ref",
   sat_context: "Sat Rarity",
+  trait_context: "Trait Context",
 }
 
 function formatDate(iso: string): string {
@@ -64,6 +66,8 @@ export function TemporalTree({ events }: Props) {
         const url = sourceUrl(event.source)
         const isHeuristic = event.metadata?.is_heuristic === true
         const salePriceSats = event.metadata?.sale_price_sats as number | undefined
+        const platform = typeof event.metadata?.platform === "string" ? event.metadata.platform : undefined
+        const scope = typeof event.metadata?.scope === "string" ? event.metadata.scope : undefined
 
         return (
           <motion.div
@@ -84,8 +88,12 @@ export function TemporalTree({ events }: Props) {
           >
             <div className="timeline-node-header">
               <span className="timeline-node-type">
-                {EVENT_ICONS[event.event_type] ?? "•"}{" "}
-                {EVENT_LABELS[event.event_type] ?? event.event_type}
+                {event.event_type === "social_mention"
+                  ? socialIcon(platform)
+                  : EVENT_ICONS[event.event_type] ?? "•"}{" "}
+                {event.event_type === "social_mention"
+                  ? socialLabel(platform)
+                  : EVENT_LABELS[event.event_type] ?? event.event_type}
               </span>
               <span className="timeline-node-time">
                 {formatDate(event.timestamp)}
@@ -94,6 +102,22 @@ export function TemporalTree({ events }: Props) {
 
             <p className="timeline-node-desc">
               {event.description}
+              {event.event_type === "social_mention" && scope && (
+                <span
+                  className="timeline-node-heuristic"
+                  title={scope === "collection_level"
+                    ? "This signal matched the collection name more strongly than the specific inscription."
+                    : scope === "mixed"
+                      ? "This signal references both the collection and the inscription label."
+                      : "This signal matched inscription-level labels directly."}
+                >
+                  {scope === "collection_level"
+                    ? "collection-level"
+                    : scope === "mixed"
+                      ? "mixed-scope"
+                      : "inscription-level"}
+                </span>
+              )}
               {event.event_type === "sale" && isHeuristic && (
                 <span
                   className="timeline-node-heuristic"
@@ -148,4 +172,34 @@ export function TemporalTree({ events }: Props) {
       )}
     </div>
   )
+}
+
+function socialLabel(platform: string | undefined): string {
+  switch (platform) {
+    case "nostr":
+      return "Nostr Mention"
+    case "bluesky":
+      return "Bluesky Mention"
+    case "x":
+      return "X Fallback"
+    case "google_trends":
+      return "Google Trends"
+    default:
+      return "Social Mention"
+  }
+}
+
+function socialIcon(platform: string | undefined): string {
+  switch (platform) {
+    case "nostr":
+      return "₿"
+    case "bluesky":
+      return "☁"
+    case "x":
+      return "𝕏"
+    case "google_trends":
+      return "📈"
+    default:
+      return "✦"
+  }
 }

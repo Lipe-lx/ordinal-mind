@@ -152,6 +152,14 @@ const chronicle: Chronicle = {
       },
       sources: [],
     },
+    socials: {
+      official_x_profiles: [
+        {
+          url: "https://x.com/quantumcats",
+          source_ref: "https://www.satflow.com/ordinals/quantum-cats",
+        },
+      ],
+    },
     presentation: {
       primary_label: "Quantum Cats",
       facets: [
@@ -190,6 +198,7 @@ describe("buildSynthesisContext", () => {
     expect(context).toContain("Collection profile:")
     expect(context).toContain("Curated collection match:")
     expect(context).toContain("Market overlay:")
+    expect(context).toContain("Official X accounts: https://x.com/quantumcats")
     expect(context).toContain("Quantum Cats")
     expect(context).toContain("Primary lens")
     expect(context).toContain("protocol_inscription")

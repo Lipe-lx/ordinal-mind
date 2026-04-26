@@ -281,9 +281,12 @@ describe("chronicle pipeline smoke", () => {
     expect(rarity.rarity_rank).toBe(321)
 
     const market = (body.collection_context as Record<string, unknown>).market as Record<string, unknown>
+    const debugInfo = body.debug_info as Record<string, unknown>
     const match = market.match as Record<string, unknown>
     const ordNetMatch = market.ord_net_match as Record<string, unknown>
     const satflowMatch = market.satflow_match as Record<string, unknown>
+    const mentionProviders = (debugInfo.mention_providers as Record<string, unknown>)
+    const collectorSignals = body.collector_signals as Record<string, unknown>
     expect(match.source_ref).toBe(`https://ord.net/inscription/${INSCRIPTION_ID}`)
     expect(match.verified).toBe(true)
     expect(ordNetMatch.source_ref).toBe(`https://ord.net/inscription/${INSCRIPTION_ID}`)
@@ -291,6 +294,9 @@ describe("chronicle pipeline smoke", () => {
     const rarityOverlay = match.rarity_overlay as Record<string, unknown>
     expect(rarityOverlay.source).toBe("satflow")
     expect((rarityOverlay.traits as unknown[]).length).toBeGreaterThan(0)
+    expect((mentionProviders.x_fallback as Record<string, unknown>).queries).toBeDefined()
+    expect(collectorSignals.sentiment_label).toBeDefined()
+    expect(collectorSignals.provider_breakdown).toBeDefined()
 
     expect(
       infoSpy.mock.calls.some((call) =>
