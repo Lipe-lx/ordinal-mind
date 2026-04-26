@@ -113,9 +113,15 @@ export async function fetchLoreContext(collectionName: string): Promise<WebResea
     searchResults = await searchWikipedia(collectionName)
   }
 
-  // 3. Fallback to DuckDuckGo Lite if all else fails
+  // 3. Fallback to Swisscows if all else fails
   if (!searchResults || searchResults.length === 0) {
-    console.log("[WebResearch] SearXNG/Wikipedia failed, falling back to DuckDuckGo Lite")
+    console.log("[WebResearch] SearXNG/Wikipedia failed, trying Swisscows...")
+    searchResults = await searchSwisscows(query)
+  }
+
+  // 4. Fallback to DuckDuckGo Lite as last resort
+  if (!searchResults || searchResults.length === 0) {
+    console.log("[WebResearch] All primary sources failed, falling back to DuckDuckGo Lite")
     searchResults = await searchDuckDuckGoLite(query)
   }
 
@@ -152,8 +158,8 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
 
   console.log(`[WebResearch] Attempting search with ${instances.length} instances in batches of 5`)
 
-  // Race in batches of 5 to increase probability of finding an open instance
-  const batchSize = 5
+  // Race in batches of 2 with a small delay to avoid triggering CDN rate limits
+  const batchSize = 2
   for (let i = 0; i < instances.length; i += batchSize) {
     const batch = instances.slice(i, i + batchSize)
     try {
@@ -169,6 +175,9 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
       const errors = (e as any).errors || [e]
       const statuses = errors.map((err: any) => err.message || String(err)).join(", ")
       console.warn(`[WebResearch] Batch ${i / batchSize + 1} failed: ${statuses}`)
+      
+      // Wait a bit before next batch to be gentle
+      await new Promise(resolve => setTimeout(resolve, 500))
       continue
     }
   }
@@ -224,6 +233,43 @@ async function searchWikipedia(term: string): Promise<SearXNGResult[]> {
       url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
       content: r.snippet.replace(/<[^>]*>/g, ""), // Strip HTML tags from snippet
     }))
+  } catch {
+    return []
+  }
+}
+
+async function searchSwisscows(query: string): Promise<SearXNGResult[]> {
+  try {
+    const url = `https://swisscows.com/en/web?query=${encodeURIComponent(query)}`
+    const res = await fetch(url, {
+      headers: { 
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return []
+    const text = await res.text()
+    
+    // Very simple HTML parsing for Swisscows
+    const results: SearXNGResult[] = []
+    const articleMatch = text.match(/<article.*?>([\s\S]*?)<\/article>/g)
+    if (articleMatch) {
+      for (const article of articleMatch.slice(0, 5)) {
+        const titleMatch = article.match(/<h2.*?>([\s\S]*?)<\/h2>/)
+        const linkMatch = article.match(/href="(.*?)"/)
+        const snippetMatch = article.match(/<p.*?>([\s\S]*?)<\/p>/)
+        
+        if (titleMatch && linkMatch) {
+          results.push({
+            title: titleMatch[1].replace(/<[^>]*>/g, "").trim(),
+            url: linkMatch[1],
+            content: snippetMatch ? snippetMatch[1].replace(/<[^>]*>/g, "").trim() : "",
+          })
+        }
+      }
+    }
+    return results
   } catch {
     return []
   }
