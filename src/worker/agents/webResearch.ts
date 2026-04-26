@@ -11,6 +11,9 @@ const FALLBACK_INSTANCES = [
   "https://priv.au",
   "https://ooglester.com",
   "https://baresearch.org",
+  "https://searx.tiekoetter.com",
+  "https://searx.rhscz.eu",
+  "https://searxng.nicfab.eu",
 ]
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -97,16 +100,22 @@ interface SearXNGResponse {
 export async function fetchLoreContext(collectionName: string): Promise<WebResearchContext | null> {
   if (!collectionName) return null
 
-  const query = `${collectionName} Ordinals Bitcoin lore history`
+  const query = `${collectionName} Ordinals lore`
   const results: WebResearchItem[] = []
   const fetchedAt = new Date().toISOString()
 
   // 1. Search via SearXNG (with parallel racing)
   let searchResults = await searchSearXNG(query)
   
-  // 2. Fallback to DuckDuckGo Lite if SearXNG fails
+  // 2. Fallback to Wikipedia if it's a known collection (high trust)
   if (!searchResults || searchResults.length === 0) {
-    console.log("[WebResearch] SearXNG failed or empty, falling back to DuckDuckGo Lite")
+    console.log("[WebResearch] SearXNG failed, trying Wikipedia...")
+    searchResults = await searchWikipedia(collectionName)
+  }
+
+  // 3. Fallback to DuckDuckGo Lite if all else fails
+  if (!searchResults || searchResults.length === 0) {
+    console.log("[WebResearch] SearXNG/Wikipedia failed, falling back to DuckDuckGo Lite")
     searchResults = await searchDuckDuckGoLite(query)
   }
 
@@ -138,20 +147,28 @@ export async function fetchLoreContext(collectionName: string): Promise<WebResea
 
 async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
   const pool = await discoverInstances()
-  // Shuffle but keep reliable ones near the front
-  const instances = [...pool].sort(() => Math.random() - 0.5).slice(0, 12)
+  // Shuffle and try up to 20 instances
+  const instances = [...pool].sort(() => Math.random() - 0.5).slice(0, 20)
 
-  // Race in batches of 3 to avoid overwhelming the network but find a fast result
-  const batchSize = 3
+  console.log(`[WebResearch] Attempting search with ${instances.length} instances in batches of 5`)
+
+  // Race in batches of 5 to increase probability of finding an open instance
+  const batchSize = 5
   for (let i = 0; i < instances.length; i += batchSize) {
     const batch = instances.slice(i, i + batchSize)
     try {
       const result = await Promise.any(
         batch.map(instance => searchSingleSearXNG(instance, query))
       )
-      if (result && result.length > 0) return result
-    } catch {
-      // If a whole batch fails, continue to next batch
+      if (result && result.length > 0) {
+        console.log(`[WebResearch] Search successful with an instance from batch ${i / batchSize + 1}`)
+        return result
+      }
+    } catch (e) {
+      // AggregateError contains errors from all batchSize promises
+      const errors = (e as any).errors || [e]
+      const statuses = errors.map((err: any) => err.message || String(err)).join(", ")
+      console.warn(`[WebResearch] Batch ${i / batchSize + 1} failed: ${statuses}`)
       continue
     }
   }
@@ -160,16 +177,37 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
 }
 
 async function searchSingleSearXNG(instance: string, query: string): Promise<SearXNGResult[]> {
-  const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json`
+  // Explicitly request multiple major engines to increase success probability
+  const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&engines=google,bing,duckduckgo,brave,qwant`
   const res = await fetch(url, {
     headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(5000), // Strict timeout for racing
+    signal: AbortSignal.timeout(8000), // Slightly more generous for multi-engine scraping
   })
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = (await res.json()) as SearXNGResponse
   if (!data.results || data.results.length === 0) throw new Error("No results")
   return data.results
+}
+
+async function searchWikipedia(term: string): Promise<SearXNGResult[]> {
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&origin=*`
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return []
+    const data = await res.json() as any
+    const search = data.query?.search || []
+    return search.map((r: any) => ({
+      title: r.title,
+      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
+      content: r.snippet.replace(/<[^>]*>/g, ""), // Strip HTML tags from snippet
+    }))
+  } catch {
+    return []
+  }
 }
 
 async function searchDuckDuckGoLite(query: string): Promise<SearXNGResult[]> {
