@@ -1,4 +1,15 @@
-import type { SearchProvider, SearchToolResult } from "./types"
+import type { SearchProvider } from "./types"
+
+interface SerpApiTrendsResponse {
+  interest_over_time?: {
+    timeline_data?: Array<{
+      date: string
+      values: Array<{
+        extracted_value: number
+      }>
+    }>
+  }
+}
 
 export const serpapiProvider: SearchProvider = {
   name: "public_interest",
@@ -13,15 +24,17 @@ export const serpapiProvider: SearchProvider = {
     }
 
     try {
+      console.log(`[SerpApi] Fetching trends for: ${keyword}`)
       const url = `https://serpapi.com/search.json?engine=google_trends&q=${encodeURIComponent(keyword)}&api_key=${config.apiKey}`
       const res = await fetch(url)
 
       if (!res.ok) {
+        console.error(`[SerpApi] HTTP error: ${res.status}`)
         throw new Error(`SerpApi error: ${res.status}`)
       }
 
-      const data = await res.json()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as SerpApiTrendsResponse
+      console.log(`[SerpApi] Data received:`, data)
       const timeline = data.interest_over_time?.timeline_data || []
       
       if (timeline.length === 0) {
@@ -33,15 +46,13 @@ export const serpapiProvider: SearchProvider = {
 
       // Summarize the trend data to avoid passing huge payloads
       // Just extract the latest data point and maybe the max
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const values = timeline.map((d: any) => ({
+      const values = timeline.map((d) => ({
         date: d.date,
         // Values usually come as arrays because of multiple keywords, here we assume one
-        value: parseInt(d.values[0].extracted_value)
+        value: d.values[0].extracted_value
       }))
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const maxPoint = values.reduce((max: any, p: any) => p.value > max.value ? p : max, values[0])
+      const maxPoint = values.reduce((max, p) => p.value > max.value ? p : max, values[0])
       const currentPoint = values[values.length - 1]
 
       const content = `Google Trends data for "${keyword}":

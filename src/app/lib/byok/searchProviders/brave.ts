@@ -1,4 +1,15 @@
-import type { SearchProvider, SearchToolResult } from "./types"
+import type { SearchProvider } from "./types"
+
+interface BraveSearchResponse {
+  web?: {
+    results?: Array<{
+      title: string
+      url: string
+      description: string
+      age?: string
+    }>
+  }
+}
 
 export const braveProvider: SearchProvider = {
   name: "web_search",
@@ -26,14 +37,12 @@ export const braveProvider: SearchProvider = {
         throw new Error(`Brave API error: ${res.status}`)
       }
 
-      const data = await res.json()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as BraveSearchResponse
       const webResults = data.web?.results || []
 
       return {
         tool_name: "web_search",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        results: webResults.map((r: any) => ({
+        results: webResults.map((r) => ({
           title: r.title,
           url: r.url,
           content: r.description,

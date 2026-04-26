@@ -436,7 +436,7 @@ describe("Satflow inscription overlay parsing", () => {
       <meta property="og:title" content="Quantum Cat #1105 - Quantum Cats" />
       <a href="/ordinals/quantum_cats">Quantum Cats</a>
       <script>
-        self.__next_f.push([1,"meta:{\\\"token\\\":{\\\"inscription_id\\\":\\\"6e357...i104\\\",\\\"attributes\\\":[{\\\"key\\\":\\\"Background\\\",\\\"value\\\":\\\"Concatenation\\\",\\\"tokenCount\\\":141},{\\\"key\\\":\\\"Body\\\",\\\"value\\\":\\\"Purple Haze\\\",\\\"tokenCount\\\":103}]},\\\"rarityRank\\\":0}"])
+        self.__next_f.push([1,'meta:{"token":{"inscription_id":"6e357...i104","attributes":[{"key":"Background","value":"Concatenation","tokenCount":141},{"key":"Body","value":"Purple Haze","tokenCount":103}]},"rarityRank":0}'])
       </script>
     `
 

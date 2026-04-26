@@ -1,5 +1,7 @@
 import type { Chronicle, VisionTransport } from "../types"
 import { buildCombinedPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt"
+import { COLLECTION_RESEARCH_TOOLS, type SearchToolDefinition } from "./tools"
+import type { ResearchKeys } from "./toolExecutor"
 
 const GEMINI_INLINE_LIMIT_BYTES = 20 * 1024 * 1024
 
@@ -26,19 +28,26 @@ export interface PreparedSynthesisInput {
   combinedPrompt: string
   inputMode: SynthesisMode
   searchToolsEnabled: boolean
+  availableTools: SearchToolDefinition[]
   fallbackReason?: string
   image?: PreparedImageInput
 }
 
 export async function prepareSynthesisInput(
   chronicle: Chronicle,
-  capabilities: ProviderCapabilities
+  capabilities: ProviderCapabilities,
+  researchKeys?: ResearchKeys
 ): Promise<PreparedSynthesisInput> {
+  const availableTools = capabilities.supportsToolCalling 
+    ? getAvailableTools(researchKeys) 
+    : []
+
   const base = {
-    systemPrompt: buildSystemPrompt(capabilities.supportsToolCalling),
+    systemPrompt: buildSystemPrompt(availableTools),
     userPrompt: buildUserPrompt(chronicle),
-    combinedPrompt: buildCombinedPrompt(chronicle),
-    searchToolsEnabled: capabilities.supportsToolCalling,
+    combinedPrompt: buildCombinedPrompt(chronicle, availableTools),
+    searchToolsEnabled: availableTools.length > 0,
+    availableTools,
   }
 
   const fallbackReason = getVisionFallbackReason(chronicle, capabilities)
@@ -120,8 +129,23 @@ async function blobToBase64(blob: Blob): Promise<string> {
   let binary = ""
 
   for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    const chunk = bytes.subarray(i, i + 0x8000)
+    // Use apply to avoid spread operator issue with large arrays and target compatibility
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[])
   }
 
   return btoa(binary)
+}
+
+function getAvailableTools(keys?: ResearchKeys): SearchToolDefinition[] {
+  return COLLECTION_RESEARCH_TOOLS.filter(tool => {
+    // If tool doesn't require any keys, it's always available
+    if (!tool.requiresKeys || tool.requiresKeys.length === 0) return true
+    
+    // If it requires keys, check if at least one is present and not empty
+    return tool.requiresKeys.some(keyName => {
+      const key = keys?.[keyName]
+      return !!key && key.trim().length > 0
+    })
+  })
 }

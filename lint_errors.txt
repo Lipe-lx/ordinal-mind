@@ -1,0 +1,167 @@
+
+> ordinal-mind@0.1.0 lint
+> eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 src
+
+
+/home/lulipe/Documentos/OrdinalMind/src/app/components/ChronicleCard.tsx
+  17:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/lulipe/Documentos/OrdinalMind/src/app/components/InscriptionPreview.tsx
+  25:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/lulipe/Documentos/OrdinalMind/src/app/components/InscriptionPreview.tsx:25:5
+  23 |
+  24 |   useEffect(() => {
+> 25 |     setRenderFallback(false)
+     |     ^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  26 |     setIsDragging(false)
+  27 |   }, [meta.inscription_id, previewMode])
+  28 |  react-hooks/set-state-in-effect
+
+/home/lulipe/Documentos/OrdinalMind/src/app/components/widgets/RarityWidget.tsx
+  28:41  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-hooks/rules-of-hooks
+  30:3   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/rules-of-hooks
+  31:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/lulipe/Documentos/OrdinalMind/src/app/components/widgets/RarityWidget.tsx:31:5
+  29 |
+  30 |   useEffect(() => {
+> 31 |     setCurrentPage((page) => Math.min(page, totalPages - 1))
+     |     ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  32 |   }, [totalPages])
+  33 |
+  34 |   const visibleTraits = useMemo(() => {  react-hooks/set-state-in-effect
+  34:25  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/rules-of-hooks
+  39:22  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/rules-of-hooks
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/anthropic.ts
+   74:9    error    'messages' is never reassigned. Use 'const' instead   prefer-const
+   74:19   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   75:9    error    'inputMode' is never reassigned. Use 'const' instead  prefer-const
+   78:19   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  119:42   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  136:49   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  136:84   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  157:9    error    'messages' is never reassigned. Use 'const' instead   prefer-const
+  157:19   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  158:9    error    'inputMode' is never reassigned. Use 'const' instead  prefer-const
+  161:19   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  201:42   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  218:49   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  218:84   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  229:80   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  229:105  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  231:61   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  232:29   warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/gemini.ts
+   74:9   error    'contents' is never reassigned. Use 'const' instead                               prefer-const
+   74:19  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+   84:9   error    'inputMode' is never reassigned. Use 'const' instead                              prefer-const
+  143:42  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  147:48  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  147:80  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  152:43  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  177:68  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  179:49  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  185:46  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  235:34  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  238:20  warning  Unexpected any. Specify a different type                                          @typescript-eslint/no-explicit-any
+  246:11  error    'GeminiResponse' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/openai.ts
+   76:9   error    'messages' is never reassigned. Use 'const' instead   prefer-const
+   76:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   83:9   error    'inputMode' is never reassigned. Use 'const' instead  prefer-const
+   86:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  130:42  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  157:80  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/openrouter.ts
+   78:9   error    'messages' is never reassigned. Use 'const' instead   prefer-const
+   78:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   93:9   error    'inputMode' is never reassigned. Use 'const' instead  prefer-const
+   96:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  140:42  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  167:80  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/searchProviders/brave.ts
+   1:31  error  'SearchToolResult' is defined but never used. Allowed unused vars must match /^_/u                     @typescript-eslint/no-unused-vars
+  30:7   error  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/searchProviders/coingecko.ts
+  1:31  error  'SearchToolResult' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/searchProviders/exa.ts
+   1:31  error  'SearchToolResult' is defined but never used. Allowed unused vars must match /^_/u                     @typescript-eslint/no-unused-vars
+  34:7   error  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/searchProviders/perplexity.ts
+  1:31  error  'SearchToolResult' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/searchProviders/serpapi.ts
+   1:31  error  'SearchToolResult' is defined but never used. Allowed unused vars must match /^_/u                     @typescript-eslint/no-unused-vars
+  27:7   error  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/searchProviders/serpapiSearch.ts
+  1:31  error  'SearchToolResult' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/lulipe/Documentos/OrdinalMind/src/app/lib/byok/toolExecutor.ts
+  20:9  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/lulipe/Documentos/OrdinalMind/src/worker/agents/mentions/trends.ts
+  111:12  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/lulipe/Documentos/OrdinalMind/src/worker/timeline.ts
+  173:10  error  'platformLabel' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/lulipe/Documentos/OrdinalMind/tests/worker/collections.test.ts
+  439:40   error  Unnecessary escape character: \"  no-useless-escape
+  439:49   error  Unnecessary escape character: \"  no-useless-escape
+  439:55   error  Unnecessary escape character: \"  no-useless-escape
+  439:73   error  Unnecessary escape character: \"  no-useless-escape
+  439:78   error  Unnecessary escape character: \"  no-useless-escape
+  439:94   error  Unnecessary escape character: \"  no-useless-escape
+  439:99   error  Unnecessary escape character: \"  no-useless-escape
+  439:113  error  Unnecessary escape character: \"  no-useless-escape
+  439:120  error  Unnecessary escape character: \"  no-useless-escape
+  439:127  error  Unnecessary escape character: \"  no-useless-escape
+  439:132  error  Unnecessary escape character: \"  no-useless-escape
+  439:146  error  Unnecessary escape character: \"  no-useless-escape
+  439:151  error  Unnecessary escape character: \"  no-useless-escape
+  439:160  error  Unnecessary escape character: \"  no-useless-escape
+  439:165  error  Unnecessary escape character: \"  no-useless-escape
+  439:182  error  Unnecessary escape character: \"  no-useless-escape
+  439:187  error  Unnecessary escape character: \"  no-useless-escape
+  439:201  error  Unnecessary escape character: \"  no-useless-escape
+  439:212  error  Unnecessary escape character: \"  no-useless-escape
+  439:219  error  Unnecessary escape character: \"  no-useless-escape
+  439:224  error  Unnecessary escape character: \"  no-useless-escape
+  439:232  error  Unnecessary escape character: \"  no-useless-escape
+  439:237  error  Unnecessary escape character: \"  no-useless-escape
+  439:246  error  Unnecessary escape character: \"  no-useless-escape
+  439:251  error  Unnecessary escape character: \"  no-useless-escape
+  439:266  error  Unnecessary escape character: \"  no-useless-escape
+  439:271  error  Unnecessary escape character: \"  no-useless-escape
+  439:285  error  Unnecessary escape character: \"  no-useless-escape
+  439:297  error  Unnecessary escape character: \"  no-useless-escape
+  439:311  error  Unnecessary escape character: \"  no-useless-escape
+
+/home/lulipe/Documentos/OrdinalMind/tests/worker/xsearch.test.ts
+  324:62  error  'init' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 93 problems (59 errors, 34 warnings)
+  13 errors and 0 warnings potentially fixable with the `--fix` option.
+

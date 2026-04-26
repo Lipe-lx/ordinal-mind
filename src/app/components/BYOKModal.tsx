@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { KeyStore, detectProvider, PROVIDERS, MODELS, type Provider, type ByokConfig } from "../lib/byok"
+import type { ResearchKeys } from "../lib/byok/toolExecutor"
 
 interface Props {
   onClose: () => void
@@ -38,7 +39,7 @@ export function BYOKModal({ onClose }: Props) {
     }
   }
 
-  function handleResearchKeyChange(keyName: keyof ByokConfig["researchKeys"], val: string) {
+  function handleResearchKeyChange(keyName: keyof ResearchKeys, val: string) {
     setConfig((c) => ({
       ...c,
       researchKeys: { ...c.researchKeys, [keyName]: val }

@@ -1,4 +1,5 @@
 import { KeyStore } from "../lib/byok"
+import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
 import { NarrativeRenderer } from "./NarrativeRenderer"
@@ -14,6 +15,7 @@ interface Props {
   elapsed: number
   synthError: string | null
   lastInputMode: SynthesisMode | null
+  researchLogs: ResearchLog[]
   onSynthesize: () => void
   onOpenBYOK: () => void
   onCancel: () => void
@@ -27,6 +29,7 @@ export function ChronicleCard({
   elapsed,
   synthError,
   lastInputMode,
+  researchLogs,
   onSynthesize,
   onOpenBYOK,
   onCancel,
@@ -63,6 +66,7 @@ export function ChronicleCard({
         modelName={config?.model}
         error={synthError}
         inputMode={lastInputMode}
+        researchLogs={researchLogs}
         onGenerate={hasKey ? onSynthesize : onOpenBYOK}
         actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
         emptyMessage={

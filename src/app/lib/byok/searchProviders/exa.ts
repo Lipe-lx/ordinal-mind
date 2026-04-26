@@ -1,4 +1,14 @@
-import type { SearchProvider, SearchToolResult } from "./types"
+import type { SearchProvider } from "./types"
+
+interface ExaSearchResponse {
+  results?: Array<{
+    title: string
+    url: string
+    text?: string
+    summary?: string
+    publishedDate?: string
+  }>
+}
 
 export const exaProvider: SearchProvider = {
   name: "deep_research",
@@ -30,14 +40,12 @@ export const exaProvider: SearchProvider = {
         throw new Error(`Exa API error: ${res.status}`)
       }
 
-      const data = await res.json()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as ExaSearchResponse
       const results = data.results || []
 
       return {
         tool_name: "deep_research",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        results: results.map((r: any) => ({
+        results: results.map((r) => ({
           title: r.title,
           url: r.url,
           content: r.text || r.summary || "",

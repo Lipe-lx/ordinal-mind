@@ -4,7 +4,6 @@ import type { PreparedImageInput, ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
-import { COLLECTION_RESEARCH_TOOLS } from "./tools"
 import type { ToolExecutor } from "./toolExecutor"
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -59,20 +58,29 @@ export class GeminiAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
     const action = stream ? "streamGenerateContent" : "generateContent"
     const streamParam = stream ? "&alt=sse" : ""
     const url = `${BASE_URL}/${this.model}:${action}?key=${this.key}${streamParam}`
 
     const tools = prepared.searchToolsEnabled ? [{
-      function_declarations: COLLECTION_RESEARCH_TOOLS.map(t => ({
+      function_declarations: prepared.availableTools.map(t => ({
         name: t.name,
         description: t.description,
         parameters: t.parameters
       }))
     }] : undefined
 
-    let contents: any[] = [
+    const contents: Array<{
+      role: string;
+      parts: Array<{
+        text?: string;
+        inline_data?: { mime_type: string; data: string };
+        file_data?: { mime_type: string; file_uri: string };
+        functionCall?: { name: string; args: Record<string, unknown> };
+        functionResponse?: { name: string; response: unknown };
+      }>;
+    }> = [
       {
         role: "user",
         parts: buildGeminiParts(
@@ -82,7 +90,7 @@ export class GeminiAdapter implements LLMAdapter {
       },
     ]
 
-    let inputMode = prepared.inputMode
+    const inputMode = prepared.inputMode
 
     for (let i = 0; i < 7; i++) {
       // Build request body
@@ -141,16 +149,16 @@ export class GeminiAdapter implements LLMAdapter {
         }
         return { text: streamResult.text, inputMode }
       } else {
-        const data = await res.json() as any
+        const data = (await res.json()) as GeminiResponse
         const candidate = data.candidates?.[0]
         const parts = candidate?.content?.parts || []
         
-        const functionCalls = parts.filter((p: any) => p.functionCall).map((p: any) => p.functionCall)
+        const functionCalls = parts.filter((p) => p.functionCall).map((p) => p.functionCall!)
         
         if (functionCalls.length > 0 && toolExecutor) {
           contents.push({
              role: "model",
-             parts: functionCalls.map((c: any) => ({ functionCall: { name: c.name, args: c.args } }))
+             parts: functionCalls.map((c) => ({ functionCall: { name: c.name, args: c.args } }))
           })
           
           const functionResponses = []
@@ -175,15 +183,15 @@ export class GeminiAdapter implements LLMAdapter {
     res: Response,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<{ text: string, toolCalls: Array<{name: string, args: any}> }> {
+  ): Promise<{ text: string, toolCalls: Array<{name: string, args: Record<string, unknown>}> }> {
     let accumulatedText = ""
-    const toolCalls: Array<{name: string, args: any}> = []
+    const toolCalls: Array<{name: string, args: Record<string, unknown>}> = []
 
     await consumeSSE(
       res,
       (data) => {
         try {
-          const parsed = JSON.parse(data) as any
+          const parsed = JSON.parse(data) as GeminiResponse
           
           const candidate = parsed.candidates?.[0]
           if (!candidate?.content?.parts) return
@@ -219,8 +227,8 @@ function toGeminiImagePart(image: PreparedImageInput) {
   if (image.transport === "inline_data") {
     return {
       inline_data: {
-        mime_type: image.mimeType,
-        data: image.data,
+        mime_type: image.mimeType || "image/png",
+        data: image.data || "",
       },
     }
   }
@@ -228,15 +236,15 @@ function toGeminiImagePart(image: PreparedImageInput) {
   return {
     file_data: {
       mime_type: "text/plain",
-      file_uri: image.url,
+      file_uri: image.url || "",
     },
   }
 }
 
-function extractGeminiText(data: any): string {
+function extractGeminiText(data: GeminiResponse): string {
   return (
     data.candidates?.[0]?.content?.parts
-      ?.map((part: any) => part.text ?? "")
+      ?.map((part) => part.text ?? "")
       .join("") ?? ""
   )
 }
@@ -247,7 +255,10 @@ function extractGeminiText(data: any): string {
 interface GeminiResponse {
   candidates?: {
     content?: {
-      parts?: { text?: string }[]
+      parts?: { 
+        text?: string;
+        functionCall?: { name: string; args: Record<string, unknown> };
+      }[]
     }
     finishReason?: string
   }[]

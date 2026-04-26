@@ -134,7 +134,8 @@ export function buildTimeline(
       block_height: 0,
       event_type: "social_mention",
       source: { type: "web", ref: mention.canonical_url },
-      description: `${platformLabel(mention.platform)} · ${mention.title ? mention.title.substring(0, 100) : "Collector signal found"}`,
+      description: `Mentioned by ${mention.author_handle} on ${platformLabel(mention.platform)}`,
+      payload: mention,
       metadata: {
         platform: mention.platform,
         scope: mention.scope,

@@ -21,10 +21,6 @@ export function InscriptionPreview({ chronicle }: Props) {
   const imgRef = useRef<HTMLImageElement>(null)
   const isInteractiveImage = previewMode === "image" && !renderFallback
 
-  useEffect(() => {
-    setRenderFallback(false)
-    setIsDragging(false)
-  }, [meta.inscription_id, previewMode])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isInteractiveImage || !containerRef.current || !imgRef.current) return

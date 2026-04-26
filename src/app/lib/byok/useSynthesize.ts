@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react"
 import { createAdapter, KeyStore } from "./index"
 import { sanitizeNarrative } from "./sanitizer"
-import { ToolExecutor } from "./toolExecutor"
+import { ToolExecutor, type ResearchLog } from "./toolExecutor"
 import type { Chronicle } from "../types"
 import type { SynthesisMode } from "./context"
 
@@ -37,6 +37,7 @@ export function useSynthesize() {
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [lastInputMode, setLastInputMode] = useState<SynthesisMode | null>(null)
+  const [researchLogs, setResearchLogs] = useState<ResearchLog[]>([])
 
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -62,6 +63,7 @@ export function useSynthesize() {
     clearTimer()
     setPhase("idle")
     setStreamingText("")
+    setResearchLogs([])
     setLastInputMode(null)
   }, [clearTimer])
 
@@ -89,6 +91,7 @@ export function useSynthesize() {
       setNarrative(null)
       setStreamingText("")
       setPhase("connecting")
+      setResearchLogs([])
       setLastInputMode(null)
       startTimer()
 
@@ -96,9 +99,24 @@ export function useSynthesize() {
       abortRef.current = controller
 
       try {
-        setPhase("analyzing")
+        if (config.researchKeys && Object.keys(config.researchKeys).length > 0) {
+          setPhase("researching")
+        } else {
+          setPhase("analyzing")
+        }
 
-        const toolExecutor = new ToolExecutor(config.researchKeys || {})
+        const toolExecutor = new ToolExecutor(config.researchKeys || {}, (log) => {
+          console.log("[useSynthesize] Tool Log:", log)
+          setResearchLogs((prev) => {
+            const index = prev.findIndex((l) => l.id === log.id)
+            if (index !== -1) {
+              const next = [...prev]
+              next[index] = log
+              return next
+            }
+            return [...prev, log]
+          })
+        })
 
         let firstChunk = true
         const result = await adapter.synthesizeStream(
@@ -158,6 +176,7 @@ export function useSynthesize() {
     loading: phase !== "idle" && phase !== "done" && phase !== "error",
     error,
     elapsed,
+    researchLogs,
     lastInputMode,
     synthesize,
     cancel,

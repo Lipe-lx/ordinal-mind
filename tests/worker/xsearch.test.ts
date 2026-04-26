@@ -321,7 +321,7 @@ describe("xsearch", () => {
 
   it("lets Bing reach public mirror queries after initial direct-query failures", async () => {
     const wrappedUrl = `https://www.bing.com/ck/a?u=a1${btoa("https://twstalker.com/TokenJokin?lang=en")}&ntb=1`
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = typeof input === "string"
         ? input
         : input instanceof URL

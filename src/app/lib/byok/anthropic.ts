@@ -4,10 +4,39 @@ import type { PreparedImageInput, ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
-import { COLLECTION_RESEARCH_TOOLS } from "./tools"
 import type { ToolExecutor } from "./toolExecutor"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
+
+type AnthropicContent = 
+  | { type: string; text?: string }
+  | { type: string; source?: { type: string; media_type: string; data: string } }
+  | { type: string; id?: string; name?: string; input?: Record<string, unknown> }
+  | { type: string; tool_use_id?: string; content?: string };
+
+type AnthropicMessage = 
+  | { role: "user"; content: string | AnthropicContent[] }
+  | { role: "assistant"; content: string | AnthropicContent[] };
+
+interface AnthropicResponse {
+  id: string;
+  type: string;
+  role: string;
+  content: Array<{
+    type: string;
+    text?: string;
+    id?: string;
+    name?: string;
+    input?: Record<string, unknown>;
+  }>;
+  model: string;
+  stop_reason: string | null;
+  stop_sequence: string | null;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+}
 
 export class AnthropicAdapter implements LLMAdapter {
   readonly provider: Provider = "anthropic"
@@ -65,18 +94,18 @@ export class AnthropicAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters
     })) : undefined
 
-    let messages: any[] = [{ role: "user", content: buildAnthropicContent(prepared.userPrompt, prepared.image) }]
-    let inputMode = prepared.inputMode
+    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(prepared.userPrompt, prepared.image) }]
+    const inputMode = prepared.inputMode
 
     for (let i = 0; i < 7; i++) {
-      const body: any = {
+      const body: Record<string, unknown> = {
         model: this.model,
         max_tokens: 600,
         system: prepared.systemPrompt,
@@ -102,13 +131,13 @@ export class AnthropicAdapter implements LLMAdapter {
       if (stream) {
         const streamResult = await this.consumeAnthropicStreamWithTools(res, onChunk, signal)
         if (streamResult.toolCalls.length > 0 && toolExecutor) {
-          messages.push({ role: "assistant", content: streamResult.assistantContent })
+          messages.push({ role: "assistant", content: streamResult.assistantContent as AnthropicContent[] })
           const toolResultsContent = []
           for (const call of streamResult.toolCalls) {
             const result = await toolExecutor.executeTool(call.name, call.args)
             toolResultsContent.push({
               type: "tool_result",
-              tool_use_id: call.id,
+              tool_use_id: call.id || "",
               content: JSON.stringify(result)
             })
           }
@@ -117,16 +146,16 @@ export class AnthropicAdapter implements LLMAdapter {
         }
         return { text: streamResult.text, inputMode }
       } else {
-        const data = await res.json() as any
+        const data = (await res.json()) as AnthropicResponse
         if (data.stop_reason === "tool_use" && toolExecutor) {
-          messages.push({ role: "assistant", content: data.content })
+          messages.push({ role: "assistant", content: data.content as AnthropicContent[] })
           const toolResultsContent = []
           for (const block of data.content) {
             if (block.type === "tool_use") {
-              const result = await toolExecutor.executeTool(block.name, block.input)
+              const result = await toolExecutor.executeTool(block.name!, block.input || {})
               toolResultsContent.push({
                 type: "tool_result",
-                tool_use_id: block.id,
+                tool_use_id: block.id || "",
                 content: JSON.stringify(result)
               })
             }
@@ -134,7 +163,7 @@ export class AnthropicAdapter implements LLMAdapter {
           messages.push({ role: "user", content: toolResultsContent })
           continue
         }
-        return { text: data.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("") ?? "", inputMode }
+        return { text: data.content?.filter((c) => c.type === "text").map((c) => c.text).join("") ?? "", inputMode }
       }
     }
     
@@ -148,18 +177,18 @@ export class AnthropicAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters
     })) : undefined
 
-    let messages: any[] = [{ role: "user", content: buildAnthropicContent(prepared.combinedPrompt, prepared.image) }]
-    let inputMode = prepared.inputMode
+    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(prepared.combinedPrompt, prepared.image) }]
+    const inputMode = prepared.inputMode
 
     for (let i = 0; i < 7; i++) {
-      const body: any = {
+      const body: Record<string, unknown> = {
         model: this.model,
         max_tokens: 600,
         messages,
@@ -184,13 +213,13 @@ export class AnthropicAdapter implements LLMAdapter {
       if (stream) {
         const streamResult = await this.consumeAnthropicStreamWithTools(res, onChunk, signal)
         if (streamResult.toolCalls.length > 0 && toolExecutor) {
-          messages.push({ role: "assistant", content: streamResult.assistantContent })
+          messages.push({ role: "assistant", content: streamResult.assistantContent as AnthropicContent[] })
           const toolResultsContent = []
           for (const call of streamResult.toolCalls) {
             const result = await toolExecutor.executeTool(call.name, call.args)
             toolResultsContent.push({
               type: "tool_result",
-              tool_use_id: call.id,
+              tool_use_id: call.id || "",
               content: JSON.stringify(result)
             })
           }
@@ -199,16 +228,16 @@ export class AnthropicAdapter implements LLMAdapter {
         }
         return { text: streamResult.text, inputMode }
       } else {
-        const data = await res.json() as any
+        const data = (await res.json()) as AnthropicResponse
         if (data.stop_reason === "tool_use" && toolExecutor) {
-          messages.push({ role: "assistant", content: data.content })
+          messages.push({ role: "assistant", content: data.content as AnthropicContent[] })
           const toolResultsContent = []
           for (const block of data.content) {
             if (block.type === "tool_use") {
-              const result = await toolExecutor.executeTool(block.name, block.input)
+              const result = await toolExecutor.executeTool(block.name!, block.input || {})
               toolResultsContent.push({
                 type: "tool_result",
-                tool_use_id: block.id,
+                tool_use_id: block.id || "",
                 content: JSON.stringify(result)
               })
             }
@@ -216,7 +245,7 @@ export class AnthropicAdapter implements LLMAdapter {
           messages.push({ role: "user", content: toolResultsContent })
           continue
         }
-        return { text: data.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("") ?? "", inputMode }
+        return { text: data.content?.filter((c) => c.type === "text").map((c) => c.text).join("") ?? "", inputMode }
       }
     }
     
@@ -227,10 +256,10 @@ export class AnthropicAdapter implements LLMAdapter {
     res: Response,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: any}>, assistantContent: any[] }> {
+  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: Record<string, unknown>}>, assistantContent: AnthropicContent[] }> {
     let accumulatedText = ""
-    const toolCalls: Array<{id: string, name: string, args: any}> = []
-    const assistantContent: any[] = []
+    const toolCalls: Array<{id: string, name: string, args: Record<string, unknown>}> = []
+    const assistantContent: AnthropicContent[] = []
 
     let currentToolId = ""
     let currentToolName = ""

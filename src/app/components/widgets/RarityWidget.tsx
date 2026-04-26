@@ -2,7 +2,7 @@
 // Shows: rank headline, trait breakdown with frequency bars, data confidence indicator.
 // Refactored to match InscriptionMetaWidget grid style.
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import type { UnisatEnrichment, DataValidationResult, TraitRarityBreakdown } from "../../lib/types"
 
 interface Props {
@@ -11,25 +11,26 @@ interface Props {
 }
 
 export function RarityWidget({ unisatEnrichment, validation }: Props) {
-  const rarity = unisatEnrichment?.rarity
-  if (!rarity || rarity.traits.length === 0) return null
-
-  const TRAITS_PER_PAGE = 6
-  const traitItems: TraitRarityBreakdown[] = rarity.trait_breakdown.length > 0
-    ? rarity.trait_breakdown
-    : rarity.traits.map((trait) => ({
-        trait_type: trait.trait_type,
-        value: trait.value,
-        frequency: undefined,
-        frequency_pct: undefined,
-        rarity_contribution: undefined,
-      }))
-  const totalPages = Math.max(1, Math.ceil(traitItems.length / TRAITS_PER_PAGE))
   const [currentPage, setCurrentPage] = useState(0)
 
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages - 1))
-  }, [totalPages])
+  const rarity = unisatEnrichment?.rarity
+  const TRAITS_PER_PAGE = 6
+
+  const traitItems: TraitRarityBreakdown[] = useMemo(() => {
+    if (!rarity) return []
+    return rarity.trait_breakdown.length > 0
+      ? rarity.trait_breakdown
+      : rarity.traits.map((trait) => ({
+          trait_type: trait.trait_type,
+          value: trait.value,
+          frequency: undefined,
+          frequency_pct: undefined,
+          rarity_contribution: undefined,
+        }))
+  }, [rarity])
+
+  const totalPages = Math.max(1, Math.ceil(traitItems.length / TRAITS_PER_PAGE))
+
 
   const visibleTraits = useMemo(() => {
     const start = currentPage * TRAITS_PER_PAGE
@@ -43,6 +44,8 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
     }
     return slots
   }, [visibleTraits])
+
+  if (!rarity || rarity.traits.length === 0) return null
 
   const confidenceIcon = validation
     ? validation.confidence === "high" ? "✓" : validation.confidence === "medium" ? "⚠" : "✗"

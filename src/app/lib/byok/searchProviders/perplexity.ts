@@ -1,4 +1,4 @@
-import type { SearchProvider, SearchToolResult } from "./types"
+import type { SearchProvider } from "./types"
 
 export const perplexityProvider: SearchProvider = {
   name: "synthesized_search",

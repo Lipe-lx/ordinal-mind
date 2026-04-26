@@ -122,6 +122,7 @@ export function Chronicle() {
     streamingText,
     phase,
     elapsed,
+    researchLogs,
     error: synthError,
     lastInputMode,
     synthesize,
@@ -264,9 +265,10 @@ export function Chronicle() {
       <div className="chronicle">
         {/* Left Sidebar: Inscription preview + metadata + rarity */}
         <div className="chronicle-sidebar-left">
-          <InscriptionPreview chronicle={chronicle} />
+          <InscriptionPreview key={chronicle.meta.inscription_id} chronicle={chronicle} />
           <InscriptionMetaWidget meta={chronicle.meta} events={chronicle.events} />
           <RarityWidget
+            key={`${chronicle.meta.inscription_id}-rarity`}
             unisatEnrichment={chronicle.unisat_enrichment}
             validation={chronicle.validation}
           />
@@ -279,6 +281,7 @@ export function Chronicle() {
           streamingText={streamingText}
           phase={phase}
           elapsed={elapsed}
+          researchLogs={researchLogs}
           synthError={synthError}
           lastInputMode={lastInputMode}
           onSynthesize={() => synthesize(chronicle)}

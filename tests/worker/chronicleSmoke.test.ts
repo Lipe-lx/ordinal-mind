@@ -294,7 +294,7 @@ describe("chronicle pipeline smoke", () => {
     const rarityOverlay = match.rarity_overlay as Record<string, unknown>
     expect(rarityOverlay.source).toBe("satflow")
     expect((rarityOverlay.traits as unknown[]).length).toBeGreaterThan(0)
-    expect((mentionProviders.x_fallback as Record<string, unknown>).queries).toBeDefined()
+    expect((mentionProviders.google_trends as Record<string, unknown>).queries).toBeDefined()
     expect(collectorSignals.sentiment_label).toBeDefined()
     expect(collectorSignals.provider_breakdown).toBeDefined()
 

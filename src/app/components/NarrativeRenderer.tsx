@@ -1,5 +1,7 @@
+import { useState } from "react"
 import ReactMarkdown from "react-markdown"
 import type { SynthesisPhase } from "../lib/byok/useSynthesize"
+import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
 
 interface Props {
@@ -19,6 +21,8 @@ interface Props {
   error?: string | null
   /** Actual request mode used by the adapter */
   inputMode?: SynthesisMode | null
+  /** Research activity logs */
+  researchLogs?: ResearchLog[]
   /** Called when user clicks Generate */
   onGenerate?: () => void
   /** Primary button label for empty/error states */
@@ -47,11 +51,14 @@ export function NarrativeRenderer({
   modelName,
   error,
   inputMode,
+  researchLogs = [],
   onGenerate,
   actionLabel = "✨ Generative Chronicle",
   emptyMessage = "Generate an AI-powered Chronicle narrative from the factual timeline above.",
   onCancel,
 }: Props) {
+  const [showLogs, setShowLogs] = useState(false)
+
   // Error state
   if (phase === "error" && error) {
     return (
@@ -110,6 +117,9 @@ export function NarrativeRenderer({
             ))}
           </div>
 
+          {/* Research Activity Logs */}
+          <ResearchLogs logs={researchLogs} phase={phase} />
+
           {/* Progressive streaming text */}
           {streamingText && (
             <div className="narrative-stream-preview">
@@ -149,6 +159,27 @@ export function NarrativeRenderer({
   // Final narrative display
   return (
     <div className="narrative-section narrative-final">
+      {researchLogs.length > 0 && (
+        <div className="narrative-final-logs">
+          <div 
+            className="narrative-logs-toggle"
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowLogs(!showLogs)}
+            onKeyDown={(e) => e.key === "Enter" && setShowLogs(!showLogs)}
+          >
+            <span className="narrative-logs-toggle-icon">{showLogs ? "▼" : "▶"}</span>
+            <span className="narrative-logs-toggle-text">
+              Research Activity ({researchLogs.length})
+            </span>
+          </div>
+          {showLogs && (
+            <div className="narrative-logs-expanded">
+              <ResearchLogs logs={researchLogs} phase={phase} />
+            </div>
+          )}
+        </div>
+      )}
       <div className="narrative-content">
         <ReactMarkdown
           components={{
@@ -193,4 +224,45 @@ function enhanceContent(children: React.ReactNode): React.ReactNode {
   }
 
   return children
+}
+
+// --- Sub-components ---
+
+function ResearchLogs({ logs, phase }: { logs: ResearchLog[], phase: string }) {
+  if (logs.length === 0 && phase !== "researching") return null
+
+  return (
+    <div className="narrative-research-logs">
+      {logs.length > 0 ? (
+        logs.map((log) => (
+          <div key={log.id} className={`narrative-log-item ${log.status}`}>
+            <div className="narrative-log-row">
+              <span className="narrative-log-status">
+                {log.status === "running" ? "⏳" : log.status === "done" ? "✅" : "❌"}
+              </span>
+              <span className="narrative-log-tool">{log.tool.replace("_", " ")}</span>
+              <span className="narrative-log-args">
+                {String(log.args.query || log.args.question || log.args.keyword || log.args.coin_id || JSON.stringify(log.args))}
+              </span>
+            </div>
+            {log.result && (
+              <div className="narrative-log-result">
+                <span className="narrative-log-result-icon">↳</span>
+                <span className="narrative-log-result-text">{log.result}</span>
+              </div>
+            )}
+            {log.error && <span className="narrative-log-error">{log.error}</span>}
+          </div>
+        ))
+      ) : phase === "researching" ? (
+        <div className="narrative-log-item running">
+          <div className="narrative-log-row">
+            <span className="narrative-log-status">🤔</span>
+            <span className="narrative-log-tool">Researcher</span>
+            <span className="narrative-log-args">Evaluating collection context...</span>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
 }

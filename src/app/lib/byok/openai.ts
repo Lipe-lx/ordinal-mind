@@ -1,13 +1,35 @@
 import type { LLMAdapter, Provider } from "./index"
 import type { Chronicle } from "../types"
-import type { ProviderCapabilities } from "./context"
+import type { ProviderCapabilities, PreparedImageInput } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
-import { COLLECTION_RESEARCH_TOOLS } from "./tools"
 import type { ToolExecutor } from "./toolExecutor"
 
 const API_URL = "https://api.openai.com/v1/chat/completions"
+
+type OpenAIMessage = 
+  | { role: "system"; content: string }
+  | { role: "user"; content: string | { type: string; text?: string; image_url?: { url: string } }[] }
+  | { role: "assistant"; content?: string | null; tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[] }
+  | { role: "tool"; tool_call_id: string; name: string; content: string };
+
+interface OpenAIResponse {
+  choices: Array<{
+    message: {
+      role: string;
+      content: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: string;
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+    };
+  }>;
+}
 
 export class OpenAIAdapter implements LLMAdapter {
   readonly provider: Provider = "openai"
@@ -64,8 +86,8 @@ export class OpenAIAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       type: "function",
       function: {
         name: t.name,
@@ -74,17 +96,17 @@ export class OpenAIAdapter implements LLMAdapter {
       }
     })) : undefined
 
-    let messages: any[] = useSystemRole
+    const messages: OpenAIMessage[] = useSystemRole
       ? [
           { role: "system", content: prepared.systemPrompt },
           { role: "user", content: buildOpenAIContent(prepared.userPrompt, prepared.image) },
         ]
       : [{ role: "user", content: buildOpenAIContent(prepared.combinedPrompt, prepared.image) }]
 
-    let inputMode = prepared.inputMode
+    const inputMode = prepared.inputMode
 
     for (let i = 0; i < 7; i++) {
-      const body: any = {
+      const body: Record<string, unknown> = {
         model: this.model,
         max_tokens: 600,
         messages,
@@ -128,10 +150,10 @@ export class OpenAIAdapter implements LLMAdapter {
         }
         return { text: streamResult.text, inputMode }
       } else {
-        const data = await res.json() as any
+        const data = (await res.json()) as OpenAIResponse
         const message = data.choices?.[0]?.message
         if (message?.tool_calls && toolExecutor) {
-          messages.push(message)
+          messages.push({ role: "assistant", content: message.content, tool_calls: message.tool_calls } as OpenAIMessage)
           for (const call of message.tool_calls) {
              const args = JSON.parse(call.function.arguments)
              const result = await toolExecutor.executeTool(call.function.name, args)
@@ -155,7 +177,7 @@ export class OpenAIAdapter implements LLMAdapter {
     res: Response,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: any}> }> {
+  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: Record<string, unknown>}> }> {
     let accumulatedText = ""
     const toolCallsMap: Record<number, {id: string, name: string, argsStr: string}> = {}
 
@@ -212,7 +234,7 @@ function buildOpenAIContent(text: string, image?: PreparedImageInput) {
       image_url: {
         url:
           image.transport === "public_url"
-            ? image.url
+            ? (image.url || "")
             : `data:${image.mimeType};base64,${image.data}`,
       },
     },

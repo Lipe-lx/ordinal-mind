@@ -1266,7 +1266,7 @@ export function parseSatflowCollectionStats(
   const change7dRaw = extractMetricNumber(html, ["priceChangePercent7d", "change7d"])
   const volume7dRaw = extractMetricNumber(html, ["volume7D", "volume_7d"])
   const supplyRaw = extractMetricNumber(html, ["totalSupply", "supply"])
-  const listedRaw = extractMetricNumber(html, ["listedCount", "listed", "activeListings"])
+  const listedRaw = extractMetricNumber(html, ["listedCount", "listed", "activeListings", "listedItems"])
   const marketCapRaw = extractMetricNumber(html, ["marketCap", "market_cap"])
 
   const labelChange = extractLabeledStatValue(html, "7D Change")
@@ -1585,7 +1585,7 @@ function extractLooseIntegerMetric(html: string, keys: string[]): number | null 
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     const patterns = [
       new RegExp(`"${escaped}"\\s*:\\s*"?(-?\\d+)"?`, "i"),
-      new RegExp(`\\\\"${escaped}\\\\"\\s*:\\s*\\\\"?(-?\\d+)\\\\"?`, "i"),
+      new RegExp(`\\\\?"${escaped}\\\\?"\\s*:\\s*\\\\?"?(-?\\d+)\\\\?"?`, "i"),
       new RegExp(`${escaped}:\\s*(-?\\d+)`, "i"),
     ]
 
@@ -1693,7 +1693,7 @@ function extractMetricNumber(html: string, keys: string[]): number | null {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     const patterns = [
       new RegExp(`"${escaped}"\\s*:\\s*"?(-?\\d+(?:\\.\\d+)?)"?`, "i"),
-      new RegExp(`\\\\"${escaped}\\\\"\\s*:\\s*\\\\"?(-?\\d+(?:\\.\\d+)?)\\\\"?`, "i"),
+      new RegExp(`\\\\?"${escaped}\\\\?"\\s*:\\s*\\\\?"?(-?\\d+(?:\\.\\d+)?)\\\\?"?`, "i"),
     ]
 
     for (const pattern of patterns) {
@@ -1717,7 +1717,7 @@ function extractMetricString(html: string, keys: string[]): string | null {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     const patterns = [
       new RegExp(`"${escaped}"\\s*:\\s*"([^"]+)"`, "i"),
-      new RegExp(`\\\\"${escaped}\\\\"\\s*:\\s*\\\\"([^\\\\"]+)\\\\"`, "i"),
+      new RegExp(`\\\\?"${escaped}\\\\?"\\s*:\\s*\\\\?"([^\\\\"]+)\\\\?"`, "i"),
     ]
 
     for (const pattern of patterns) {

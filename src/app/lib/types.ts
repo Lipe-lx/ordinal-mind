@@ -55,7 +55,7 @@ export type MediaKind =
 
 export interface ChronicleEvent {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any
+  payload?: any
   id: string
   timestamp: string                    // ISO8601 derived from BTC block
   block_height: number

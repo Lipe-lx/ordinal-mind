@@ -108,7 +108,7 @@ async function fetchInterestScore(
         cookieHeader = nidMatch[0]
       }
     }
-  } catch (error) {
+  } catch {
     // best effort
   }
 
