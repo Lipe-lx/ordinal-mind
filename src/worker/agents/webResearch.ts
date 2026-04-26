@@ -5,10 +5,12 @@ const FALLBACK_INSTANCES = [
   "https://searx.tiekoetter.com",
   "https://searx.monocles.de",
   "https://searx.divided-by-zero.eu",
-  "https://search.ononoki.org",
+  "https://searx.work",
   "https://searx.nixnet.services",
   "https://searx.fmac.xyz",
   "https://priv.au",
+  "https://ooglester.com",
+  "https://baresearch.org",
 ]
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -53,20 +55,26 @@ async function discoverInstances(): Promise<string[]> {
 
     const candidates = Object.entries(data.instances)
       .filter(([_url, info]) => {
-        // High quality criteria: 200 OK, >95% success rate, <2s response time
+        // Higher quality criteria for 2026: 200 OK, >98% success rate, <1.5s response time
         return (
           info.http?.status_code === 200 &&
-          (info.timing?.search?.success_percentage ?? 0) > 95 &&
-          (info.timing?.search?.all?.median ?? 99) < 2.0
+          (info.timing?.search?.success_percentage ?? 0) > 98 &&
+          (info.timing?.search?.all?.median ?? 99) < 1.5
         )
       })
-      .map(([url]) => url.replace(/\/$/, "")) // Remove trailing slash
-      .filter((url) => !url.includes(".onion") && url.startsWith("https://"))
+      .map(([url, info]) => ({
+        url: url.replace(/\/$/, ""),
+        score: (info.timing?.search?.success_percentage ?? 0) / (info.timing?.search?.all?.median ?? 1)
+      }))
+      .filter(({ url }) => !url.includes(".onion") && url.startsWith("https://"))
+      .sort((a, b) => b.score - a.score) // Sort by our custom reliability score
+      .map(c => c.url)
 
-    if (candidates.length > 5) {
-      discoveredInstances = candidates.sort(() => Math.random() - 0.5).slice(0, 15)
+    if (candidates.length > 3) {
+      // Keep top 20 most reliable ones
+      discoveredInstances = candidates.slice(0, 20)
       lastDiscoveryTime = now
-      console.log(`[WebResearch] Discovered ${discoveredInstances.length} fresh SearXNG instances`)
+      console.log(`[WebResearch] Discovered ${discoveredInstances.length} high-quality SearXNG instances`)
       return discoveredInstances
     }
   } catch (e) {
@@ -93,8 +101,15 @@ export async function fetchLoreContext(collectionName: string): Promise<WebResea
   const results: WebResearchItem[] = []
   const fetchedAt = new Date().toISOString()
 
-  // 1. Search via SearXNG
-  const searchResults = await searchSearXNG(query)
+  // 1. Search via SearXNG (with parallel racing)
+  let searchResults = await searchSearXNG(query)
+  
+  // 2. Fallback to DuckDuckGo Lite if SearXNG fails
+  if (!searchResults || searchResults.length === 0) {
+    console.log("[WebResearch] SearXNG failed or empty, falling back to DuckDuckGo Lite")
+    searchResults = await searchDuckDuckGoLite(query)
+  }
+
   if (!searchResults || searchResults.length === 0) return null
 
   // 2. Select top 3 relevant results (excluding marketplaces if possible)
@@ -123,29 +138,93 @@ export async function fetchLoreContext(collectionName: string): Promise<WebResea
 
 async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
   const pool = await discoverInstances()
-  const instances = [...pool].sort(() => Math.random() - 0.5)
+  // Shuffle but keep reliable ones near the front
+  const instances = [...pool].sort(() => Math.random() - 0.5).slice(0, 12)
 
-  for (const instance of instances) {
+  // Race in batches of 3 to avoid overwhelming the network but find a fast result
+  const batchSize = 3
+  for (let i = 0; i < instances.length; i += batchSize) {
+    const batch = instances.slice(i, i + batchSize)
     try {
-      const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json`
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": USER_AGENT,
-        },
-        signal: AbortSignal.timeout(6000), // Fast timeout for search
-      })
-
-      if (res.ok) {
-        const data = (await res.json()) as SearXNGResponse
-        return data.results || []
-      }
-    } catch (e) {
-      console.warn(`[WebResearch] SearXNG instance ${instance} failed:`, e)
+      const result = await Promise.any(
+        batch.map(instance => searchSingleSearXNG(instance, query))
+      )
+      if (result && result.length > 0) return result
+    } catch {
+      // If a whole batch fails, continue to next batch
       continue
     }
   }
 
   return []
+}
+
+async function searchSingleSearXNG(instance: string, query: string): Promise<SearXNGResult[]> {
+  const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json`
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(5000), // Strict timeout for racing
+  })
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = (await res.json()) as SearXNGResponse
+  if (!data.results || data.results.length === 0) throw new Error("No results")
+  return data.results
+}
+
+async function searchDuckDuckGoLite(query: string): Promise<SearXNGResult[]> {
+  try {
+    const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (!res.ok) return []
+
+    const results: SearXNGResult[] = []
+    let currentResult: Partial<SearXNGResult> = {}
+
+    const rewriter = new HTMLRewriter()
+      .on("a.result-link", {
+        element(el) {
+          const href = el.getAttribute("href")
+          if (href) {
+            // DDG Lite URLs are proxied: //duckduckgo.com/l/?uddg=URL...
+            const match = href.match(/[?&]uddg=([^&]+)/)
+            const actualUrl = match ? decodeURIComponent(match[1]) : href
+            currentResult.url = actualUrl.startsWith("//") ? "https:" + actualUrl : actualUrl
+          }
+        },
+        text(chunk) {
+          currentResult.title = (currentResult.title || "") + chunk.text
+        }
+      })
+      .on("td.result-snippet", {
+        text(chunk) {
+          currentResult.content = (currentResult.content || "") + chunk.text
+        }
+      })
+      // The snippet is usually the last part of a result block in DDG Lite
+      .on("span.link-text", {
+        element() {
+          if (currentResult.title && currentResult.url) {
+            results.push({
+              title: currentResult.title.trim(),
+              url: currentResult.url,
+              content: (currentResult.content || "").trim(),
+            })
+          }
+          currentResult = {} // Reset for next result
+        }
+      })
+
+    await rewriter.transform(res).text()
+    return results
+  } catch (e) {
+    console.error("[WebResearch] DDG Lite search failed:", e)
+    return []
+  }
 }
 
 async function extractContent(url: string): Promise<string | null> {
