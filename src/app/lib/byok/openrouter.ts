@@ -4,6 +4,8 @@ import type { PreparedImageInput, ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
+import { COLLECTION_RESEARCH_TOOLS } from "./tools"
+import type { ToolExecutor } from "./toolExecutor"
 
 const API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -29,12 +31,12 @@ export class OpenRouterAdapter implements LLMAdapter {
     }
   }
 
-  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
+  async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, false, true)
+      return await this.request(chronicle, false, true, undefined, undefined, toolExecutor)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(chronicle, false, false)
+        return await this.request(chronicle, false, false, undefined, undefined, toolExecutor)
       }
       throw err
     }
@@ -43,13 +45,14 @@ export class OpenRouterAdapter implements LLMAdapter {
   async synthesizeStream(
     chronicle: Chronicle,
     onChunk: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, true, true, onChunk, signal)
+      return await this.request(chronicle, true, true, onChunk, signal, toolExecutor)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(chronicle, true, false, onChunk, signal)
+        return await this.request(chronicle, true, false, onChunk, signal, toolExecutor)
       }
       throw err
     }
@@ -60,10 +63,20 @@ export class OpenRouterAdapter implements LLMAdapter {
     stream: boolean,
     useSystemRole: boolean,
     onChunk?: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const messages = useSystemRole
+    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }
+    })) : undefined
+
+    let messages: any[] = useSystemRole
       ? [
           { role: "system", content: prepared.systemPrompt },
           {
@@ -77,69 +90,114 @@ export class OpenRouterAdapter implements LLMAdapter {
             content: buildOpenRouterContent(prepared.combinedPrompt, prepared.image),
           },
         ]
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
+    
+    let inputMode = prepared.inputMode
+
+    for (let i = 0; i < 7; i++) {
+      const body: any = {
         model: this.model,
         max_tokens: 600,
         messages,
         stream,
-      }),
-      signal,
-    })
+      }
+      if (tools && tools.length > 0) {
+        body.tools = tools
+      }
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(`OpenRouter error ${res.status}: ${JSON.stringify(err)}`)
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(body),
+        signal,
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(`OpenRouter error ${res.status}: ${JSON.stringify(err)}`)
+      }
+
+      if (stream) {
+        const streamResult = await this.consumeOpenRouterStreamWithTools(res, onChunk, signal)
+        if (streamResult.toolCalls.length > 0 && toolExecutor) {
+          messages.push({ role: "assistant", tool_calls: streamResult.toolCalls.map(c => ({
+            id: c.id,
+            type: "function",
+            function: { name: c.name, arguments: JSON.stringify(c.args) }
+          }))})
+          
+          for (const call of streamResult.toolCalls) {
+            const result = await toolExecutor.executeTool(call.name, call.args)
+            messages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              name: call.name,
+              content: JSON.stringify(result)
+            })
+          }
+          continue
+        }
+        return { text: streamResult.text, inputMode }
+      } else {
+        const data = await res.json() as any
+        const message = data.choices?.[0]?.message
+        if (message?.tool_calls && toolExecutor) {
+          messages.push(message)
+          for (const call of message.tool_calls) {
+             const args = JSON.parse(call.function.arguments)
+             const result = await toolExecutor.executeTool(call.function.name, args)
+             messages.push({
+                role: "tool",
+                tool_call_id: call.id,
+                name: call.function.name,
+                content: JSON.stringify(result)
+             })
+          }
+          continue
+        }
+        return { text: message?.content ?? "", inputMode }
+      }
     }
 
-    if (stream && onChunk) {
-      const text = await this.consumeOpenRouterStream(res, onChunk, signal)
-      return { text, inputMode: prepared.inputMode }
-    }
-
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-    return {
-      text: data.choices?.[0]?.message?.content ?? "",
-      inputMode: prepared.inputMode,
-    }
+    return { text: "Tool calling limit reached.", inputMode }
   }
 
-  /**
-   * OpenRouter SSE format (OpenAI-compatible):
-   * data: {"choices":[{"delta":{"content":"..."}}]}
-   * Terminal: data: [DONE]
-   *
-   * Quirks:
-   * - May contain `: OPENROUTER PROCESSING` comment lines (handled by streamParser)
-   * - Reasoning models may include `reasoning_content` field — we ignore it
-   * - Errors mid-stream arrive as JSON with `error` field
-   */
-  private async consumeOpenRouterStream(
+  private async consumeOpenRouterStreamWithTools(
     res: Response,
-    onChunk: (text: string) => void,
+    onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
-    let accumulated = ""
+  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: any}> }> {
+    let accumulatedText = ""
+    const toolCallsMap: Record<number, {id: string, name: string, argsStr: string}> = {}
 
     await consumeSSE(
       res,
       (data) => {
         try {
+          if (data === "[DONE]") return
           const parsed = JSON.parse(data)
 
-          // Check for mid-stream errors
           if (parsed.error) {
             console.error("[OpenRouter] mid-stream error:", parsed.error)
             return
           }
 
-          // Extract content delta (ignore reasoning_content)
-          const content = parsed.choices?.[0]?.delta?.content
-          if (content) {
-            accumulated += content
-            onChunk(content)
+          const delta = parsed.choices?.[0]?.delta
+
+          if (delta?.content) {
+            accumulatedText += delta.content
+            if (onChunk) onChunk(delta.content)
+          }
+
+          if (delta?.tool_calls) {
+            for (const call of delta.tool_calls) {
+              const index = call.index
+              if (!toolCallsMap[index]) {
+                toolCallsMap[index] = { id: call.id, name: call.function?.name ?? "", argsStr: "" }
+              }
+              if (call.function?.arguments) {
+                toolCallsMap[index].argsStr += call.function.arguments
+              }
+            }
           }
         } catch {
           // Skip unparseable chunks
@@ -148,7 +206,15 @@ export class OpenRouterAdapter implements LLMAdapter {
       signal
     )
 
-    return accumulated
+    const toolCalls = Object.values(toolCallsMap).map(tc => {
+      try {
+        return { id: tc.id, name: tc.name, args: JSON.parse(tc.argsStr || "{}") }
+      } catch {
+        return { id: tc.id, name: tc.name, args: {} }
+      }
+    })
+
+    return { text: accumulatedText, toolCalls }
   }
 }
 

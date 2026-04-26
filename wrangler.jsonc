@@ -12,7 +12,7 @@
   "kv_namespaces": [
     {
       "binding": "CHRONICLES_KV",
-      "id": "<your-kv-namespace-id>"
+      "id": "9434dd5bf9394fcc808384e46ff61725"
     }
   ]
 }

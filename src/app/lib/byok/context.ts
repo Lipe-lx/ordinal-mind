@@ -25,6 +25,7 @@ export interface PreparedSynthesisInput {
   userPrompt: string
   combinedPrompt: string
   inputMode: SynthesisMode
+  searchToolsEnabled: boolean
   fallbackReason?: string
   image?: PreparedImageInput
 }
@@ -34,9 +35,10 @@ export async function prepareSynthesisInput(
   capabilities: ProviderCapabilities
 ): Promise<PreparedSynthesisInput> {
   const base = {
-    systemPrompt: buildSystemPrompt(),
+    systemPrompt: buildSystemPrompt(capabilities.supportsToolCalling),
     userPrompt: buildUserPrompt(chronicle),
     combinedPrompt: buildCombinedPrompt(chronicle),
+    searchToolsEnabled: capabilities.supportsToolCalling,
   }
 
   const fallbackReason = getVisionFallbackReason(chronicle, capabilities)

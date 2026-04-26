@@ -4,8 +4,10 @@ import type { ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
+import { COLLECTION_RESEARCH_TOOLS } from "./tools"
+import type { ToolExecutor } from "./toolExecutor"
 
-const API_URL = "https://api.openai.com/v1/responses"
+const API_URL = "https://api.openai.com/v1/chat/completions"
 
 export class OpenAIAdapter implements LLMAdapter {
   readonly provider: Provider = "openai"
@@ -27,12 +29,12 @@ export class OpenAIAdapter implements LLMAdapter {
     }
   }
 
-  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
+  async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, false, true)
+      return await this.request(chronicle, false, true, undefined, undefined, toolExecutor)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(chronicle, false, false)
+        return await this.request(chronicle, false, false, undefined, undefined, toolExecutor)
       }
       throw err
     }
@@ -41,13 +43,14 @@ export class OpenAIAdapter implements LLMAdapter {
   async synthesizeStream(
     chronicle: Chronicle,
     onChunk: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, true, true, onChunk, signal)
+      return await this.request(chronicle, true, true, onChunk, signal, toolExecutor)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(chronicle, true, false, onChunk, signal)
+        return await this.request(chronicle, true, false, onChunk, signal, toolExecutor)
       }
       throw err
     }
@@ -58,83 +61,127 @@ export class OpenAIAdapter implements LLMAdapter {
     stream: boolean,
     useSystemRole: boolean,
     onChunk?: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const userContent = [
-      {
-        type: "input_text",
-        text: useSystemRole ? prepared.userPrompt : prepared.combinedPrompt,
-      },
-      ...(prepared.image ? [toOpenAIImageInput(prepared.image)] : []),
-    ]
+    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }
+    })) : undefined
 
-    const input = useSystemRole
+    let messages: any[] = useSystemRole
       ? [
-          {
-            role: "system",
-            content: [{ type: "input_text", text: prepared.systemPrompt }],
-          },
-          { role: "user", content: userContent },
+          { role: "system", content: prepared.systemPrompt },
+          { role: "user", content: buildOpenAIContent(prepared.userPrompt, prepared.image) },
         ]
-      : [{ role: "user", content: userContent }]
+      : [{ role: "user", content: buildOpenAIContent(prepared.combinedPrompt, prepared.image) }]
 
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
+    let inputMode = prepared.inputMode
+
+    for (let i = 0; i < 7; i++) {
+      const body: any = {
         model: this.model,
-        max_output_tokens: 600,
-        input,
+        max_tokens: 600,
+        messages,
         stream,
-      }),
-      signal,
-    })
+      }
+      if (tools && tools.length > 0) {
+        body.tools = tools
+      }
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(`OpenAI error ${res.status}: ${JSON.stringify(err)}`)
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(body),
+        signal,
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(`OpenAI error ${res.status}: ${JSON.stringify(err)}`)
+      }
+
+      if (stream) {
+        const streamResult = await this.consumeOpenAIStreamWithTools(res, onChunk, signal)
+        if (streamResult.toolCalls.length > 0 && toolExecutor) {
+          messages.push({ role: "assistant", tool_calls: streamResult.toolCalls.map(c => ({
+            id: c.id,
+            type: "function",
+            function: { name: c.name, arguments: JSON.stringify(c.args) }
+          }))})
+          
+          for (const call of streamResult.toolCalls) {
+            const result = await toolExecutor.executeTool(call.name, call.args)
+            messages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              name: call.name,
+              content: JSON.stringify(result)
+            })
+          }
+          continue
+        }
+        return { text: streamResult.text, inputMode }
+      } else {
+        const data = await res.json() as any
+        const message = data.choices?.[0]?.message
+        if (message?.tool_calls && toolExecutor) {
+          messages.push(message)
+          for (const call of message.tool_calls) {
+             const args = JSON.parse(call.function.arguments)
+             const result = await toolExecutor.executeTool(call.function.name, args)
+             messages.push({
+                role: "tool",
+                tool_call_id: call.id,
+                name: call.function.name,
+                content: JSON.stringify(result)
+             })
+          }
+          continue
+        }
+        return { text: message?.content ?? "", inputMode }
+      }
     }
 
-    if (stream && onChunk) {
-      const text = await this.consumeOpenAIStream(res, onChunk, signal)
-      return { text, inputMode: prepared.inputMode }
-    }
-
-    const data = (await res.json()) as OpenAIResponse
-    return {
-      text: extractOpenAIText(data),
-      inputMode: prepared.inputMode,
-    }
+    return { text: "Tool calling limit reached.", inputMode }
   }
 
-  /**
-   * OpenAI SSE format:
-   * data: {"choices":[{"delta":{"content":"..."}}]}
-   * Terminal: data: [DONE]
-   */
-  private async consumeOpenAIStream(
+  private async consumeOpenAIStreamWithTools(
     res: Response,
-    onChunk: (text: string) => void,
+    onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
-    let accumulated = ""
+  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: any}> }> {
+    let accumulatedText = ""
+    const toolCallsMap: Record<number, {id: string, name: string, argsStr: string}> = {}
 
     await consumeSSE(
       res,
       (data) => {
         try {
+          if (data === "[DONE]") return
           const parsed = JSON.parse(data)
-          if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
-            accumulated += parsed.delta
-            onChunk(parsed.delta)
-          } else if (
-            parsed.type === "response.output_text.done" &&
-            typeof parsed.text === "string" &&
-            accumulated.length === 0
-          ) {
-            accumulated = parsed.text
-            onChunk(parsed.text)
+          const delta = parsed.choices?.[0]?.delta
+
+          if (delta?.content) {
+            accumulatedText += delta.content
+            if (onChunk) onChunk(delta.content)
+          }
+
+          if (delta?.tool_calls) {
+            for (const call of delta.tool_calls) {
+              const index = call.index
+              if (!toolCallsMap[index]) {
+                toolCallsMap[index] = { id: call.id, name: call.function?.name ?? "", argsStr: "" }
+              }
+              if (call.function?.arguments) {
+                toolCallsMap[index].argsStr += call.function.arguments
+              }
+            }
           }
         } catch {
           // Skip unparseable chunks
@@ -143,41 +190,33 @@ export class OpenAIAdapter implements LLMAdapter {
       signal
     )
 
-    return accumulated
+    const toolCalls = Object.values(toolCallsMap).map(tc => {
+      try {
+        return { id: tc.id, name: tc.name, args: JSON.parse(tc.argsStr || "{}") }
+      } catch {
+        return { id: tc.id, name: tc.name, args: {} }
+      }
+    })
+
+    return { text: accumulatedText, toolCalls }
   }
 }
 
-function toOpenAIImageInput(image: Awaited<ReturnType<typeof prepareSynthesisInput>>["image"]) {
-  if (!image) return null
+function buildOpenAIContent(text: string, image?: PreparedImageInput) {
+  if (!image) return text
 
-  return {
-    type: "input_image",
-    image_url:
-      image.transport === "public_url"
-        ? image.url
-        : `data:${image.mimeType};base64,${image.data}`,
-    detail: image.detail,
-  }
-}
-
-function extractOpenAIText(data: OpenAIResponse): string {
-  if (typeof data.output_text === "string") return data.output_text
-
-  const chunks = data.output
-    ?.flatMap((item) => item.content ?? [])
-    .flatMap((content) => (content.type === "output_text" && typeof content.text === "string" ? [content.text] : []))
-
-  return chunks?.join("") ?? ""
-}
-
-interface OpenAIResponse {
-  output_text?: string
-  output?: {
-    content?: {
-      type?: string
-      text?: string
-    }[]
-  }[]
+  return [
+    { type: "text", text },
+    {
+      type: "image_url",
+      image_url: {
+        url:
+          image.transport === "public_url"
+            ? image.url
+            : `data:${image.mimeType};base64,${image.data}`,
+      },
+    },
+  ]
 }
 
 function isSystemRoleError(err: unknown): boolean {

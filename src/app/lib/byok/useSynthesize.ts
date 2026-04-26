@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react"
 import { createAdapter, KeyStore } from "./index"
 import { sanitizeNarrative } from "./sanitizer"
+import { ToolExecutor } from "./toolExecutor"
 import type { Chronicle } from "../types"
 import type { SynthesisMode } from "./context"
 
@@ -8,6 +9,7 @@ export type SynthesisPhase =
   | "idle"
   | "connecting"
   | "analyzing"
+  | "researching"
   | "streaming"
   | "sanitizing"
   | "done"
@@ -96,6 +98,8 @@ export function useSynthesize() {
       try {
         setPhase("analyzing")
 
+        const toolExecutor = new ToolExecutor(config.researchKeys || {})
+
         let firstChunk = true
         const result = await adapter.synthesizeStream(
           chronicle,
@@ -106,7 +110,8 @@ export function useSynthesize() {
             }
             setStreamingText((prev) => prev + chunk)
           },
-          controller.signal
+          controller.signal,
+          toolExecutor
         )
 
         // Don't proceed if aborted

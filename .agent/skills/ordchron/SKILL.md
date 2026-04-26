@@ -4,7 +4,7 @@ description: >
   Implementa o produto Ordinal Mind — plataforma de Chronicle factual para colecionadores de Bitcoin Ordinals.
   Use esta skill sempre que o usuário pedir para desenvolver, modificar, ou expandir o Ordinal Mind.
   Cobre: Cloudflare Workers + Pages + KV, rastreador UTXO reverso via mempool.space, ordinals.com nativo,
-  scraping de menções no X sem API key, BYOK agnóstico de provedor (Anthropic/OpenAI/Gemini),
+  pipeline de pesquisa client-side (MCP) agnóstico de provedor (Anthropic/OpenAI/Gemini/OpenRouter),
   árvore temporal de eventos on-chain descentralizada, Chronicle Synthesizer e Chronicle card compartilhável.
 ---
 
@@ -15,8 +15,8 @@ description: >
 Ordinal Mind é um Chronicle factual para colecionadores de Bitcoin Ordinals. O usuário cola um
 **inscription number** (ex: `4821`) ou um **endereço taproot** (`bc1p...`) e recebe:
 
-1. Uma **árvore temporal** de todos os eventos verificáveis do ativo — genesis, transfers, menções no X
-2. Uma **narrativa Chronicle** sintetizada por LLM a partir dos dados reais
+1. Uma **árvore temporal** de todos os eventos verificáveis do ativo — genesis, transfers, metadados
+2. Uma **narrativa Chronicle** sintetizada por LLM, enriquecida por um pipeline de pesquisa client-side
 3. Um **Chronicle card** compartilhável no X com imagem OG
 
 Sem login, sem wallet connect, sem API paga. Todo o dado é público e imutável.
@@ -32,7 +32,7 @@ Sem login, sem wallet connect, sem API paga. Todo o dado é público e imutável
 | Frontend | React + Cloudflare Pages | estático, deploy no mesmo projeto CF |
 | On-chain data & Metadata | ordinals.com API | instância oficial do protocolo, fornece satpoint, txid, genesis fee, etc |
 | Block timestamps & Transfers | mempool.space API (open) | timestamps reais + rastreador reverso de UTXOs para histórico de transferências |
-| X mentions | DDG HTML scrape (sem API key) | `site:x.com` query, HTMLRewriter do CF |
+| Research Pipeline | BYOK MCP Tools | Busca semântica client-side (Brave, Exa, Perplexity) sem vazar chaves de API |
 | LLM synthesis | BYOK agnóstico de provedor | key do usuário no browser, nunca no servidor |
 
 **Princípio central:** o Worker apenas agrega dados brutos públicos e cacheáveis. A síntese LLM
@@ -50,8 +50,7 @@ ordinal-mind/
 │   │   ├── resolver.ts           # detecta tipo de input (inscription vs address)
 │   │   ├── agents/
 │   │   │   ├── mempool.ts        # fetch mempool.space (timestamps e UTXO crawler)
-│   │   │   ├── ordinals.ts       # fetch ordinals.com (metadados brutos completos)
-│   │   │   └── xsearch.ts        # scraping DDG → menções X
+│   │   │   └── ordinals.ts       # fetch ordinals.com (metadados brutos completos)
 │   │   ├── timeline.ts           # merge + sort → ChronicleEvent[]
 │   │   └── cache.ts              # KV read/write com TTL strategy
 │   └── app/
@@ -67,9 +66,12 @@ ordinal-mind/
 │       └── lib/
 │           ├── byok/
 │           │   ├── index.ts      # detecta provider, instancia adapter
-│           │   ├── anthropic.ts  # adapter Anthropic
-│           │   ├── openai.ts     # adapter OpenAI
-│           │   └── gemini.ts     # adapter Gemini
+│           │   ├── anthropic.ts  # adapter Anthropic com tool loops
+│           │   ├── openai.ts     # adapter OpenAI com tool loops
+│           │   ├── gemini.ts     # adapter Gemini com tool loops
+│           │   ├── openrouter.ts # adapter OpenRouter com tool loops
+│           │   ├── toolExecutor.ts # router de execução de tools MCP
+│           │   └── tools.ts      # definições JSON schema dos tools
 │           └── types.ts          # tipos compartilhados
 ├── wrangler.toml
 ├── package.json
@@ -89,15 +91,15 @@ cache.ts → KV lookup por inscription_id
   ↓ cache miss
 ordinals.ts → fetch metadata principal (satpoint, genesis, etc)
   ↓
-Promise.all([mempool (UTXO traceTransfers), xsearch])   ← paralelo
+mempool.ts → fetch histórico de transferências (UTXO trace)
   ↓
 timeline.ts → merge, sort por timestamp, tipifica
   ↓
 cache.ts → KV write com TTL por tipo de evento
   ↓
-Response.json(events)   ← Worker retorna ao browser
+Response.json(events)   ← Worker retorna ao browser via SSE
   ↓
-browser: LLM BYOK → Chronicle Synthesizer → narrativa
+browser: LLM BYOK → ToolExecutor (Pesquisa dinâmica) → Chronicle Synthesizer → narrativa
   ↓
 ChronicleCard + TemporalTree renderizados
 ```
@@ -195,9 +197,7 @@ Para implementar cada camada, leia os arquivos de referência na ordem necessár
 - O Worker **nunca** recebe, loga ou armazena chaves de LLM do usuário
 - Dados de genesis (imutáveis) → TTL de 30 dias no KV
 - Dados de transfer → TTL de 1 hora
-- Menções X → TTL de 24 horas
-- O scraping do DDG tem rate limit implícito: máximo 1 request por 3 segundos por IP,
-  use a fila descrita em `references/data-sources.md`
+- As ferramentas de pesquisa (Brave, Exa, Perplexity) são executadas **client-side** pelo LLM para coletar contexto de coleção
 - Sempre retornar `events` mesmo se o Chronicle Synthesizer falhar — a árvore temporal
   de eventos brutos é o produto mínimo viável, a narrativa é enhancement
 - BYOK: se o usuário não tiver key, renderizar a árvore de eventos sem narrativa.

@@ -342,7 +342,7 @@ async function handleStandardChronicle(
         sentiment_label: "insufficient_data" as const,
         confidence: "low" as const,
         evidence_count: 0,
-        provider_breakdown: { nostr: 0, bluesky: 0, x_fallback: 0, google_trends: 0 },
+        provider_breakdown: { nostr: 0, google_trends: 0 },
         scope_breakdown: {
           inscription_level: 0,
           collection_level: 0,
@@ -628,7 +628,7 @@ async function handleStreamingChronicle(
         sentiment_label: "insufficient_data",
         confidence: "low",
         evidence_count: 0,
-        provider_breakdown: { nostr: 0, bluesky: 0, x_fallback: 0, google_trends: 0 },
+        provider_breakdown: { nostr: 0, google_trends: 0 },
         scope_breakdown: {
           inscription_level: 0,
           collection_level: 0,

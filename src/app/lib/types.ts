@@ -29,7 +29,7 @@ export type SourceTrustLevel =
   | "unisat_indexer"
 
 export type SocialPlatform = "nostr" | "x" | "google_trends"
-export type SocialSignalProvider = "nostr" | "x_fallback" | "google_trends"
+export type SocialSignalProvider = "nostr" | "google_trends"
 export type SocialMatchType =
   | "collection_only"
   | "item_plus_collection"
@@ -346,21 +346,7 @@ export interface CollectorSignals {
   }
 }
 
-export interface LegacyXMentionDebugInfo {
-  collection_name?: string
-  item_name?: string
-  official_x_urls: string[]
-  candidate_handles: string[]
-  queries: string[]
-  attempts: Array<{
-    provider: "ddg" | "bing"
-    transport: "POST" | "GET"
-    query: string
-    outcome: "query_completed" | "non_ok" | "fetch_failed" | "transport_unavailable"
-    status?: number
-    mention_count?: number
-  }>
-}
+
 
 export interface AddressResponse {
   type: "address"

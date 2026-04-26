@@ -7,6 +7,7 @@ import { AnthropicAdapter } from "./anthropic"
 import { OpenAIAdapter } from "./openai"
 import { GeminiAdapter } from "./gemini"
 import { OpenRouterAdapter } from "./openrouter"
+import type { ResearchKeys, ToolExecutor } from "./toolExecutor"
 
 export type Provider = "anthropic" | "openai" | "gemini" | "openrouter" | "unknown"
 
@@ -14,6 +15,7 @@ export interface ByokConfig {
   provider: Provider
   model: string
   key: string
+  researchKeys?: ResearchKeys
 }
 
 export interface SynthesisResult {
@@ -22,11 +24,12 @@ export interface SynthesisResult {
 }
 
 export interface LLMAdapter {
-  synthesize(chronicle: Chronicle): Promise<SynthesisResult>
+  synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult>
   synthesizeStream(
     chronicle: Chronicle,
     onChunk: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult>
   getCapabilities(): ProviderCapabilities
   provider: Provider

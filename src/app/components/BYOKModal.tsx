@@ -8,8 +8,9 @@ interface Props {
 
 export function BYOKModal({ onClose }: Props) {
   const [config, setConfig] = useState<ByokConfig>(
-    KeyStore.get() ?? { provider: "unknown", model: "", key: "" }
+    KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
   )
+  const [showResearch, setShowResearch] = useState(false)
 
   function handleProviderChange(e: ChangeEvent<HTMLSelectElement>) {
     const newProvider = e.target.value as Provider
@@ -37,6 +38,13 @@ export function BYOKModal({ onClose }: Props) {
     }
   }
 
+  function handleResearchKeyChange(keyName: keyof ByokConfig["researchKeys"], val: string) {
+    setConfig((c) => ({
+      ...c,
+      researchKeys: { ...c.researchKeys, [keyName]: val }
+    }))
+  }
+
   const isValid = config.provider !== "unknown" && config.key.length > 10 && config.model
 
   function handleSave() {
@@ -47,7 +55,7 @@ export function BYOKModal({ onClose }: Props) {
 
   function handleClear() {
     KeyStore.clear()
-    setConfig({ provider: "unknown", model: "", key: "" })
+    setConfig({ provider: "unknown", model: "", key: "", researchKeys: {} })
   }
 
   return (
@@ -114,6 +122,80 @@ export function BYOKModal({ onClose }: Props) {
                 autoComplete="off"
                 id="byok-key-input"
               />
+            </div>
+
+            <div style={{ marginTop: "1rem" }}>
+              <button 
+                className="btn btn-ghost" 
+                style={{ width: "100%", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--border-subtle)", borderRadius: 0 }}
+                onClick={() => setShowResearch(!showResearch)}
+              >
+                <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>Research Tools (Optional)</span>
+                <span>{showResearch ? "▼" : "▶"}</span>
+              </button>
+              
+              <AnimatePresence>
+                {showResearch && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    style={{ overflow: "hidden", display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}
+                  >
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                      Provide keys for specialized search tools to enable the autonomous research phase.
+                    </p>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Brave Search API Key</label>
+                      <input
+                        className="input-field"
+                        type="password"
+                        value={config.researchKeys?.braveSearchApiKey || ""}
+                        onChange={(e) => handleResearchKeyChange("braveSearchApiKey", e.target.value)}
+                        placeholder="BS..."
+                        autoComplete="off"
+                      />
+                    </div>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Exa API Key</label>
+                      <input
+                        className="input-field"
+                        type="password"
+                        value={config.researchKeys?.exaApiKey || ""}
+                        onChange={(e) => handleResearchKeyChange("exaApiKey", e.target.value)}
+                        placeholder="exa..."
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Perplexity API Key</label>
+                      <input
+                        className="input-field"
+                        type="password"
+                        value={config.researchKeys?.perplexityApiKey || ""}
+                        onChange={(e) => handleResearchKeyChange("perplexityApiKey", e.target.value)}
+                        placeholder="pplx..."
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>SerpApi Key (Google Trends)</label>
+                      <input
+                        className="input-field"
+                        type="password"
+                        value={config.researchKeys?.serpapiApiKey || ""}
+                        onChange={(e) => handleResearchKeyChange("serpapiApiKey", e.target.value)}
+                        placeholder="serpapi..."
+                        autoComplete="off"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 

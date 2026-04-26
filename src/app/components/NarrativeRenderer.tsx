@@ -32,6 +32,7 @@ interface Props {
 const PHASE_LABELS: Record<string, { icon: string; text: string }> = {
   connecting: { icon: "⚡", text: "Connecting to provider…" },
   analyzing: { icon: "⛓️", text: "Analyzing on-chain data…" },
+  researching: { icon: "🔎", text: "Researching cultural context…" },
   streaming: { icon: "✍️", text: "Synthesizing Chronicle…" },
   sanitizing: { icon: "🔍", text: "Cleaning up narrative…" },
 }

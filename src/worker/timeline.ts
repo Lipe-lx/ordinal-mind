@@ -173,8 +173,6 @@ function platformLabel(platform: SocialMention["platform"]): string {
   switch (platform) {
     case "nostr":
       return "Nostr"
-    case "bluesky":
-      return "Bluesky"
     case "x":
       return "X"
     case "google_trends":

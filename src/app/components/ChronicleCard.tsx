@@ -375,8 +375,6 @@ function platformLabel(platform: ChronicleResponse["collector_signals"]["top_evi
 
 function providerLabel(provider: SocialSignalProvider): string {
   switch (provider) {
-    case "x_fallback":
-      return "X fallback"
     case "google_trends":
       return "Google Trends"
     default:

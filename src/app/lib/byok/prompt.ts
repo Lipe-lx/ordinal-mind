@@ -8,8 +8,8 @@ import type { Chronicle, ChronicleEvent, ProtocolRelationSet, RelatedInscription
  * System prompt: role definition, constraints, and output format rules.
  * Sent as `system` message where the API supports it.
  */
-export function buildSystemPrompt(): string {
-  return `You are a factual chronicler of digital Bitcoin artifacts.
+export function buildSystemPrompt(supportsTools: boolean = false): string {
+  const baseRules = `You are a factual chronicler of digital Bitcoin artifacts.
 
 Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
 
@@ -26,6 +26,23 @@ Rules:
 - Parent provenance and galleries are different mechanisms. Never imply that a gallery or curated match creates an on-chain parent-child relationship.
 - If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
 - Output ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
+
+  if (!supportsTools) return baseRules
+
+  return `${baseRules}
+
+You have access to research tools. Before writing the Chronicle, research the collection this inscription belongs to. Focus on:
+- Origin story and creators
+- Cultural significance in the Ordinals ecosystem
+- Notable milestones (launches, airdrops, auctions, partnerships)
+- Community reception and collector interest over time
+- Market trajectory and notable price events
+
+Available tools: web_search, deep_research, synthesized_search, market_context, public_interest.
+Use 2-5 tool calls to gather context. Cite sources with URLs.
+After research, write the Chronicle integrating on-chain data and cultural context.
+
+If tools are unavailable or return no results, write using only provided factual data.`
 }
 
 /**
@@ -45,13 +62,21 @@ Write the Chronicle now.`
  * Falls back to a single user message containing both parts.
  */
 export function buildCombinedPrompt(chronicle: Chronicle): string {
-  return `${buildSystemPrompt()}\n\n${buildUserPrompt(chronicle)}`
+  return `${buildSystemPrompt(false)}\n\n${buildUserPrompt(chronicle)}`
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {
   const { meta, events, media_context, collection_context, source_catalog } = chronicle
 
+  const collectionName = collection_context.presentation.full_label || collection_context.presentation.primary_label
+  const collectionSlug = collection_context.presentation.slug
+
   const sections = [
+    buildSection("Collection Focus", [
+      collectionName ? `Name: ${collectionName}` : null,
+      collectionSlug ? `Slug: ${collectionSlug}` : null,
+      "Instruction: Prioritize researching this collection rather than the specific inscription.",
+    ]),
     buildSection("Identity", [
       `ID: ${meta.inscription_id}`,
       `Number: #${meta.inscription_number?.toLocaleString() ?? "—"}`,

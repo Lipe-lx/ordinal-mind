@@ -5,7 +5,6 @@
 import type {
   Chronicle,
   ChronicleEvent,
-  LegacyXMentionDebugInfo,
   SocialMention,
 } from "../app/lib/types"
 import { buildCollectorSignals } from "./agents/mentions"
@@ -21,11 +20,7 @@ export async function cacheGet(kv: KVNamespace, id: string): Promise<Chronicle |
   const raw = await kv.get(id)
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as Chronicle & {
-      debug_info?: {
-        x_mentions?: LegacyXMentionDebugInfo
-      }
-    }
+    const parsed = JSON.parse(raw) as Chronicle
     return migrateChronicle(parsed)
   } catch {
     return null
@@ -41,41 +36,16 @@ export async function cachePut(kv: KVNamespace, id: string, chronicle: Chronicle
 }
 
 function migrateChronicle(
-  chronicle: Chronicle & {
-    debug_info?: {
-      x_mentions?: LegacyXMentionDebugInfo
-    }
-  }
+  chronicle: Chronicle
 ): Chronicle {
   const events = chronicle.events.map(migrateEvent)
   const collectorSignals = chronicle.collector_signals
     ?? buildCollectorSignals(events.flatMap(eventToSocialMention))
-  const mentionProviders = chronicle.debug_info?.mention_providers
-    ?? (chronicle.debug_info?.x_mentions
-      ? {
-          x_fallback: {
-            provider: "x_fallback" as const,
-            collection_name: chronicle.debug_info.x_mentions.collection_name,
-            item_name: chronicle.debug_info.x_mentions.item_name,
-            official_x_urls: chronicle.debug_info.x_mentions.official_x_urls,
-            candidate_handles: chronicle.debug_info.x_mentions.candidate_handles,
-            queries: chronicle.debug_info.x_mentions.queries,
-            attempts: chronicle.debug_info.x_mentions.attempts.map((attempt) => ({
-              query: attempt.query,
-              outcome: attempt.outcome,
-              status: attempt.status,
-              result_count: attempt.mention_count,
-            })),
-            notes: ["Migrated from legacy x_mentions debug info."],
-          },
-        }
-      : undefined)
 
   return {
     ...chronicle,
     events,
     collector_signals: collectorSignals,
-    debug_info: mentionProviders ? { mention_providers: mentionProviders } : chronicle.debug_info,
   }
 }
 
@@ -104,7 +74,7 @@ function eventToSocialMention(event: ChronicleEvent): SocialMention[] {
 
   return [{
     platform: (event.metadata.platform as SocialMention["platform"] | undefined) ?? "x",
-    provider: "x_fallback",
+    provider: "nostr",
     canonical_url: (event.metadata.canonical_url as string | undefined) ?? event.source.ref,
     title: event.description,
     excerpt: (event.metadata.excerpt as string | undefined) ?? "",

@@ -13,11 +13,9 @@ import { buildMentionQueries } from "./queryBuilder"
 import type { MentionSearchInput, MentionCollectionResult } from "./types"
 import { createProviderDebug } from "./types"
 import { fetchGoogleTrendsMacro } from "./trends"
-import { searchXFallback } from "./xFallback"
 
 const PROVIDER_WEIGHTS: Record<SocialSignalProvider, number> = {
   nostr: 1.0,
-  x_fallback: 0.35,
   google_trends: 0,
 }
 
@@ -36,7 +34,6 @@ export async function collectSignals(input: MentionSearchInput): Promise<Mention
 
   const providerDebug = {
     nostr: createProviderDebug("nostr", input, queries),
-    x_fallback: createProviderDebug("x_fallback", input, queries),
     google_trends: createProviderDebug("google_trends", input, queries),
   } satisfies Record<SocialSignalProvider, ReturnType<typeof createProviderDebug>>
 
@@ -45,20 +42,17 @@ export async function collectSignals(input: MentionSearchInput): Promise<Mention
     queries,
   }
 
-  const [nostrResult, xFallbackResult, trendsResult] = await Promise.all([
+  const [nostrResult, trendsResult] = await Promise.all([
     searchNostr({ ...baseContext, diagnostics: providerDebug.nostr }),
-    searchXFallback({ ...baseContext, diagnostics: providerDebug.x_fallback }),
     fetchGoogleTrendsMacro({ ...baseContext, diagnostics: providerDebug.google_trends }),
   ])
 
   const mentions = dedupeMentions([
     ...nostrResult.mentions,
-    ...xFallbackResult.mentions,
   ])
   const collectorSignals = buildCollectorSignals(mentions)
   const sourceCatalog = mergeSourceCatalog([
     ...nostrResult.sourceCatalog,
-    ...xFallbackResult.sourceCatalog,
     ...trendsResult.sourceCatalog,
   ])
 
@@ -152,7 +146,6 @@ function calculateConfidence(mentions: SocialMention[]): CollectorSignalConfiden
 function countProviders(mentions: SocialMention[]): Record<SocialSignalProvider, number> {
   const counts: Record<SocialSignalProvider, number> = {
     nostr: 0,
-    x_fallback: 0,
     google_trends: 0,
   }
   for (const mention of mentions) {

@@ -178,10 +178,8 @@ function socialLabel(platform: string | undefined): string {
   switch (platform) {
     case "nostr":
       return "Nostr Mention"
-    case "bluesky":
-      return "Bluesky Mention"
     case "x":
-      return "X Fallback"
+      return "X Mention"
     case "google_trends":
       return "Google Trends"
     default:
@@ -193,8 +191,6 @@ function socialIcon(platform: string | undefined): string {
   switch (platform) {
     case "nostr":
       return "₿"
-    case "bluesky":
-      return "☁"
     case "x":
       return "𝕏"
     case "google_trends":

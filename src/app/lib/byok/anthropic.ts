@@ -4,6 +4,8 @@ import type { PreparedImageInput, ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
+import { COLLECTION_RESEARCH_TOOLS } from "./tools"
+import type { ToolExecutor } from "./toolExecutor"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
 
@@ -29,12 +31,12 @@ export class AnthropicAdapter implements LLMAdapter {
     }
   }
 
-  async synthesize(chronicle: Chronicle): Promise<SynthesisResult> {
+  async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
     try {
-      return await this.requestWithSystemMessage(chronicle, false)
+      return await this.requestWithSystemMessage(chronicle, false, undefined, undefined, toolExecutor)
     } catch (err) {
       if (isSystemMessageError(err)) {
-        return await this.requestCombined(chronicle, false)
+        return await this.requestCombined(chronicle, false, undefined, undefined, toolExecutor)
       }
       throw err
     }
@@ -43,13 +45,14 @@ export class AnthropicAdapter implements LLMAdapter {
   async synthesizeStream(
     chronicle: Chronicle,
     onChunk: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     try {
-      return await this.requestWithSystemMessage(chronicle, true, onChunk, signal)
+      return await this.requestWithSystemMessage(chronicle, true, onChunk, signal, toolExecutor)
     } catch (err) {
       if (isSystemMessageError(err)) {
-        return await this.requestCombined(chronicle, true, onChunk, signal)
+        return await this.requestCombined(chronicle, true, onChunk, signal, toolExecutor)
       }
       throw err
     }
@@ -59,101 +62,213 @@ export class AnthropicAdapter implements LLMAdapter {
     chronicle: Chronicle,
     stream: boolean,
     onChunk?: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const body = {
-      model: this.model,
-      max_tokens: 600,
-      system: prepared.systemPrompt,
-      messages: [{ role: "user", content: buildAnthropicContent(prepared.userPrompt, prepared.image) }],
-      stream,
-    }
+    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.parameters
+    })) : undefined
 
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(body),
-      signal,
-    })
+    let messages: any[] = [{ role: "user", content: buildAnthropicContent(prepared.userPrompt, prepared.image) }]
+    let inputMode = prepared.inputMode
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(`Anthropic error ${res.status}: ${JSON.stringify(err)}`)
-    }
+    for (let i = 0; i < 7; i++) {
+      const body: any = {
+        model: this.model,
+        max_tokens: 600,
+        system: prepared.systemPrompt,
+        messages,
+        stream,
+      }
+      if (tools && tools.length > 0) {
+        body.tools = tools
+      }
 
-    if (stream && onChunk) {
-      const text = await this.consumeAnthropicStream(res, onChunk, signal)
-      return { text, inputMode: prepared.inputMode }
-    }
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(body),
+        signal,
+      })
 
-    const data = (await res.json()) as { content?: { text?: string }[] }
-    return {
-      text: data.content?.[0]?.text ?? "",
-      inputMode: prepared.inputMode,
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(`Anthropic error ${res.status}: ${JSON.stringify(err)}`)
+      }
+
+      if (stream) {
+        const streamResult = await this.consumeAnthropicStreamWithTools(res, onChunk, signal)
+        if (streamResult.toolCalls.length > 0 && toolExecutor) {
+          messages.push({ role: "assistant", content: streamResult.assistantContent })
+          const toolResultsContent = []
+          for (const call of streamResult.toolCalls) {
+            const result = await toolExecutor.executeTool(call.name, call.args)
+            toolResultsContent.push({
+              type: "tool_result",
+              tool_use_id: call.id,
+              content: JSON.stringify(result)
+            })
+          }
+          messages.push({ role: "user", content: toolResultsContent })
+          continue
+        }
+        return { text: streamResult.text, inputMode }
+      } else {
+        const data = await res.json() as any
+        if (data.stop_reason === "tool_use" && toolExecutor) {
+          messages.push({ role: "assistant", content: data.content })
+          const toolResultsContent = []
+          for (const block of data.content) {
+            if (block.type === "tool_use") {
+              const result = await toolExecutor.executeTool(block.name, block.input)
+              toolResultsContent.push({
+                type: "tool_result",
+                tool_use_id: block.id,
+                content: JSON.stringify(result)
+              })
+            }
+          }
+          messages.push({ role: "user", content: toolResultsContent })
+          continue
+        }
+        return { text: data.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("") ?? "", inputMode }
+      }
     }
+    
+    return { text: "Tool calling limit reached.", inputMode }
   }
 
   private async requestCombined(
     chronicle: Chronicle,
     stream: boolean,
     onChunk?: (text: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities())
-    const body = {
-      model: this.model,
-      max_tokens: 600,
-      messages: [{ role: "user", content: buildAnthropicContent(prepared.combinedPrompt, prepared.image) }],
-      stream,
-    }
+    const tools = prepared.searchToolsEnabled ? COLLECTION_RESEARCH_TOOLS.map(t => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.parameters
+    })) : undefined
 
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(body),
-      signal,
-    })
+    let messages: any[] = [{ role: "user", content: buildAnthropicContent(prepared.combinedPrompt, prepared.image) }]
+    let inputMode = prepared.inputMode
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(`Anthropic error ${res.status}: ${JSON.stringify(err)}`)
-    }
+    for (let i = 0; i < 7; i++) {
+      const body: any = {
+        model: this.model,
+        max_tokens: 600,
+        messages,
+        stream,
+      }
+      if (tools && tools.length > 0) {
+        body.tools = tools
+      }
 
-    if (stream && onChunk) {
-      const text = await this.consumeAnthropicStream(res, onChunk, signal)
-      return { text, inputMode: prepared.inputMode }
-    }
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(body),
+        signal,
+      })
 
-    const data = (await res.json()) as { content?: { text?: string }[] }
-    return {
-      text: data.content?.[0]?.text ?? "",
-      inputMode: prepared.inputMode,
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(`Anthropic error ${res.status}: ${JSON.stringify(err)}`)
+      }
+
+      if (stream) {
+        const streamResult = await this.consumeAnthropicStreamWithTools(res, onChunk, signal)
+        if (streamResult.toolCalls.length > 0 && toolExecutor) {
+          messages.push({ role: "assistant", content: streamResult.assistantContent })
+          const toolResultsContent = []
+          for (const call of streamResult.toolCalls) {
+            const result = await toolExecutor.executeTool(call.name, call.args)
+            toolResultsContent.push({
+              type: "tool_result",
+              tool_use_id: call.id,
+              content: JSON.stringify(result)
+            })
+          }
+          messages.push({ role: "user", content: toolResultsContent })
+          continue
+        }
+        return { text: streamResult.text, inputMode }
+      } else {
+        const data = await res.json() as any
+        if (data.stop_reason === "tool_use" && toolExecutor) {
+          messages.push({ role: "assistant", content: data.content })
+          const toolResultsContent = []
+          for (const block of data.content) {
+            if (block.type === "tool_use") {
+              const result = await toolExecutor.executeTool(block.name, block.input)
+              toolResultsContent.push({
+                type: "tool_result",
+                tool_use_id: block.id,
+                content: JSON.stringify(result)
+              })
+            }
+          }
+          messages.push({ role: "user", content: toolResultsContent })
+          continue
+        }
+        return { text: data.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("") ?? "", inputMode }
+      }
     }
+    
+    return { text: "Tool calling limit reached.", inputMode }
   }
 
-  /**
-   * Anthropic SSE format:
-   * event: content_block_delta
-   * data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
-   *
-   * Terminal: event: message_stop
-   */
-  private async consumeAnthropicStream(
+  private async consumeAnthropicStreamWithTools(
     res: Response,
-    onChunk: (text: string) => void,
+    onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<string> {
-    let accumulated = ""
+  ): Promise<{ text: string, toolCalls: Array<{id: string, name: string, args: any}>, assistantContent: any[] }> {
+    let accumulatedText = ""
+    const toolCalls: Array<{id: string, name: string, args: any}> = []
+    const assistantContent: any[] = []
+
+    let currentToolId = ""
+    let currentToolName = ""
+    let currentToolInput = ""
 
     await consumeSSE(
       res,
       (data) => {
         try {
           const parsed = JSON.parse(data)
-          if (parsed.type === "content_block_delta" && parsed.delta?.text) {
-            accumulated += parsed.delta.text
-            onChunk(parsed.delta.text)
+          if (parsed.type === "content_block_start") {
+            if (parsed.content_block.type === "tool_use") {
+              currentToolId = parsed.content_block.id
+              currentToolName = parsed.content_block.name
+              currentToolInput = ""
+            }
+          } else if (parsed.type === "content_block_delta") {
+            if (parsed.delta.type === "text_delta") {
+              accumulatedText += parsed.delta.text
+              if (onChunk) onChunk(parsed.delta.text)
+            } else if (parsed.delta.type === "input_json_delta") {
+              currentToolInput += parsed.delta.partial_json
+            }
+          } else if (parsed.type === "content_block_stop") {
+            if (currentToolId) {
+              const args = JSON.parse(currentToolInput || "{}")
+              toolCalls.push({ id: currentToolId, name: currentToolName, args })
+              assistantContent.push({
+                type: "tool_use",
+                id: currentToolId,
+                name: currentToolName,
+                input: args
+              })
+              currentToolId = ""
+            } else if (accumulatedText.length > 0 && assistantContent.length === 0) {
+               // Only push text if it's a text block stopping
+               assistantContent.push({ type: "text", text: accumulatedText })
+            }
           }
         } catch {
           // Skip unparseable chunks
@@ -162,7 +277,11 @@ export class AnthropicAdapter implements LLMAdapter {
       signal
     )
 
-    return accumulated
+    if (accumulatedText.length > 0 && assistantContent.length === 0) {
+       assistantContent.push({ type: "text", text: accumulatedText })
+    }
+
+    return { text: accumulatedText, toolCalls, assistantContent }
   }
 }
 
