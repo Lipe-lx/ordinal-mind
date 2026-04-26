@@ -267,10 +267,24 @@ export interface Chronicle {
   collection_context: CollectionContext
   source_catalog: SourceCatalogItem[]
   cached_at: string
-  narrative?: string                    // filled client-side by LLM
+  web_research?: WebResearchContext
   unisat_enrichment?: UnisatEnrichment
   validation?: DataValidationResult
   debug_info?: ChronicleDebugInfo
+}
+
+export interface WebResearchItem {
+  title: string
+  url: string
+  snippet: string
+  content?: string
+  source: string // e.g., "searxng"
+}
+
+export interface WebResearchContext {
+  query: string
+  results: WebResearchItem[]
+  fetched_at: string
 }
 
 export interface ChronicleResponse extends Chronicle {

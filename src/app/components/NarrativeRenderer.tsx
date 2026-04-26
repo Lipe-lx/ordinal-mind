@@ -23,6 +23,8 @@ interface Props {
   inputMode?: SynthesisMode | null
   /** Research activity logs */
   researchLogs?: ResearchLog[]
+  /** Whether research capability is enabled (keys present) */
+  researchEnabled?: boolean
   /** Called when user clicks Generate */
   onGenerate?: () => void
   /** Primary button label for empty/error states */
@@ -52,6 +54,7 @@ export function NarrativeRenderer({
   error,
   inputMode,
   researchLogs = [],
+  researchEnabled = false,
   onGenerate,
   actionLabel = "✨ Generative Chronicle",
   emptyMessage = "Generate an AI-powered Chronicle narrative from the factual timeline above.",
@@ -117,8 +120,12 @@ export function NarrativeRenderer({
             ))}
           </div>
 
-          {/* Research Activity Logs */}
-          <ResearchLogs logs={researchLogs} phase={phase} />
+          {/* Research Activity Logs (In-progress) */}
+          {(researchLogs.length > 0 || phase === "researching") && (
+            <div className="narrative-loading-logs">
+              <ResearchLogs logs={researchLogs} phase={phase} />
+            </div>
+          )}
 
           {/* Progressive streaming text */}
           {streamingText && (
@@ -157,9 +164,11 @@ export function NarrativeRenderer({
   }
 
   // Final narrative display
+  const hasResearch = researchLogs.length > 0 || researchEnabled
+
   return (
     <div className="narrative-section narrative-final">
-      {researchLogs.length > 0 && (
+      {hasResearch && (
         <div className="narrative-final-logs">
           <div 
             className="narrative-logs-toggle"
@@ -229,7 +238,24 @@ function enhanceContent(children: React.ReactNode): React.ReactNode {
 // --- Sub-components ---
 
 function ResearchLogs({ logs, phase }: { logs: ResearchLog[], phase: string }) {
-  if (logs.length === 0 && phase !== "researching") return null
+  // If we have no logs and are not currently researching, only return something if it's "done"
+  // so the user can see that research was attempted but nothing found.
+  if (logs.length === 0 && phase !== "researching") {
+    if (phase === "done" || phase === "streaming" || phase === "sanitizing") {
+      return (
+        <div className="narrative-research-logs">
+          <div className="narrative-log-item">
+            <div className="narrative-log-row">
+              <span className="narrative-log-status">🔍</span>
+              <span className="narrative-log-tool">Researcher</span>
+              <span className="narrative-log-args">No external tools were triggered.</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    return null
+  }
 
   return (
     <div className="narrative-research-logs">

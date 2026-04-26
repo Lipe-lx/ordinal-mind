@@ -43,7 +43,9 @@ export function ChronicleCard({
   return (
     <div className="chronicle-card glass-card">
       <CollectionContextWidget collectionContext={chronicle.collection_context} />
-      <CollectorSignalsPanel chronicle={chronicle} />
+      {chronicle.collector_signals.evidence_count > 0 && (
+        <CollectorSignalsPanel chronicle={chronicle} />
+      )}
       {chronicle.debug_info?.mention_providers && (
         <details style={{ marginBottom: "var(--space-md)" }}>
           <summary style={{ cursor: "pointer", fontWeight: 700, marginBottom: "0.5rem" }}>
@@ -67,6 +69,7 @@ export function ChronicleCard({
         error={synthError}
         inputMode={lastInputMode}
         researchLogs={researchLogs}
+        researchEnabled={!!config?.researchKeys && Object.keys(config.researchKeys).length > 0}
         onGenerate={hasKey ? onSynthesize : onOpenBYOK}
         actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
         emptyMessage={
@@ -286,27 +289,27 @@ function buildDataSources(chronicle: ChronicleResponse): DataSource[] {
 
   const mentionCount = events.filter((e) => e.event_type === "social_mention").length
   const collectorSignals = chronicle.collector_signals
-  sources.push({
-    name: "Collector signals",
-    status: mentionCount > 0 ? "success" : "partial",
-    detail: mentionCount > 0
-      ? `${mentionCount} mention${mentionCount > 1 ? "s" : ""} found · ${formatSentiment(collectorSignals.sentiment_label)}`
-      : "Not enough cross-source evidence yet",
-    cached: chronicle.from_cache,
-    count: mentionCount,
-    links: [
-      ...events
-        .filter((e) => e.event_type === "social_mention")
-        .map((e, i) => ({
-          label: e.description ? (e.description.length > 30 ? e.description.substring(0, 30) + "..." : e.description) : `Mention ${i + 1}`,
-          url: e.source.ref
+  if (mentionCount > 0) {
+    sources.push({
+      name: "Collector signals",
+      status: "success",
+      detail: `${mentionCount} mention${mentionCount > 1 ? "s" : ""} found · ${formatSentiment(collectorSignals.sentiment_label)}`,
+      cached: chronicle.from_cache,
+      count: mentionCount,
+      links: [
+        ...events
+          .filter((e) => e.event_type === "social_mention")
+          .map((e, i) => ({
+            label: e.description ? (e.description.length > 30 ? e.description.substring(0, 30) + "..." : e.description) : `Mention ${i + 1}`,
+            url: e.source.ref
+          })),
+        ...socialEntries.map((entry) => ({
+          label: entry.source_type,
+          url: entry.url_or_ref,
         })),
-      ...socialEntries.map((entry) => ({
-        label: entry.source_type,
-        url: entry.url_or_ref,
-      })),
-    ]
-  })
+      ]
+    })
+  }
 
   if (registryEntries.length > 0) {
     sources.push({

@@ -106,6 +106,7 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
     buildSection("Collector focus", buildCollectorFocus(chronicle)),
     buildSection("Collection profile", buildCollectionProfileSection(chronicle)),
     buildSection("On-chain facts", buildTimelineSummary(events)),
+    buildSection("Web Lore & Context", buildWebResearchSection(chronicle)),
     buildSection("Transfers", summarizeEvents(events, ["transfer", "sale"], 12)),
     buildSection(
       "Parents",
@@ -234,6 +235,32 @@ function buildCollectionProfileSection(chronicle: Chronicle): string[] {
   if (profile.market_stats) {
     lines.push("Market stats from public collection page:")
     lines.push(...formatMarketStats(profile.market_stats))
+  }
+
+  return lines
+}
+
+function buildWebResearchSection(chronicle: Chronicle): string[] {
+  const research = chronicle.web_research
+  if (!research || research.results.length === 0) {
+    return ["No baseline web research context available."]
+  }
+
+  const lines = [
+    `Research Query: ${research.query}`,
+    `Fetched at: ${research.fetched_at}`,
+    "Found Articles and Content:"
+  ]
+
+  for (const item of research.results) {
+    lines.push(`- Title: ${item.title}`)
+    lines.push(`  URL: ${item.url}`)
+    lines.push(`  Snippet: ${item.snippet}`)
+    if (item.content) {
+      // Limit content per article to avoid token explosion
+      const cleanContent = item.content.replace(/\s+/g, " ").trim()
+      lines.push(`  Content: ${cleanContent.substring(0, 1500)}...`)
+    }
   }
 
   return lines

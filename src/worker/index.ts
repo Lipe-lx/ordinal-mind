@@ -11,12 +11,13 @@ import { fetchOrdinals } from "./agents/ordinals"
 import { fetchUnisat } from "./agents/unisat"
 import { buildMediaContext, fetchCollectionContext } from "./agents/collections"
 import { collectSignals } from "./agents/mentions"
+import { fetchLoreContext } from "./agents/webResearch"
 import { buildTimeline } from "./timeline"
 import { cacheGet, cachePut } from "./cache"
 import { buildInscriptionRarity } from "./rarity"
 import { validateAcrossSources, mergeCharms } from "./validation"
 import { db } from "./db"
-import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment } from "../app/lib/types"
+import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment, WebResearchContext } from "../app/lib/types"
 
 export interface Env {
   CHRONICLES_KV: KVNamespace
@@ -306,14 +307,17 @@ async function handleStandardChronicle(
           officialXUrls: [],
         },
       }
-  const mentionSignals = await Promise.resolve(
+
+  const collectionNameForResearch = 
+    collectionData.collectionContext.market.match?.collection_name
+    ?? collectionData.mentionSearchHints.collectionName
+    ?? collectionData.collectionContext.presentation.primary_label
+
+  const [mentionSignals, webResearchResult] = await Promise.allSettled([
     collectSignals({
       inscriptionId: id,
       inscriptionNumber: meta.inscription_number,
-      collectionName:
-        collectionData.collectionContext.market.match?.collection_name
-        ?? collectionData.mentionSearchHints.collectionName
-        ?? collectionData.collectionContext.presentation.primary_label,
+      collectionName: collectionNameForResearch,
       itemName:
         collectionData.collectionContext.presentation.item_label
         ?? collectionData.mentionSearchHints.itemName,
@@ -322,9 +326,11 @@ async function handleStandardChronicle(
       nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
       debug: diagnostics?.debug,
       requestId: diagnostics?.requestId,
-    })
-  ).then((value) => ({ status: "fulfilled" as const, value }))
-    .catch((reason) => ({ status: "rejected" as const, reason }))
+    }),
+    collectionNameForResearch ? fetchLoreContext(collectionNameForResearch) : Promise.resolve(null)
+  ])
+
+  const webResearch = webResearchResult.status === "fulfilled" ? webResearchResult.value : null
   diagLog(diagnostics, "parallel_fetch_status", {
     transfers: transfers.status,
     collector_signals: mentionSignals.status,
@@ -500,6 +506,7 @@ async function handleStandardChronicle(
     collector_signals: collectorSignals,
     media_context: collectionData.mediaContext,
     collection_context: collectionData.collectionContext,
+    web_research: webResearch || undefined,
     source_catalog: sourceCatalog,
     cached_at: fetchedAt,
     unisat_enrichment: unisatEnrichment ?? undefined,
@@ -643,29 +650,56 @@ async function handleStreamingChronicle(
       }
       let mentionSourceCatalog: SourceCatalogItem[] = []
       let mentionDebugInfo: { mention_providers: Record<string, unknown> } | undefined
+      
+      const collectionNameForResearch = 
+        collectionContext.collectionContext.market.match?.collection_name
+        ?? collectionContext.mentionSearchHints.collectionName
+        ?? collectionContext.collectionContext.presentation.primary_label
+
+      let webResearch: WebResearchContext | null = null
+
       try {
-        const signalResult = await collectSignals({
-          inscriptionId: id,
-          inscriptionNumber: meta.inscription_number,
-          collectionName:
-            collectionContext.collectionContext.market.match?.collection_name
-            ?? collectionContext.mentionSearchHints.collectionName
-            ?? collectionContext.collectionContext.presentation.primary_label,
-          itemName:
-            collectionContext.collectionContext.presentation.item_label
-            ?? collectionContext.mentionSearchHints.itemName,
-          fullLabel: collectionContext.collectionContext.presentation.full_label,
-          officialXUrls: collectionContext.mentionSearchHints.officialXUrls,
-          nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
-          debug: diagnostics?.debug,
-          requestId: diagnostics?.requestId,
-        })
+        const [signalResult, loreResult] = await Promise.all([
+          collectSignals({
+            inscriptionId: id,
+            inscriptionNumber: meta.inscription_number,
+            collectionName: collectionNameForResearch,
+            itemName:
+              collectionContext.collectionContext.presentation.item_label
+              ?? collectionContext.mentionSearchHints.itemName,
+            fullLabel: collectionContext.collectionContext.presentation.full_label,
+            officialXUrls: collectionContext.mentionSearchHints.officialXUrls,
+            nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
+            debug: diagnostics?.debug,
+            requestId: diagnostics?.requestId,
+          }),
+          collectionNameForResearch 
+            ? (async () => {
+                await sendEvent("progress", {
+                  phase: "mentions",
+                  step: 2,
+                  description: `Searching lore for ${collectionNameForResearch}…`,
+                })
+                return fetchLoreContext(collectionNameForResearch)
+              })()
+            : Promise.resolve(null)
+        ])
+        
         socialMentions = signalResult.mentions
         collectorSignals = signalResult.collectorSignals
         mentionSourceCatalog = signalResult.sourceCatalog
         mentionDebugInfo = signalResult.debugInfo as { mention_providers: Record<string, unknown> } | undefined
+        webResearch = loreResult
+
+        if (webResearch && webResearch.results.length > 0) {
+          await sendEvent("progress", {
+            phase: "mentions",
+            step: 3,
+            description: `Extracted lore from ${webResearch.results.length} sources`,
+          })
+        }
       } catch {
-        // Collector signal failure is non-blocking
+        // Collector signal or lore failure is non-blocking
       }
 
       // Phase 4: UniSat indexer & Rarity Engine
@@ -840,6 +874,7 @@ async function handleStreamingChronicle(
         collector_signals: collectorSignals,
         media_context: collectionContext.mediaContext,
         collection_context: collectionContext.collectionContext,
+        web_research: webResearch || undefined,
         source_catalog: sourceCatalog,
         cached_at: fetchedAt,
         unisat_enrichment: unisatEnrichment ?? undefined,
