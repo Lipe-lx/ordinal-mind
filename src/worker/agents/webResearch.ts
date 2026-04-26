@@ -177,14 +177,33 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
 }
 
 async function searchSingleSearXNG(instance: string, query: string): Promise<SearXNGResult[]> {
-  // Explicitly request multiple major engines to increase success probability
-  const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json&engines=google,bing,duckduckgo,brave,qwant`
+  // Use a very standard search URL without complex engine filters that might trigger rate limits
+  const url = `${instance}/search?q=${encodeURIComponent(query)}&format=json`
   const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(8000), // Slightly more generous for multi-engine scraping
+    headers: { 
+      "User-Agent": USER_AGENT,
+      "Accept": "application/json, text/javascript, */*; q=0.01",
+      "Accept-Language": "en-US,en;q=0.9",
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    signal: AbortSignal.timeout(10000), // More generous timeout for public instances
   })
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    if (res.status === 403 || res.status === 429) {
+      throw new Error(`HTTP ${res.status} (Blocked)`)
+    }
+    throw new Error(`HTTP ${res.status}`)
+  }
+
+  const contentType = res.headers.get("content-type") || ""
+  if (!contentType.includes("application/json")) {
+    const text = await res.text()
+    const titleMatch = text.match(/<title>(.*?)<\/title>/i)
+    const pageTitle = titleMatch ? titleMatch[1] : "Unknown HTML"
+    throw new Error(`Non-JSON response (${pageTitle})`)
+  }
+
   const data = (await res.json()) as SearXNGResponse
   if (!data.results || data.results.length === 0) throw new Error("No results")
   return data.results
@@ -214,8 +233,13 @@ async function searchDuckDuckGoLite(query: string): Promise<SearXNGResult[]> {
   try {
     const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`
     const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(8000),
+      headers: { 
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://duckduckgo.com/",
+      },
+      signal: AbortSignal.timeout(10000),
     })
 
     if (!res.ok) return []

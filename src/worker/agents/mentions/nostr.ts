@@ -3,9 +3,11 @@ import type { MentionProviderContext, MentionProviderResult } from "./types"
 import { recordAttempt } from "./types"
 
 const DEFAULT_NOSTR_RELAYS = [
+  "wss://relay.damus.io",
+  "wss://nos.lol",
   "wss://relay.nostr.band",
-  "wss://relay.nostr.band/all",
-  "wss://cache1.primal.net",
+  "wss://relay.snort.social",
+  "wss://purplepag.es",
 ] as const
 
 type RelayMode = "search" | "recent_scan"
@@ -58,9 +60,9 @@ async function probeRelay(
     res = await fetchImpl(infoUrl, {
       headers: {
         "Accept": "application/nostr+json",
-        "User-Agent": "ordinal-mind/1.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(5000),
     })
   } catch (error) {
     recordAttempt(context.diagnostics, {
