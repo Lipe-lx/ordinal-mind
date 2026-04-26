@@ -18,6 +18,7 @@ import { buildInscriptionRarity } from "./rarity"
 import { validateAcrossSources, mergeCharms } from "./validation"
 import { db } from "./db"
 import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment, WebResearchContext } from "../app/lib/types"
+import type { MentionCollectionResult } from "./agents/mentions/types"
 
 export interface Env {
   CHRONICLES_KV: KVNamespace
@@ -155,6 +156,7 @@ async function handleApi(url: URL, env: Env): Promise<Response> {
 
     const useStream = url.searchParams.get("stream") === "1"
     const debug = url.searchParams.get("debug") === "1"
+    const lite = url.searchParams.get("lite") === "1"
 
     try {
       const resolved = await resolveInput(raw)
@@ -198,7 +200,7 @@ async function handleApi(url: URL, env: Env): Promise<Response> {
       }
 
       // Standard mode: JSON response (backward compatible)
-      return handleStandardChronicle(id, env, diagnostics)
+      return handleStandardChronicle(id, env, diagnostics, lite)
     } catch (err) {
       console.error("Chronicle API error:", err)
       const message = err instanceof Error ? err.message : "Internal error"
@@ -252,7 +254,8 @@ async function fetchUnisatInfo(
 async function handleStandardChronicle(
   id: string,
   env: Env,
-  diagnostics?: DiagnosticsContext
+  diagnostics?: DiagnosticsContext,
+  lite?: boolean
 ): Promise<Response> {
   // 1. Fetch inscription metadata
   let meta: InscriptionMeta
@@ -279,7 +282,7 @@ async function handleStandardChronicle(
   // 2. Parallel fetch for transfers, collection context, genesis tx, and UniSat.
   // Collector signals run after collection context so queries can prioritize collection/item labels.
   const [transfers, collectionContext, genesisTx, unisatInfo] = await Promise.allSettled([
-    fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, { limit: 30 }),
+    lite ? Promise.resolve([]) : fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, { limit: 30 }),
     fetchCollectionContext(id, meta, {
       debug: diagnostics?.debug,
       requestId: diagnostics?.requestId,
@@ -313,22 +316,47 @@ async function handleStandardChronicle(
     ?? collectionData.mentionSearchHints.collectionName
     ?? collectionData.collectionContext.presentation.primary_label
 
-  const [mentionSignals, webResearchResult] = await Promise.allSettled([
-    collectSignals({
-      inscriptionId: id,
-      inscriptionNumber: meta.inscription_number,
-      collectionName: collectionNameForResearch,
-      itemName:
-        collectionData.collectionContext.presentation.item_label
-        ?? collectionData.mentionSearchHints.itemName,
-      fullLabel: collectionData.collectionContext.presentation.full_label,
-      officialXUrls: collectionData.mentionSearchHints.officialXUrls,
-      nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
-      debug: diagnostics?.debug,
-      requestId: diagnostics?.requestId,
-    }),
-    collectionNameForResearch ? fetchLoreContext(collectionNameForResearch) : Promise.resolve(null)
-  ])
+  const [mentionSignals, webResearchResult] = lite
+    ? [
+        {
+          status: "fulfilled",
+          value: {
+            mentions: [],
+            collectorSignals: {
+              attention_score: 0,
+              sentiment_label: "insufficient_data",
+              confidence: "low",
+              evidence_count: 0,
+              provider_breakdown: { nostr: 0, google_trends: 0 },
+              scope_breakdown: { inscription_level: 0, collection_level: 0, mixed: 0, dominant_scope: "none" },
+              top_evidence: [],
+              windows: {
+                current_7d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
+                context_30d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
+              }
+            },
+            sourceCatalog: [],
+            debugInfo: undefined
+          }
+        } as PromiseSettledResult<MentionCollectionResult>,
+        { status: "fulfilled", value: null } as PromiseSettledResult<WebResearchContext | null>
+      ]
+    : await Promise.allSettled([
+        collectSignals({
+          inscriptionId: id,
+          inscriptionNumber: meta.inscription_number,
+          collectionName: collectionNameForResearch,
+          itemName:
+            collectionData.collectionContext.presentation.item_label
+            ?? collectionData.mentionSearchHints.itemName,
+          fullLabel: collectionData.collectionContext.presentation.full_label,
+          officialXUrls: collectionData.mentionSearchHints.officialXUrls,
+          nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
+          debug: diagnostics?.debug,
+          requestId: diagnostics?.requestId,
+        }),
+        collectionNameForResearch ? fetchLoreContext(collectionNameForResearch) : Promise.resolve(null)
+      ])
 
   const webResearch = webResearchResult.status === "fulfilled" ? webResearchResult.value : null
   diagLog(diagnostics, "parallel_fetch_status", {
@@ -518,14 +546,16 @@ async function handleStandardChronicle(
       : undefined,
   }
 
-  // Cache (fire-and-forget)
-  try {
-    await cachePut(env.CHRONICLES_KV, id, chronicle)
-  } catch (cacheErr) {
-    console.error("Cache write failed:", cacheErr)
-    diagLog(diagnostics, "cache_write_error", {
-      error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
-    })
+  // Cache (fire-and-forget) - only for full scans
+  if (!lite) {
+    try {
+      await cachePut(env.CHRONICLES_KV, id, chronicle)
+    } catch (cacheErr) {
+      console.error("Cache write failed:", cacheErr)
+      diagLog(diagnostics, "cache_write_error", {
+        error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
+      })
+    }
   }
 
   return jsonResponse(chronicle)

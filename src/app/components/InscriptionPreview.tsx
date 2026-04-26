@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router"
 import { getMediaPreviewMode } from "../lib/media"
 import { SatRarityBadge, CharmBadge } from "./SatBadge"
 import type { ChronicleResponse } from "../lib/types"
 
 interface Props {
-  chronicle: ChronicleResponse
+  initialChronicle: ChronicleResponse
+  activeChronicle: ChronicleResponse
+  isSwitching: boolean
+  error: string | null
+  onSwitchTo: (id: string) => Promise<void>
 }
 
 const MAX_TEXT_PREVIEW_BYTES = 24 * 1024
 
-export function InscriptionPreview({ chronicle }: Props) {
-  const navigate = useNavigate()
-  const { meta, media_context } = chronicle
+export function InscriptionPreview({ 
+  initialChronicle, 
+  activeChronicle, 
+  isSwitching, 
+  error, 
+  onSwitchTo: switchTo 
+}: Props) {
+  const { meta, media_context } = activeChronicle
   const previewMode = getMediaPreviewMode(media_context)
   const previewSandbox = media_context.preview_url.startsWith("https://ordinals.com/preview/")
     ? "allow-scripts allow-same-origin"
@@ -22,6 +30,8 @@ export function InscriptionPreview({ chronicle }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const isInteractiveImage = previewMode === "image" && !renderFallback
+
+  const isMain = activeChronicle.meta.inscription_id === initialChronicle.meta.inscription_id
 
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -83,6 +93,7 @@ export function InscriptionPreview({ chronicle }: Props) {
         "chronicle-card-content-preview",
         isInteractiveImage ? "is-interactive" : "",
         previewMode === "text" && !renderFallback ? "is-text" : "",
+        isSwitching ? "is-loading" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -106,56 +117,18 @@ export function InscriptionPreview({ chronicle }: Props) {
           : undefined
       }
     >
-      {renderFallback || previewMode === "ordinals_preview" ? (
-        <iframe
-          title={`Inscription #${meta.inscription_number} preview`}
-          src={media_context.preview_url}
-          loading="lazy"
-          sandbox={previewSandbox}
-          referrerPolicy="no-referrer"
-        />
-      ) : previewMode === "audio" ? (
-        <audio
-          controls
-          preload="metadata"
-          src={media_context.content_url}
-          onError={() => setRenderFallback(true)}
-        />
-      ) : previewMode === "video" ? (
-        <video
-          controls
-          playsInline
-          preload="metadata"
-          src={media_context.content_url}
-          onError={() => setRenderFallback(true)}
-        />
-      ) : previewMode === "text" ? (
-        <TextPreview
-          contentType={media_context.content_type}
-          contentUrl={media_context.content_url}
-          onFallback={setRenderFallback}
-        />
-      ) : (
-        <img
-          ref={imgRef}
-          src={media_context.content_url}
-          alt={`Inscription #${meta.inscription_number}`}
-          loading="lazy"
-          onError={() => setRenderFallback(true)}
-        />
-      )}
-
       {/* Hierarchy Navigation Overlay */}
       <div className="inscription-nav-overlay">
         <div className="inscription-nav-group">
-          {chronicle.collection_context.protocol.parents?.items.map((parent) => (
+          {activeChronicle.collection_context.protocol.parents?.items.map((parent) => (
             <button
               key={parent.inscription_id}
               className="nav-btn nav-btn--parent"
               onClick={(e) => {
                 e.stopPropagation()
-                navigate(`/${parent.inscription_id}${window.location.search}`)
+                void switchTo(parent.inscription_id)
               }}
+              disabled={isSwitching}
               title={`Parent: #${parent.inscription_number ?? parent.inscription_id}`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -166,17 +139,35 @@ export function InscriptionPreview({ chronicle }: Props) {
               </span>
             </button>
           ))}
+          {!isMain && (
+             <button
+              className="nav-btn nav-btn--reset"
+              onClick={(e) => {
+                e.stopPropagation()
+                void switchTo(initialChronicle.meta.inscription_id)
+              }}
+              disabled={isSwitching}
+              title="Return to main inscription"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span className="nav-btn-label">Back to Main</span>
+            </button>
+          )}
         </div>
 
         <div className="inscription-nav-group">
-          {chronicle.collection_context.protocol.children?.items.slice(0, 3).map((child) => (
+          {activeChronicle.collection_context.protocol.children?.items.slice(0, 3).map((child) => (
             <button
               key={child.inscription_id}
               className="nav-btn nav-btn--child"
               onClick={(e) => {
                 e.stopPropagation()
-                navigate(`/${child.inscription_id}${window.location.search}`)
+                void switchTo(child.inscription_id)
               }}
+              disabled={isSwitching}
               title={`Child: #${child.inscription_number ?? child.inscription_id}`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -190,13 +181,73 @@ export function InscriptionPreview({ chronicle }: Props) {
         </div>
       </div>
 
+      {isSwitching ? (
+        <div className="chronicle-card-preview-placeholder fade-in">
+          Loading hierarchy data…
+        </div>
+      ) : error ? (
+        <div className="chronicle-card-preview-placeholder has-error">
+          <p>{error}</p>
+          <button className="btn btn-secondary btn-sm" onClick={() => void switchTo(activeChronicle.meta.inscription_id)}>Retry</button>
+        </div>
+      ) : renderFallback || previewMode === "ordinals_preview" ? (
+        <iframe
+          key={activeChronicle.meta.inscription_id}
+          title={`Inscription #${meta.inscription_number} preview`}
+          src={media_context.preview_url}
+          loading="lazy"
+          sandbox={previewSandbox}
+          referrerPolicy="no-referrer"
+        />
+      ) : previewMode === "audio" ? (
+        <audio
+          key={activeChronicle.meta.inscription_id}
+          controls
+          preload="metadata"
+          src={media_context.content_url}
+          onError={() => setRenderFallback(true)}
+        />
+      ) : previewMode === "video" ? (
+        <video
+          key={activeChronicle.meta.inscription_id}
+          controls
+          playsInline
+          preload="metadata"
+          src={media_context.content_url}
+          onError={() => setRenderFallback(true)}
+        />
+      ) : previewMode === "text" ? (
+        <TextPreview
+          key={activeChronicle.meta.inscription_id}
+          contentType={media_context.content_type}
+          contentUrl={media_context.content_url}
+          onFallback={setRenderFallback}
+        />
+      ) : (
+        <img
+          key={activeChronicle.meta.inscription_id}
+          ref={imgRef}
+          src={media_context.content_url}
+          alt={`Inscription #${meta.inscription_number}`}
+          loading="lazy"
+          onError={() => setRenderFallback(true)}
+        />
+      )}
+
       {/* Sat rarity & charm badges — overlaid on preview */}
-      {(meta.sat_rarity !== "common" || (meta.charms && meta.charms.length > 0)) && (
+      {!isSwitching && (meta.sat_rarity !== "common" || (meta.charms && meta.charms.length > 0)) && (
         <div className="sat-rarity-overlay">
           <SatRarityBadge rarity={meta.sat_rarity} />
           {meta.charms?.map(charm => (
             <CharmBadge key={charm} charm={charm} />
           ))}
+        </div>
+      )}
+
+      {/* Label when viewing a related inscription */}
+      {!isMain && !isSwitching && (
+        <div className="nav-preview-label">
+          #{meta.inscription_number}
         </div>
       )}
     </div>

@@ -171,15 +171,22 @@ export function NarrativeRenderer({
       {hasResearch && (
         <div className="narrative-final-logs">
           <div 
-            className="narrative-logs-toggle"
+            className={`narrative-logs-toggle ${showLogs ? "is-expanded" : ""}`}
             role="button"
             tabIndex={0}
             onClick={() => setShowLogs(!showLogs)}
             onKeyDown={(e) => e.key === "Enter" && setShowLogs(!showLogs)}
           >
-            <span className="narrative-logs-toggle-icon">{showLogs ? "▼" : "▶"}</span>
+            <svg className="narrative-logs-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {showLogs ? (
+                <path d="m18 15-6-6-6 6" />
+              ) : (
+                <path d="m6 9 6 6 6-6" />
+              )}
+            </svg>
             <span className="narrative-logs-toggle-text">
-              Research Activity ({researchLogs.length})
+              Research Activity
+              <span className="narrative-logs-count">{researchLogs.length}</span>
             </span>
           </div>
           {showLogs && (

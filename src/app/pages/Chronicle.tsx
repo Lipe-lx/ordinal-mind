@@ -2,9 +2,7 @@ import { useEffect, useReducer, useCallback, useRef } from "react"
 import { useLoaderData, useLocation, useNavigate, useOutletContext } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
-import { InscriptionPreview } from "../components/InscriptionPreview"
-import { InscriptionMetaWidget } from "../components/widgets/InscriptionMetaWidget"
-import { RarityWidget } from "../components/widgets/RarityWidget"
+import { ChronicleSidebar } from "../components/ChronicleSidebar"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
 import { KeyStore } from "../lib/byok"
@@ -61,9 +59,6 @@ function useChronicleStream(id: string, debug: boolean) {
   const [state, dispatch] = useReducer(streamReducer, initialState)
 
 
-  useEffect(() => {
-    dispatch({ type: "RESET" })
-  }, [id])
   useEffect(() => {
     const params = new URLSearchParams({
       id,
@@ -220,11 +215,6 @@ export function Chronicle() {
     synthesize(chronicle)
   }, [chronicle, narrative, phase, streamingText, synthesize])
 
-  // Reset narrative and cancel synthesis when ID changes (navigation)
-  useEffect(() => {
-    cancel()
-    autoSynthesizedRef.current = null
-  }, [id, cancel])
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
@@ -273,16 +263,8 @@ export function Chronicle() {
   return (
     <div className="chronicle-page fade-in">
       <div className="chronicle">
-        {/* Left Sidebar: Inscription preview + metadata + rarity */}
-        <div className="chronicle-sidebar-left">
-          <InscriptionPreview key={chronicle.meta.inscription_id} chronicle={chronicle} />
-          <InscriptionMetaWidget meta={chronicle.meta} events={chronicle.events} />
-          <RarityWidget
-            key={`${chronicle.meta.inscription_id}-rarity`}
-            unisatEnrichment={chronicle.unisat_enrichment}
-            validation={chronicle.validation}
-          />
-        </div>
+        {/* Left Sidebar: Inscription preview + metadata + rarity (unified hierarchy state) */}
+        <ChronicleSidebar key={chronicle.meta.inscription_id} chronicle={chronicle} />
 
         {/* Center: Provenance, narrative, sources */}
         <ChronicleCard

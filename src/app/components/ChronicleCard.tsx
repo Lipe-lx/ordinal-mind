@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react"
 import { KeyStore } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
@@ -90,75 +91,164 @@ export function ChronicleCard({
 
 function CollectorSignalsPanel({ chronicle }: { chronicle: ChronicleResponse }) {
   const { collector_signals: signals } = chronicle
+  const [currentPage, setCurrentPage] = useState(0)
+  const [expanded, setExpanded] = useState(false)
+
   const dominantScope = signals.scope_breakdown.dominant_scope
   const scopeLabel = dominantScope === "collection_level"
-    ? "Collection-level"
+    ? "Collection"
     : dominantScope === "mixed"
       ? "Mixed"
       : dominantScope === "inscription_level"
-        ? "Inscription-level"
-        : "No social scope"
+        ? "Inscription"
+        : "None"
 
   const trendsMention = chronicle.events.find(
     (e) => e.event_type === "social_mention" && e.payload.provider === "google_trends"
   )
 
+  // Pagination logic
+  const itemsPerPage = 3
+  const evidenceChunks = useMemo(() => {
+    const chunks = []
+    for (let i = 0; i < signals.top_evidence.length; i += itemsPerPage) {
+      chunks.push(signals.top_evidence.slice(i, i + itemsPerPage))
+    }
+    return chunks
+  }, [signals.top_evidence])
+
+  const totalPages = 1 + evidenceChunks.length
+
+  const goToNext = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setCurrentPage((p) => Math.min(p + 1, totalPages - 1))
+  }
+  const goToPrev = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setCurrentPage((p) => Math.max(p - 1, 0))
+  }
+
   return (
-    <section
-      style={{
-        marginBottom: "var(--space-md)",
-        padding: "0.85rem 0.95rem",
-        borderRadius: "var(--radius-lg)",
-        border: "1px solid var(--border-subtle)",
-        background: "var(--bg-glass)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", marginBottom: "0.5rem" }}>
-        <strong>Collector Signals</strong>
-        <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-          Attention {signals.attention_score}/100
-        </span>
-      </div>
-      <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
-        <div>
-          Sentiment: <strong>{formatSentiment(signals.sentiment_label)}</strong>
-          {" · "}
-          Confidence: <strong>{signals.confidence}</strong>
+    <section className={`signals-panel ${expanded ? "expanded" : ""}`}>
+      <button 
+        type="button"
+        className="signals-header" 
+        onClick={() => setExpanded(!expanded)}
+        style={{ width: "100%", background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: 0 }}
+      >
+        <div className="signals-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+          </svg>
+          Collector Signals
         </div>
-        <div>
-          Scope: <strong>{scopeLabel}</strong>
-          {" · "}
-          Evidence: <strong>{signals.evidence_count}</strong>
-        </div>
-        {signals.sentiment_label === "insufficient_data" && (
-          <div style={{ color: "var(--text-secondary)" }}>
-            Not enough cross-source evidence yet
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div className="signals-attention">
+            {signals.attention_score} Attention
           </div>
-        )}
-        {signals.top_evidence.length > 0 && (
-          <div style={{ display: "grid", gap: "0.35rem", marginTop: "0.25rem" }}>
-            {signals.top_evidence.slice(0, 3).map((evidence) => (
-              <a
-                key={`${evidence.provider}:${evidence.url}`}
-                href={evidence.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: "var(--text-secondary)", textDecoration: "none" }}
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.2s ease-out",
+              color: "var(--text-tertiary)"
+            }}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </button>
+
+      {expanded && (
+        <>
+          <div key={currentPage} className="signals-content" style={{ marginTop: "0.75rem" }}>
+            {currentPage === 0 ? (
+              <>
+                <div className="signals-grid">
+                  <div className="signals-metric">
+                    <div className="signals-metric-label">Sentiment</div>
+                    <div className="signals-metric-value">{formatSentiment(signals.sentiment_label)}</div>
+                  </div>
+                  <div className="signals-metric">
+                    <div className="signals-metric-label">Scope</div>
+                    <div className="signals-metric-value">{scopeLabel}</div>
+                  </div>
+                  <div className="signals-metric">
+                    <div className="signals-metric-label">Confidence</div>
+                    <div className="signals-metric-value">{signals.confidence.toUpperCase()}</div>
+                  </div>
+                  <div className="signals-metric">
+                    <div className="signals-metric-label">Evidence</div>
+                    <div className="signals-metric-value">{signals.evidence_count} items</div>
+                  </div>
+                </div>
+                {trendsMention && (
+                  <div className="signals-trends-preview" title={trendsMention.payload.text}>
+                    {trendsMention.payload.text}
+                  </div>
+                )}
+                {!trendsMention && signals.sentiment_label === "insufficient_data" && (
+                  <div style={{ color: "var(--text-tertiary)", fontSize: "0.8rem", fontStyle: "italic", textAlign: "center", marginTop: "0.5rem" }}>
+                    Awaiting more cross-source data...
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="signals-evidence-list">
+                {evidenceChunks[currentPage - 1]?.map((evidence) => (
+                  <a
+                    key={`${evidence.provider}:${evidence.url}`}
+                    href={evidence.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="signals-evidence-card"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="signals-evidence-meta">
+                      <span className="signals-platform-tag">{platformLabel(evidence.platform)}</span>
+                      <span style={{ color: "var(--text-tertiary)", fontSize: "0.65rem" }}>
+                        {new Date(evidence.published_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="signals-evidence-title">{evidence.title}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {totalPages > 1 && (
+            <footer className="signals-nav">
+              <button 
+                className="signals-nav-btn" 
+                onClick={goToPrev} 
+                disabled={currentPage === 0}
               >
-                [{platformLabel(evidence.platform)}] {evidence.title}
-              </a>
-            ))}
-          </div>
-        )}
-        {trendsMention && (
-          <div style={{ marginTop: "0.25rem", padding: "0.5rem", background: "rgba(255,255,255,0.03)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)" }}>
-            <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Google Trends</div>
-            <div style={{ whiteSpace: "pre-wrap", color: "var(--text-secondary)", fontSize: "0.85rem", lineHeight: 1.4 }}>
-              {trendsMention.payload.text}
-            </div>
-          </div>
-        )}
-      </div>
+                ← Prev
+              </button>
+              <div className="signals-page-dots">
+                {Array.from({ length: totalPages }).map((_, i) => (
+                  <div key={i} className={`signals-dot ${i === currentPage ? "active" : ""}`} />
+                ))}
+              </div>
+              <button 
+                className="signals-nav-btn" 
+                onClick={goToNext} 
+                disabled={currentPage === totalPages - 1}
+              >
+                Next →
+              </button>
+            </footer>
+          )}
+        </>
+      )}
     </section>
   )
 }
