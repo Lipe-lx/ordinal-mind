@@ -1,48 +1,10 @@
-import { useState, useRef, useEffect } from "react"
-import { createPortal } from "react-dom"
+import { useState, useRef } from "react"
+import { PortalTooltip } from "../Tooltip"
 import type { CollectionContext, CollectionPresentationFacet, RelatedInscriptionSummary } from "../../lib/types"
 import { linkifyBrands } from "../../lib/brandLinks"
 
 interface Props {
   collectionContext: CollectionContext
-}
-
-// Tooltip rendered into document.body via Portal — escapes all stacking contexts
-function PortalTooltip({ text, anchorRef, visible }: {
-  text: string
-  anchorRef: React.RefObject<HTMLElement | null>
-  visible: boolean
-}) {
-  const [coords, setCoords] = useState({ top: 0, left: 0 })
-
-  useEffect(() => {
-    if (visible && anchorRef.current) {
-      const rect = anchorRef.current.getBoundingClientRect()
-      setCoords({
-        top: rect.top + window.scrollY - 8,
-        left: rect.left + window.scrollX + rect.width / 2,
-      })
-    }
-  }, [visible, anchorRef])
-
-  if (!visible) return null
-
-  return createPortal(
-    <div
-      className="portal-tooltip"
-      style={{
-        position: "absolute",
-        top: coords.top,
-        left: coords.left,
-        transform: "translate(-50%, -100%)",
-        zIndex: 99999,
-      }}
-    >
-      {text}
-      <span className="portal-tooltip-arrow" />
-    </div>,
-    document.body
-  )
 }
 
 function IssueBadge({ issue }: { issue: string }) {

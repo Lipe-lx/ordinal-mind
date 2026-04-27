@@ -20,6 +20,7 @@ interface Props {
   onSynthesize: () => void
   onOpenBYOK: () => void
   onCancel: () => void
+  onShare: () => void
 }
 
 export function ChronicleCard({
@@ -34,6 +35,7 @@ export function ChronicleCard({
   onSynthesize,
   onOpenBYOK,
   onCancel,
+  onShare,
 }: Props) {
   const hasKey = KeyStore.has()
   const config = KeyStore.get()
@@ -79,6 +81,7 @@ export function ChronicleCard({
             : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
         }
         onCancel={onCancel}
+        onShare={onShare}
         collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
       />
       

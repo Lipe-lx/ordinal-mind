@@ -130,28 +130,28 @@ export function Chronicle() {
   } = useSynthesize()
   const navigate = useNavigate()
   const homePath = `/${location.search}`
-  const { setHeaderCenter, setHeaderRight, openBYOK } = useOutletContext<LayoutOutletContext>()
+  const { setHeaderCenter, openBYOK } = useOutletContext<LayoutOutletContext>()
   const autoSynthesizedRef = useRef<string | null>(null)
 
-  // Inject inscription title + share into Layout header when chronicle loads
+  const handleShare = useCallback(() => {
+    if (!chronicle) return
+    const fullLabel = chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label
+    const label = fullLabel ? `${fullLabel} (#${chronicle.meta.inscription_number})` : `Inscription #${chronicle.meta.inscription_number}`
+    const text = `${label} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
+    const url = window.location.href
+
+    if (navigator.share) {
+      navigator.share({ title: "Ordinal Mind Chronicle", text, url }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(`${text}\n${url}`).catch(() => {})
+    }
+  }, [chronicle])
+
+  // Inject inscription title into Layout header when chronicle loads
   useEffect(() => {
     if (!chronicle) {
       setHeaderCenter(null)
-      setHeaderRight(null)
       return
-    }
-
-    const handleShare = () => {
-      const fullLabel = chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label
-      const label = fullLabel ? `${fullLabel} (#${chronicle.meta.inscription_number})` : `Inscription #${chronicle.meta.inscription_number}`
-      const text = `${label} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
-      const url = window.location.href
-
-      if (navigator.share) {
-        navigator.share({ title: "Ordinal Mind Chronicle", text, url }).catch(() => {})
-      } else {
-        navigator.clipboard.writeText(`${text}\n${url}`).catch(() => {})
-      }
     }
 
     const fullLabel = chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label
@@ -187,21 +187,10 @@ export function Chronicle() {
       </>
     )
 
-    setHeaderRight(
-      <button
-        className="btn btn-share-header"
-        onClick={handleShare}
-        title="Share this Chronicle"
-      >
-        ✦ Share
-      </button>
-    )
-
     return () => {
       setHeaderCenter(null)
-      setHeaderRight(null)
     }
-  }, [chronicle, setHeaderCenter, setHeaderRight])
+  }, [chronicle, setHeaderCenter])
 
   useEffect(() => {
     if (!chronicle) return
@@ -280,6 +269,7 @@ export function Chronicle() {
           onSynthesize={() => synthesize(chronicle)}
           onOpenBYOK={openBYOK}
           onCancel={cancel}
+          onShare={handleShare}
         />
 
         {/* Right Sidebar: Factual Genesis + Temporal Timeline */}

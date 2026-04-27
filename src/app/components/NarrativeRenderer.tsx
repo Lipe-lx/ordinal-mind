@@ -36,6 +36,8 @@ interface Props {
   onCancel?: () => void
   /** Optional collection slug for brand linking */
   collectionSlug?: string
+  /** Called when user clicks Share */
+  onShare?: () => void
 }
 
 const PHASE_LABELS: Record<string, { icon: string; text: string }> = {
@@ -63,6 +65,7 @@ export function NarrativeRenderer({
   emptyMessage = "Generate an AI-powered Chronicle narrative from the factual timeline above.",
   onCancel,
   collectionSlug,
+  onShare,
 }: Props) {
   const [showLogs, setShowLogs] = useState(false)
 
@@ -219,6 +222,18 @@ export function NarrativeRenderer({
         >
           {narrative.trim()}
         </ReactMarkdown>
+
+        {onShare && (
+          <div className="narrative-share-container">
+            <button
+              className="btn-share-narrative"
+              onClick={onShare}
+              title="Share this Chronicle"
+            >
+              ✦ Share
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
