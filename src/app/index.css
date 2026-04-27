@@ -3599,3 +3599,487 @@ select.input-field option {
   color: var(--text-primary) !important;
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.1) !important;
 }
+
+/* --- Chronicle Tabs --- */
+.chronicle-tabs {
+  display: flex;
+  gap: var(--space-md);
+  padding: 0 var(--space-md);
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: var(--space-md);
+  flex-shrink: 0;
+}
+
+.chronicle-tab {
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.813rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--duration-fast) var(--ease-smooth);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chronicle-tab:hover {
+  color: var(--text-secondary);
+}
+
+.chronicle-tab.active {
+  color: var(--accent-primary);
+}
+
+.chronicle-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-primary);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* --- Genealogy Tree --- */
+.genealogy-container {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center; /* Center vertically */
+  position: relative;
+  min-height: 0;
+  cursor: grab;
+  background: rgba(0, 0, 0, 0.2); /* Subtle depth */
+}
+
+.genealogy-container:active {
+  cursor: grabbing;
+}
+
+.genealogy-tree {
+  width: auto;
+  min-width: 100%;
+  padding: var(--space-3xl);
+  display: flex;
+  flex-direction: column;
+  gap: 100px; /* Even more space for stylized paths */
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  transform-origin: center center;
+  flex-shrink: 0; /* Prevent squishing */
+}
+
+.genealogy-connections {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.genealogy-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xl);
+  width: 100%;
+  position: relative;
+}
+
+.genealogy-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  cursor: pointer;
+  position: relative;
+}
+
+.node-role-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+}
+
+.genealogy-node .node-card {
+  width: 140px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all var(--duration-normal) var(--ease-smooth);
+}
+
+.genealogy-node.is-root .node-card {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 20px var(--accent-glow);
+  background: rgba(247, 147, 26, 0.05);
+}
+
+.genealogy-node.is-compact .node-card {
+  width: 100px;
+}
+
+.genealogy-node.is-featured .node-card {
+  width: 180px;
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 40px rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.genealogy-node.is-featured .node-number {
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.node-image {
+  width: 100%;
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.node-image img, 
+.node-image iframe, 
+.node-image video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: none;
+}
+
+.node-image audio {
+  width: 90%;
+}
+
+.media-text-preview {
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.is-compact .media-text-preview {
+  font-size: 0.5rem;
+  padding: 0.4rem;
+}
+
+.media-text-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  flex: 1;
+  overflow: hidden;
+}
+
+.media-text-meta {
+  font-size: 0.5rem;
+  opacity: 0.5;
+  margin-top: 0.25rem;
+  text-transform: uppercase;
+}
+
+.media-placeholder {
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+
+.node-number {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.node-root-indicator {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: var(--accent-primary);
+  color: #000;
+  font-size: 0.625rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.children-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 600px;
+}
+
+.genealogy-node-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100px;
+  height: 100px;
+  background: var(--bg-glass);
+  border: 1px dashed var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+}
+
+.node-more-count {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.node-more-label {
+  font-size: 0.625rem;
+  text-align: center;
+}
+
+/* Detail Overlay */
+.node-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+}
+
+.node-detail-card {
+  width: 100%;
+  max-width: 500px;
+  position: relative;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.node-detail-close {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.node-detail-content {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--space-xl);
+}
+
+.node-detail-image {
+  width: 100%;
+  aspect-ratio: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--glass-border);
+}
+
+.node-detail-image .media-text-preview {
+  font-size: 0.85rem;
+  padding: 1.5rem;
+}
+
+.node-detail-info h3 {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-sm);
+}
+
+.node-detail-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  margin-bottom: var(--space-md);
+}
+
+.node-detail-date {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.node-detail-actions {
+  margin-top: var(--space-lg);
+}
+
+/* --- Enhanced Genealogy Layout --- */
+.genealogy-row.ancestors,
+.genealogy-row.parents {
+  flex-wrap: wrap;
+  max-width: 900px;
+}
+
+.node-role-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  color: var(--accent-primary);
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--border-accent);
+}
+
+.node-badge {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+}
+
+.node-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+}
+
+.node-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-glass);
+}
+
+.stat-item label {
+  display: block;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.stat-item span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* --- Descendants Explorer --- */
+.explorer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg-primary);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.explorer-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.explorer-header {
+  padding: var(--space-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.explorer-title h3 {
+  font-size: 1.25rem;
+  margin-bottom: 4px;
+}
+
+.explorer-title p {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.explorer-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: var(--space-md);
+  align-content: flex-start;
+}
+
+/* Custom scrollbar for explorer grid */
+.explorer-grid::-webkit-scrollbar {
+  width: 6px;
+}
+.explorer-grid::-webkit-scrollbar-thumb {
+  background: var(--border-glass);
+  border-radius: 3px;
+}
+
+/* SVG Path Glow */
+.genealogy-path {
+  filter: drop-shadow(0 0 8px var(--accent-glow));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke-width 0.3s ease, stroke-opacity 0.3s ease;
+  pointer-events: stroke; /* Make it interactive only on the line */
+}
+
+.genealogy-path:hover {
+  stroke-width: 4 !important;
+  stroke: var(--accent-primary) !important;
+  stroke-opacity: 1 !important;
+  filter: drop-shadow(0 0 12px var(--accent-glow-strong));
+}
+
+@keyframes energy-flow {
+  0% { stroke-dashoffset: 40; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.genealogy-path.animate-flow {
+  stroke-dasharray: 20 20;
+  animation: energy-flow 2s linear infinite;
+}

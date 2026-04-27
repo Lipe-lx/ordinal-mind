@@ -169,7 +169,8 @@ export async function fetchCollectionContext(
       "parents",
       MAX_PARENT_ITEMS,
       fetchedAt,
-      sourceCatalog
+      sourceCatalog,
+      inscriptionId
     ),
     fetchProtocolRelations(
       `${ORDINALS_BASE_URL}/r/children/${inscriptionId}/inscriptions`,
@@ -179,6 +180,107 @@ export async function fetchCollectionContext(
       sourceCatalog
     ),
   ])
+
+  // Resolve grandparents for ALL parents in parallel
+  let grandparents: ProtocolRelationSet | null = null
+  let greatGrandparents: ProtocolRelationSet | null = null
+  if (parents && parents.items.length > 0) {
+    const parentIds = parents.items.slice(0, 5).map(p => p.inscription_id)
+    const gpResults = await Promise.allSettled(
+      parentIds.map(parentId => 
+        fetchProtocolRelations(
+          `${ORDINALS_BASE_URL}/r/parents/${parentId}/inscriptions`,
+          "parents",
+          5, // Limit grandparents per parent
+          fetchedAt,
+          sourceCatalog,
+          parentId
+        )
+      )
+    )
+    
+    // Merge all unique grandparents
+    const allGpItems: RelatedInscriptionSummary[] = []
+    const seenGpIds = new Map<string, RelatedInscriptionSummary>()
+    let totalGpCount = 0
+    let hasMoreGp = false
+    
+    for (const res of gpResults) {
+      if (res.status === "fulfilled" && res.value) {
+        for (const gp of res.value.items) {
+          const existing = seenGpIds.get(gp.inscription_id)
+          if (existing) {
+            if (gp.related_to_ids) {
+              existing.related_to_ids = Array.from(new Set([...(existing.related_to_ids || []), ...gp.related_to_ids]))
+            }
+          } else {
+            seenGpIds.set(gp.inscription_id, gp)
+            allGpItems.push(gp)
+          }
+        }
+        totalGpCount += res.value.total_count
+        if (res.value.more) hasMoreGp = true
+      }
+    }
+    
+    if (allGpItems.length > 0) {
+      grandparents = {
+        items: allGpItems,
+        total_count: totalGpCount,
+        more: hasMoreGp,
+        source_ref: "multi-parent-ancestry",
+        partial: hasMoreGp
+      }
+
+      // Resolve Great-Grandparents (Level 3)
+      const gpIds = allGpItems.slice(0, 5).map(gp => gp.inscription_id)
+      const ggpResults = await Promise.allSettled(
+        gpIds.map(gpId => 
+          fetchProtocolRelations(
+            `${ORDINALS_BASE_URL}/r/parents/${gpId}/inscriptions`,
+            "parents",
+            3, // Capped depth
+            fetchedAt,
+            sourceCatalog,
+            gpId
+          )
+        )
+      )
+
+      const allGgpItems: RelatedInscriptionSummary[] = []
+      const seenGgpIds = new Map<string, RelatedInscriptionSummary>()
+      let totalGgpCount = 0
+      let hasMoreGgp = false
+
+      for (const res of ggpResults) {
+        if (res.status === "fulfilled" && res.value) {
+          for (const ggp of res.value.items) {
+            const existing = seenGgpIds.get(ggp.inscription_id)
+            if (existing) {
+              if (ggp.related_to_ids) {
+                existing.related_to_ids = Array.from(new Set([...(existing.related_to_ids || []), ...ggp.related_to_ids]))
+              }
+            } else {
+              seenGgpIds.set(ggp.inscription_id, ggp)
+              allGgpItems.push(ggp)
+            }
+          }
+          totalGgpCount += res.value.total_count
+          if (res.value.more) hasMoreGgp = true
+        }
+      }
+
+      if (allGgpItems.length > 0) {
+        greatGrandparents = {
+          items: allGgpItems,
+          total_count: totalGgpCount,
+          more: hasMoreGgp,
+          source_ref: "great-grandparent-ancestry",
+          partial: hasMoreGgp
+        }
+      }
+    }
+  }
 
   const [protocolGallery, ordNetOverlay, satflowOverlay] = await Promise.all([
     fetchProtocolGallery(inscriptionId, selfDetails, fetchedAt, sourceCatalog),
@@ -268,6 +370,8 @@ export async function fetchCollectionContext(
       parents,
       children,
       gallery: protocolGallery,
+      grandparents,
+      greatGrandparents,
     },
     registry,
     market: {
@@ -374,7 +478,8 @@ async function fetchProtocolRelations(
   kind: "parents" | "children",
   limit: number,
   fetchedAt: string,
-  sourceCatalog: SourceCatalogItem[]
+  sourceCatalog: SourceCatalogItem[],
+  relatedToId?: string
 ): Promise<ProtocolRelationSet | null> {
   const data = await fetchOptionalJson<ParentInscriptionsResponse | ChildInscriptionsResponse>(url, {
     sourceCatalog,
@@ -393,7 +498,7 @@ async function fetchProtocolRelations(
       : (data as ChildInscriptionsResponse).children ?? []
 
   return {
-    items: rawItems.slice(0, limit).map(toRelatedInscriptionSummary),
+    items: rawItems.slice(0, limit).map(item => toRelatedInscriptionSummary(item, relatedToId)),
     total_count: rawItems.length,
     more: data.more ?? false,
     source_ref: url,
@@ -446,7 +551,7 @@ async function fetchProtocolGallery(
 
   return {
     gallery_id: inscriptionId,
-    items: (details ?? []).slice(0, MAX_GALLERY_ITEMS).map(toRelatedInscriptionSummary),
+    items: (details ?? []).slice(0, MAX_GALLERY_ITEMS).map(item => toRelatedInscriptionSummary(item)),
     total_count: (galleryPage.ids ?? []).length,
     more: galleryPage.more ?? false,
     source_ref: url,
@@ -2013,16 +2118,20 @@ function toRegistryMatch(
   }
 }
 
-function toRelatedInscriptionSummary(item: RecursiveInscriptionSummary): RelatedInscriptionSummary {
+function toRelatedInscriptionSummary(
+  item: RecursiveInscriptionSummary,
+  relatedToId?: string
+): RelatedInscriptionSummary {
   return {
     inscription_id: item.id,
-    inscription_number: item.number,
+    inscription_number: item.number ?? null,
     content_type: item.content_type,
     content_url: `${ORDINALS_BASE_URL}/content/${item.id}`,
     genesis_block: item.height,
     genesis_timestamp: item.timestamp
       ? new Date(item.timestamp * 1000).toISOString()
       : undefined,
+    related_to_ids: relatedToId ? [relatedToId] : undefined,
   }
 }
 

@@ -354,7 +354,7 @@ function buildUncertainties(chronicle: Chronicle): string[] {
 function describeRelatedInscription(item: RelatedInscriptionSummary): string {
   const number = item.inscription_number != null ? `#${item.inscription_number}` : "unknown number"
   const contentType = item.content_type ?? "unknown type"
-  const date = item.genesis_timestamp ? ` · minted ${item.genesis_timestamp.slice(0, 10)}` : ""
+  const date = item.genesis_timestamp ? ` · minted ${String(item.genesis_timestamp).slice(0, 10)}` : ""
   return `${number} · ${item.inscription_id} · ${contentType}${date}`
 }
 

@@ -7,6 +7,7 @@ import { NarrativeRenderer } from "./NarrativeRenderer"
 import type { ChronicleResponse, MentionProviderDebug, SocialSignalProvider } from "../lib/types"
 import type { SynthesisPhase } from "../lib/byok/useSynthesize"
 import type { SynthesisMode } from "../lib/byok/context"
+import { GenealogyTree } from "./GenealogyTree"
 
 interface Props {
   chronicle: ChronicleResponse
@@ -42,6 +43,7 @@ export function ChronicleCard({
 
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
+  const [activeTab, setActiveTab] = useState<"narrative" | "genealogy">("narrative")
 
   return (
     <div className="chronicle-card glass-card">
@@ -62,28 +64,48 @@ export function ChronicleCard({
           🔑 Set your API key to generate narratives
         </p>
       )}
-      <NarrativeRenderer
-        narrative={narrative}
-        streamingText={streamingText}
-        phase={phase}
-        elapsed={elapsed}
-        providerName={config?.provider}
-        modelName={config?.model}
-        error={synthError}
-        inputMode={lastInputMode}
-        researchLogs={researchLogs}
-        researchEnabled={!!config?.researchKeys && Object.keys(config.researchKeys).length > 0}
-        onGenerate={hasKey ? onSynthesize : onOpenBYOK}
-        actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
-        emptyMessage={
-          hasKey
-            ? "Generate an AI-powered Chronicle narrative from the factual timeline above."
-            : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
-        }
-        onCancel={onCancel}
-        onShare={onShare}
-        collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
-      />
+      {/* Tab Switcher */}
+      <div className="chronicle-tabs">
+        <button 
+          className={`chronicle-tab ${activeTab === "narrative" ? "active" : ""}`}
+          onClick={() => setActiveTab("narrative")}
+        >
+          Chronicle Narrative
+        </button>
+        <button 
+          className={`chronicle-tab ${activeTab === "genealogy" ? "active" : ""}`}
+          onClick={() => setActiveTab("genealogy")}
+        >
+          Genealogical Tree
+        </button>
+      </div>
+
+      {activeTab === "narrative" ? (
+        <NarrativeRenderer
+          narrative={narrative}
+          streamingText={streamingText}
+          phase={phase}
+          elapsed={elapsed}
+          providerName={config?.provider}
+          modelName={config?.model}
+          error={synthError}
+          inputMode={lastInputMode}
+          researchLogs={researchLogs}
+          researchEnabled={!!config?.researchKeys && Object.keys(config.researchKeys).length > 0}
+          onGenerate={hasKey ? onSynthesize : onOpenBYOK}
+          actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
+          emptyMessage={
+            hasKey
+              ? "Generate an AI-powered Chronicle narrative from the factual timeline above."
+              : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
+          }
+          onCancel={onCancel}
+          onShare={onShare}
+          collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
+        />
+      ) : (
+        <GenealogyTree chronicle={chronicle} />
+      )}
       
       {/* Sources Widget */}
       <div style={{ marginTop: "auto" }}>

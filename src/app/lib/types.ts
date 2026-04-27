@@ -139,11 +139,12 @@ export interface MediaContext {
 
 export interface RelatedInscriptionSummary {
   inscription_id: string
-  inscription_number?: number
+  inscription_number: number | null
   content_type?: string
   content_url?: string
   genesis_block?: number
-  genesis_timestamp?: string
+  genesis_timestamp?: string | number
+  related_to_ids?: string[]
 }
 
 export interface ProtocolRelationSet {
@@ -233,6 +234,8 @@ export interface CollectionContext {
     parents: ProtocolRelationSet | null
     children: ProtocolRelationSet | null
     gallery: ProtocolGalleryContext | null
+    grandparents: ProtocolRelationSet | null
+    greatGrandparents: ProtocolRelationSet | null
   }
   registry: {
     match: CuratedRegistryMatch | null
