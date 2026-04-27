@@ -172,8 +172,6 @@ const truncAddr = (addr: string) =>
 
 function platformLabel(platform: SocialMention["platform"]): string {
   switch (platform) {
-    case "nostr":
-      return "Nostr"
     case "x":
       return "X"
     case "google_trends":

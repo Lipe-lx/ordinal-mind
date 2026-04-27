@@ -463,8 +463,6 @@ function formatSentiment(sentiment: ChronicleResponse["collector_signals"]["sent
 
 function platformLabel(platform: ChronicleResponse["collector_signals"]["top_evidence"][number]["platform"]): string {
   switch (platform) {
-    case "nostr":
-      return "Nostr"
     case "x":
       return "X"
     case "google_trends":
@@ -475,10 +473,6 @@ function platformLabel(platform: ChronicleResponse["collector_signals"]["top_evi
 }
 
 function providerLabel(provider: SocialSignalProvider): string {
-  switch (provider) {
-    case "google_trends":
-      return "Google Trends"
-    default:
-      return provider.charAt(0).toUpperCase() + provider.slice(1)
-  }
+  if (provider === "google_trends") return "Google Trends"
+  return provider
 }

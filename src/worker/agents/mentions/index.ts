@@ -8,14 +8,12 @@ import type {
   SocialSignalProvider,
   SourceCatalogItem,
 } from "../../../app/lib/types"
-import { searchNostr } from "./nostr"
 import { buildMentionQueries } from "./queryBuilder"
 import type { MentionSearchInput, MentionCollectionResult } from "./types"
 import { createProviderDebug } from "./types"
 import { fetchGoogleTrendsMacro } from "./trends"
 
 const PROVIDER_WEIGHTS: Record<SocialSignalProvider, number> = {
-  nostr: 1.0,
   google_trends: 0,
 }
 
@@ -33,7 +31,6 @@ export async function collectSignals(input: MentionSearchInput): Promise<Mention
   const queries = buildMentionQueries(input)
 
   const providerDebug = {
-    nostr: createProviderDebug("nostr", input, queries),
     google_trends: createProviderDebug("google_trends", input, queries),
   } satisfies Record<SocialSignalProvider, ReturnType<typeof createProviderDebug>>
 
@@ -42,17 +39,13 @@ export async function collectSignals(input: MentionSearchInput): Promise<Mention
     queries,
   }
 
-  const [nostrResult, trendsResult] = await Promise.all([
-    searchNostr({ ...baseContext, diagnostics: providerDebug.nostr }),
+  const [trendsResult] = await Promise.all([
     fetchGoogleTrendsMacro({ ...baseContext, diagnostics: providerDebug.google_trends }),
   ])
 
-  const mentions = dedupeMentions([
-    ...nostrResult.mentions,
-  ])
+  const mentions = dedupeMentions([])
   const collectorSignals = buildCollectorSignals(mentions)
   const sourceCatalog = mergeSourceCatalog([
-    ...nostrResult.sourceCatalog,
     ...trendsResult.sourceCatalog,
   ])
 
@@ -145,7 +138,6 @@ function calculateConfidence(mentions: SocialMention[]): CollectorSignalConfiden
 
 function countProviders(mentions: SocialMention[]): Record<SocialSignalProvider, number> {
   const counts: Record<SocialSignalProvider, number> = {
-    nostr: 0,
     google_trends: 0,
   }
   for (const mention of mentions) {

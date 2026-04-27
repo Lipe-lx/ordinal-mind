@@ -28,8 +28,8 @@ export type SourceTrustLevel =
   | "public_social"
   | "unisat_indexer"
 
-export type SocialPlatform = "nostr" | "x" | "google_trends"
-export type SocialSignalProvider = "nostr" | "google_trends"
+export type SocialPlatform = "x" | "google_trends"
+export type SocialSignalProvider = "google_trends"
 export type SocialMatchType =
   | "collection_only"
   | "item_plus_collection"

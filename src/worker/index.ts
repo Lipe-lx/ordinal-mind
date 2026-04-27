@@ -25,7 +25,6 @@ export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   ENVIRONMENT: string
   UNISAT_API_KEY?: string
-  NOSTR_RELAYS?: string
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -111,14 +110,6 @@ function buildMempoolSourceCatalog(options: {
   ]
 }
 
-function parseNostrRelays(raw: string | undefined): string[] | undefined {
-  if (!raw) return undefined
-  const relays = raw
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-  return relays.length > 0 ? relays : undefined
-}
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -327,7 +318,7 @@ async function handleStandardChronicle(
               sentiment_label: "insufficient_data",
               confidence: "low",
               evidence_count: 0,
-              provider_breakdown: { nostr: 0, google_trends: 0 },
+              provider_breakdown: { google_trends: 0 },
               scope_breakdown: { inscription_level: 0, collection_level: 0, mixed: 0, dominant_scope: "none" },
               top_evidence: [],
               windows: {
@@ -351,7 +342,6 @@ async function handleStandardChronicle(
             ?? collectionData.mentionSearchHints.itemName,
           fullLabel: collectionData.collectionContext.presentation.full_label,
           officialXUrls: collectionData.mentionSearchHints.officialXUrls,
-          nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
           debug: diagnostics?.debug,
           requestId: diagnostics?.requestId,
         }),
@@ -376,7 +366,7 @@ async function handleStandardChronicle(
         sentiment_label: "insufficient_data" as const,
         confidence: "low" as const,
         evidence_count: 0,
-        provider_breakdown: { nostr: 0, google_trends: 0 },
+        provider_breakdown: { google_trends: 0 },
         scope_breakdown: {
           inscription_level: 0,
           collection_level: 0,
@@ -665,7 +655,7 @@ async function handleStreamingChronicle(
         sentiment_label: "insufficient_data",
         confidence: "low",
         evidence_count: 0,
-        provider_breakdown: { nostr: 0, google_trends: 0 },
+        provider_breakdown: { google_trends: 0 },
         scope_breakdown: {
           inscription_level: 0,
           collection_level: 0,
@@ -699,7 +689,6 @@ async function handleStreamingChronicle(
               ?? collectionContext.mentionSearchHints.itemName,
             fullLabel: collectionContext.collectionContext.presentation.full_label,
             officialXUrls: collectionContext.mentionSearchHints.officialXUrls,
-            nostrRelays: parseNostrRelays(env.NOSTR_RELAYS),
             debug: diagnostics?.debug,
             requestId: diagnostics?.requestId,
           }),

@@ -18,7 +18,6 @@ export interface MentionSearchInput {
   enableTrends?: boolean
   debug?: boolean
   requestId?: string
-  nostrRelays?: string[]
 }
 
 export interface MentionProviderResult {

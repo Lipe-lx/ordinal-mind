@@ -178,8 +178,6 @@ export function TemporalTree({ events, collectionSlug }: Props) {
 
 function socialLabel(platform: string | undefined): string {
   switch (platform) {
-    case "nostr":
-      return "Nostr Mention"
     case "x":
       return "X Mention"
     case "google_trends":
@@ -191,8 +189,6 @@ function socialLabel(platform: string | undefined): string {
 
 function socialIcon(platform: string | undefined): string {
   switch (platform) {
-    case "nostr":
-      return "₿"
     case "x":
       return "𝕏"
     case "google_trends":

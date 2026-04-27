@@ -74,7 +74,7 @@ function eventToSocialMention(event: ChronicleEvent): SocialMention[] {
 
   return [{
     platform: (event.metadata.platform as SocialMention["platform"] | undefined) ?? "x",
-    provider: "nostr",
+    provider: "google_trends",
     canonical_url: (event.metadata.canonical_url as string | undefined) ?? event.source.ref,
     title: event.description,
     excerpt: (event.metadata.excerpt as string | undefined) ?? "",
