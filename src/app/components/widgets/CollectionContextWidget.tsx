@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import type { CollectionContext, CollectionPresentationFacet, RelatedInscriptionSummary } from "../../lib/types"
+import { linkifyBrands } from "../../lib/brandLinks"
 
 interface Props {
   collectionContext: CollectionContext
@@ -217,14 +218,12 @@ export function CollectionContextWidget({ collectionContext }: Props) {
           {(identityFacets.length > 0 || registry.match || relationGroups.length > 0) && (
             <section className="widget-provenance-section">
               <span className="widget-provenance-section-label">Verified identity</span>
-              <div style={{ 
-                display: "grid", 
+              <div className="widget-meta-grid" style={{ 
                 gridTemplateColumns: (identityFacets.length > 0 || registry.match) && relationGroups.length > 0 ? "1fr 1fr" : "1fr", 
-                gap: "16px", 
-                alignItems: "start" 
+                gap: "1px" 
               }}>
                 {(identityFacets.length > 0 || registry.match) && (
-                  <div>
+                  <>
                     {registry.match && (
                       <EvidenceRow
                         label="Curated registry"
@@ -236,15 +235,15 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                     {identityFacets.map((facet) => (
                       <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
                     ))}
-                  </div>
+                  </>
                 )}
 
                 {relationGroups.length > 0 && (
-                  <div>
+                  <>
                     {relationGroups.map((group) => (
                       <RelationRow key={group.label} group={group} />
                     ))}
-                  </div>
+                  </>
                 )}
               </div>
             </section>
@@ -253,55 +252,95 @@ export function CollectionContextWidget({ collectionContext }: Props) {
           {(marketFacets.length > 0 || market.match || marketSignals.length > 0 || collectionContext.socials.official_x_profiles.length > 0) && (
             <section className="widget-provenance-section">
               <span className="widget-provenance-section-label">Market &amp; collector signals</span>
-              {market.ord_net_match && (
-                <EvidenceRow
-                  label={market.ord_net_match.verified ? "ord.net verified overlay" : "ord.net overlay"}
-                  value={market.ord_net_match.collection_name}
-                  detail={market.ord_net_match.item_name ?? market.ord_net_match.collection_slug}
-                  tone="overlay"
-                />
-              )}
-              {market.satflow_match && (
-                <EvidenceRow
-                  label="Satflow overlay"
-                  value={market.satflow_match.collection_name}
-                  detail={market.satflow_match.item_name ?? market.satflow_match.collection_slug}
-                  tone="overlay"
-                />
-              )}
-              {marketFacets.map((facet) => (
-                <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
-              ))}
-              {marketSignals.slice(0, 4).map((signal) => (
-                <EvidenceRow
-                  key={`${signal.label}-${signal.value}`}
-                  label={signal.label}
-                  value={signal.value}
-                  detail={shortenSource(signal.source_ref)}
-                  tone="overlay"
-                  href={signal.source_ref}
-                />
-              ))}
-              {collectionContext.socials.official_x_profiles.map((profileLink) => (
-                <EvidenceRow
-                  key={profileLink.url}
-                  label="Official X account"
-                  value={formatXHandle(profileLink.url)}
-                  detail={`Used as a public seed for X mention discovery · found via ${shortenSource(profileLink.source_ref)}`}
-                  tone="overlay"
-                  href={profileLink.url}
-                  ctaLabel="Open X profile"
-                />
-              ))}
+              <div className="widget-meta-grid" style={{ gap: "1px" }}>
+                {market.ord_net_match && (
+                  <EvidenceRow
+                    label={market.ord_net_match.verified ? "ord.net verified overlay" : "ord.net overlay"}
+                    value={market.ord_net_match.collection_name}
+                    detail={market.ord_net_match.item_name ?? market.ord_net_match.collection_slug}
+                    tone="overlay"
+                  />
+                )}
+                {market.satflow_match && (
+                  <EvidenceRow
+                    label="Satflow overlay"
+                    value={market.satflow_match.collection_name}
+                    detail={market.satflow_match.item_name ?? market.satflow_match.collection_slug}
+                    tone="overlay"
+                  />
+                )}
+                {marketFacets.map((facet) => (
+                  <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
+                ))}
+                {marketSignals.slice(0, 4).map((signal) => {
+                  if (signal.label === "Satflow collection market") {
+                    const metrics = signal.value.split(" · ")
+                    return (
+                      <div key="satflow-stats" className="widget-meta-cell" style={{ 
+                        display: "flex", 
+                        flexDirection: "column",
+                        gap: "4px",
+                        padding: "6px 12px"
+                      }}>
+                        <span className="widget-meta-label">Market</span>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                          {metrics.map((m, i) => {
+                            const lastSpace = m.lastIndexOf(" ")
+                            const label = lastSpace !== -1 ? m.substring(0, lastSpace) : m
+                            const value = lastSpace !== -1 ? m.substring(lastSpace + 1) : "—"
+                            return (
+                              <div key={i} style={{ 
+                                display: "flex", 
+                                alignItems: "baseline", 
+                                gap: "3px",
+                                padding: "1px 4px",
+                                background: "rgba(255, 255, 255, 0.04)",
+                                borderRadius: "3px",
+                                border: "1px solid rgba(255, 255, 255, 0.06)"
+                              }}>
+                                <span style={{ fontSize: "0.5rem", fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase" }}>{linkifyBrands(label)}</span>
+                                <span style={{ fontSize: "0.688rem", fontWeight: 600, color: "var(--accent-primary)", fontFamily: "var(--font-mono)" }}>{linkifyBrands(value)}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  }
+                  return (
+                    <EvidenceRow
+                      key={`${signal.label}-${signal.value}`}
+                      label={signal.label}
+                      value={signal.value}
+                      detail={shortenSource(signal.source_ref)}
+                      tone="overlay"
+                      href={signal.source_ref}
+                    />
+                  )
+                })}
+                {collectionContext.socials.official_x_profiles.map((profileLink) => (
+                  <EvidenceRow
+                    key={profileLink.url}
+                    label="Official X account"
+                    value={formatXHandle(profileLink.url)}
+                    detail={`Found via ${shortenSource(profileLink.source_ref)}`}
+                    tone="overlay"
+                    href={profileLink.url}
+                    ctaLabel="Open X"
+                  />
+                ))}
+              </div>
             </section>
           )}
 
           {partialFacets.length > 0 && (
             <section className="widget-provenance-section">
               <span className="widget-provenance-section-label">Caveats</span>
-              {partialFacets.map((facet) => (
-                <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
-              ))}
+              <div className="widget-meta-grid" style={{ gap: "1px" }}>
+                {partialFacets.map((facet) => (
+                  <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
+                ))}
+              </div>
             </section>
           )}
         </div>
@@ -324,78 +363,64 @@ function EvidenceRow({
   detail,
   tone,
   href,
-  ctaLabel = "Open collection",
+  ctaLabel = "Open",
 }: CollectionPresentationFacet & { href?: string; ctaLabel?: string }) {
   return (
-    <div className={`widget-provenance-row tone-${tone}`}>
-      <span className="widget-provenance-row-marker" />
-      <div className="widget-provenance-row-copy">
-        <span className="widget-provenance-row-label">{label}</span>
-        <span className="widget-provenance-row-value">{value}</span>
-        {detail && <span className="widget-provenance-row-detail">{detail}</span>}
-        {href && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "6px" }}>
-            <a 
-              href={href} 
-              target="_blank" 
-              rel="noreferrer" 
-              style={{ 
-                fontSize: "0.625rem", 
-                color: "var(--accent-primary)", 
-                textDecoration: "none", 
-                display: "inline-flex", 
-                alignItems: "center", 
-                gap: "4px", 
-                fontWeight: 700,
-                padding: "2px 6px",
-                borderRadius: "4px",
-                background: "rgba(247, 147, 26, 0.08)",
-                border: "1px solid rgba(247, 147, 26, 0.2)",
-                transition: "background 0.2s"
-              }}
-            >
-              {ctaLabel} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-            </a>
-          </div>
-        )}
-      </div>
+    <div className={`widget-meta-cell tone-${tone} ${tone !== 'overlay' ? 'provenance-cell' : ''}`}>
+      <span className="widget-meta-label">{linkifyBrands(label)}</span>
+      <span className="widget-meta-value">{linkifyBrands(value)}</span>
+      {detail && <span className="widget-meta-sub">{linkifyBrands(detail)}</span>}
+      {href && (
+        <div style={{ marginTop: "4px" }}>
+          <a 
+            href={href} 
+            target="_blank" 
+            rel="noreferrer" 
+            className="widget-meta-sub"
+            style={{ 
+              color: "var(--accent-primary)", 
+              textDecoration: "none", 
+              display: "inline-flex", 
+              alignItems: "center", 
+              gap: "2px", 
+              fontWeight: 700 
+            }}
+          >
+            {ctaLabel} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </a>
+        </div>
+      )}
     </div>
   )
 }
 
 function RelationRow({ group }: { group: RelationGroup }) {
   return (
-    <div className="widget-provenance-row tone-canonical">
-      <span className="widget-provenance-row-marker" />
-      <div className="widget-provenance-row-copy">
-        <span className="widget-provenance-row-label">{group.label}</span>
-        <span className="widget-provenance-row-value">{group.description}</span>
-        <span className="widget-provenance-relation-list">
-          {group.items.slice(0, 4).map((item) => (
-            <a
-              key={item.inscription_id}
-              className="widget-provenance-relation-link"
-              href={`https://ordinals.com/inscription/${item.inscription_id}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {item.inscription_number != null ? `#${item.inscription_number}` : shortenInscription(item.inscription_id)}
-            </a>
-          ))}
-          {group.partial && <span className="widget-provenance-row-detail">sampled result</span>}
-          {group.sourceRef && (
-            <a
-              className="widget-provenance-source-link"
-              href={group.sourceRef}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-            >
-              source
-            </a>
-          )}
-        </span>
+    <div className="widget-meta-cell tone-canonical provenance-cell">
+      <span className="widget-meta-label">{linkifyBrands(group.label)}</span>
+      <span className="widget-meta-value" style={{ whiteSpace: "normal", fontSize: "0.75rem", lineHeight: "1.3" }}>
+        {linkifyBrands(group.description)}
+      </span>
+      <div className="widget-provenance-relation-list" style={{ marginTop: "4px" }}>
+        {group.items.slice(0, 4).map((item) => (
+          <a
+            key={item.inscription_id}
+            className="widget-provenance-relation-link"
+            href={`https://ordinals.com/inscription/${item.inscription_id}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontSize: "0.625rem", padding: "1px 4px" }}
+          >
+            {item.inscription_number != null ? `#${item.inscription_number}` : shortenInscription(item.inscription_id)}
+            {item.genesis_timestamp && (
+              <span className="widget-provenance-relation-date">
+                ({new Date(item.genesis_timestamp).getFullYear()})
+              </span>
+            )}
+          </a>
+        ))}
+        {group.partial && <span className="widget-meta-sub">sampled result</span>}
       </div>
     </div>
   )

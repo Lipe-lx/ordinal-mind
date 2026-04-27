@@ -5,6 +5,7 @@ import { ChronicleCard } from "../components/ChronicleCard"
 import { ChronicleSidebar } from "../components/ChronicleSidebar"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
+import { FactualInfoWidget } from "../components/widgets/FactualInfoWidget"
 import { KeyStore } from "../lib/byok"
 import { useSynthesize } from "../lib/byok/useSynthesize"
 import type { LayoutOutletContext } from "../components/Layout"
@@ -281,18 +282,22 @@ export function Chronicle() {
           onCancel={cancel}
         />
 
-        {/* Right Sidebar: Temporal Timeline */}
-        <div className="timeline-panel">
-          <div className="timeline-panel-title">
-            <span className="timeline-panel-title-text">Temporal Timeline</span>
-            <OwnershipWidget
-              events={chronicle.events}
-              genesisAddress={chronicle.meta.genesis_owner_address}
-              currentOwnerAddress={chronicle.meta.owner_address}
-            />
-          </div>
-          <div className="timeline-scroll-container">
-            <TemporalTree events={chronicle.events} />
+        {/* Right Sidebar: Factual Genesis + Temporal Timeline */}
+        <div className="chronicle-sidebar-right">
+          <FactualInfoWidget meta={chronicle.meta} />
+          
+          <div className="timeline-panel">
+            <div className="timeline-panel-title">
+              <span className="timeline-panel-title-text">Temporal Timeline</span>
+              <OwnershipWidget
+                events={chronicle.events}
+                genesisAddress={chronicle.meta.genesis_owner_address}
+                currentOwnerAddress={chronicle.meta.owner_address}
+              />
+            </div>
+            <div className="timeline-scroll-container">
+              <TemporalTree events={chronicle.events} />
+            </div>
           </div>
         </div>
       </div>

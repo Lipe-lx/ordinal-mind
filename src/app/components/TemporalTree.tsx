@@ -1,5 +1,6 @@
 import { motion } from "motion/react"
 import type { ChronicleEvent } from "../lib/types"
+import { linkifyBrands } from "../lib/brandLinks"
 
 interface Props {
   events: ChronicleEvent[]
@@ -93,7 +94,7 @@ export function TemporalTree({ events }: Props) {
                   : EVENT_ICONS[event.event_type] ?? "•"}{" "}
                 {event.event_type === "social_mention"
                   ? socialLabel(platform)
-                  : EVENT_LABELS[event.event_type] ?? event.event_type}
+                  : linkifyBrands(EVENT_LABELS[event.event_type] ?? event.event_type)}
               </span>
               <span className="timeline-node-time">
                 {formatDate(event.timestamp)}
@@ -101,7 +102,7 @@ export function TemporalTree({ events }: Props) {
             </div>
 
             <p className="timeline-node-desc">
-              {event.description}
+              {linkifyBrands(event.description)}
               {event.event_type === "social_mention" && scope && (
                 <span
                   className="timeline-node-heuristic"

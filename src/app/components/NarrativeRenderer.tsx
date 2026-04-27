@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown"
 import type { SynthesisPhase } from "../lib/byok/useSynthesize"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
+import { linkifyBrands } from "../lib/brandLinks"
 
 interface Props {
   /** Final sanitized narrative text (markdown) */
@@ -130,7 +131,15 @@ export function NarrativeRenderer({
           {/* Progressive streaming text */}
           {streamingText && (
             <div className="narrative-stream-preview">
-              <ReactMarkdown>{streamingText}</ReactMarkdown>
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => (
+                    <p className="narrative-paragraph">{enhanceContent(children)}</p>
+                  ),
+                }}
+              >
+                {streamingText}
+              </ReactMarkdown>
               <span className="narrative-cursor" />
             </div>
           )}
@@ -229,17 +238,20 @@ function enhanceContent(children: React.ReactNode): React.ReactNode {
 
   const text = children as string
 
-  // Replace Bitcoin addresses with styled spans
+  // 1. Detect Bitcoin addresses and block heights for special styling
   const addressRegex = /(bc1[a-z0-9]{8,})/gi
   const blockRegex = /#(\d{3,}(?:,\d{3})*)/g
+  const needsEnhancement = addressRegex.test(text) || blockRegex.test(text)
 
-  // Simple enhancement: just return styled text for now
-  // Full implementation would parse and create React elements
-  if (addressRegex.test(text) || blockRegex.test(text)) {
-    return <span className="narrative-enhanced">{text}</span>
+  // 2. Apply brand linkification
+  const brandLinked = linkifyBrands(text)
+  
+  // 3. Wrap in enhanced span if it has on-chain identifiers
+  if (needsEnhancement) {
+    return <span className="narrative-enhanced">{brandLinked}</span>
   }
 
-  return children
+  return brandLinked
 }
 
 // --- Sub-components ---

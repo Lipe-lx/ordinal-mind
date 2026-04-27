@@ -32,18 +32,17 @@ export function OwnershipWidget({ events, genesisAddress, currentOwnerAddress }:
     <div className="widget-ownership-chain condensed">
       {/* Initial Owner */}
       <div className="widget-ownership-node">
-        <div className="widget-ownership-item vertical">
+        <div className="widget-ownership-item">
           <a
             className="widget-address-pill"
             href={`https://mempool.space/address/${initial.address}`}
             target="_blank"
             rel="noopener noreferrer"
-            title={initial.address}
+            title={`Genesis: ${initial.address}`}
           >
-            <span className="widget-ownership-type-icon" title="Genesis">⛏️</span>
+            <span className="widget-ownership-type-icon">⛏️</span>
             {truncateAddr(initial.address)}
           </a>
-          <span className="widget-ownership-date">{formatShortDate(initial.date)}</span>
         </div>
       </div>
 
@@ -59,20 +58,19 @@ export function OwnershipWidget({ events, genesisAddress, currentOwnerAddress }:
 
           {/* Current Owner */}
           <div className="widget-ownership-node">
-            <div className="widget-ownership-item vertical">
+            <div className="widget-ownership-item">
               <a
                 className="widget-address-pill"
                 href={`https://mempool.space/address/${final.address}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={final.address}
+                title={`Current: ${final.address}`}
               >
                 {final.type === "sale" && (
-                  <span className="widget-ownership-type-icon" title="Sale">💰</span>
+                  <span className="widget-ownership-type-icon">💰</span>
                 )}
                 {truncateAddr(final.address)}
               </a>
-              <span className="widget-ownership-date">{formatShortDate(final.date)}</span>
             </div>
           </div>
         </>
