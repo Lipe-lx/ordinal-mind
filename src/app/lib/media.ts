@@ -97,3 +97,21 @@ export function getMediaFallbackReason(kind: MediaKind): string | undefined {
       return "This inscription renders through ordinals preview because its content type is not supported natively yet."
   }
 }
+
+export function isEmojiOnly(text: string): boolean {
+  if (!text) return false
+  const trimmed = text.trim()
+  
+  // Heuristic: Emojis are rarely more than a few characters (even with modifiers)
+  // But we allow up to 20 for complex sequences (flags, families, etc)
+  if (trimmed.length === 0 || trimmed.length > 20) return false
+  
+  // Matches strings that consist ONLY of emoji-related characters
+  const emojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}|\p{Emoji_Modifier}|\p{Emoji_Component}|\u200D|\u20E3)+$/u
+  
+  // Ensure it's actually an emoji and not just numbers/punctuation which \p{Emoji} can include
+  const hasOnlyEmoji = emojiRegex.test(trimmed)
+  const hasNormalText = /[a-zA-Z0-9]/.test(trimmed)
+  
+  return hasOnlyEmoji && !hasNormalText
+}

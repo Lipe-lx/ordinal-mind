@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useMotionValue, useSpring, animate } from "motion/react"
+import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
 import { GenealogyNode } from "./GenealogyNode"
@@ -38,15 +38,91 @@ const Connection = memo(({ startId, endId, nodePositions }: ConnectionProps) => 
       d={pathData}
       className="genealogy-path animate-flow"
       stroke="url(#connection-grad)"
-      strokeWidth="2"
+      strokeWidth="3.5"
       fill="none"
       filter="url(#glow)"
-      style={{ opacity: 0.6 }}
+      style={{ opacity: 0.8 }}
     />
   )
 })
 
 Connection.displayName = "Connection"
+
+interface BackgroundProps {
+  x: MotionValue<number>
+  y: MotionValue<number>
+}
+
+/**
+ * Technical 3D Background with parallax layers.
+ */
+const GenealogyBackground = memo(({ x, y }: BackgroundProps) => {
+  // Parallax multipliers for depth layers
+  const gridX = useTransform(x, (v) => v * 0.4)
+  const gridY = useTransform(y, (v) => v * 0.4)
+  
+  const dotsX = useTransform(x, (v) => v * 0.8)
+  const dotsY = useTransform(y, (v) => v * 0.8)
+
+  const [particles] = useState(() => Array.from({ length: 30 }).map((_, i) => ({
+    id: i,
+    size: Math.random() * 3 + 1.5,
+    top: `${Math.random() * 100}%`,
+    left: `${Math.random() * 100}%`,
+    duration: Math.random() * 20 + 10,
+    delay: Math.random() * 10
+  })))
+
+  return (
+    <div className="genealogy-bg">
+      {/* 3D Grid Layer */}
+      <motion.div 
+        className="genealogy-bg-layer"
+        style={{ x: gridX, y: gridY }}
+      >
+        <div className="genealogy-bg-grid" />
+      </motion.div>
+
+      {/* 3D Dots Layer */}
+      <motion.div 
+        className="genealogy-bg-layer"
+        style={{ x: dotsX, y: dotsY }}
+      >
+        <div className="genealogy-bg-dots" />
+      </motion.div>
+
+      {/* Data Particles */}
+      {particles.map((p) => (
+        <motion.div
+          key={p.id}
+          className="bg-particle"
+          style={{
+            width: p.size,
+            height: p.size,
+            top: p.top,
+            left: p.left,
+          }}
+          animate={{
+            y: [-40, 40],
+            x: [-20, 20],
+            opacity: [0.05, 0.2, 0.05],
+            scale: [1, 1.5, 1],
+          }}
+          transition={{
+            duration: p.duration,
+            repeat: Infinity,
+            delay: p.delay,
+            ease: "linear"
+          }}
+        />
+      ))}
+
+      <div className="genealogy-bg-scanline" />
+    </div>
+  )
+})
+
+GenealogyBackground.displayName = "GenealogyBackground"
 
 interface Props {
   chronicle: ChronicleResponse
@@ -68,6 +144,26 @@ export function GenealogyTree({ chronicle }: Props) {
   // Spring physics
   const springScale = useSpring(scale, { stiffness: 120, damping: 24 })
 
+  // Mouse Parallax
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const { clientX, clientY } = e
+      const { innerWidth, innerHeight } = window
+      // Normalize mouse position from -1 to 1 and multiply by intensity
+      mouseX.set((clientX / innerWidth - 0.5) * 40)
+      mouseY.set((clientY / innerHeight - 0.5) * 40)
+    }
+    window.addEventListener("mousemove", handleMouseMove)
+    return () => window.removeEventListener("mousemove", handleMouseMove)
+  }, [mouseX, mouseY])
+
+  // Combine dragging parallax + mouse parallax for the background layers
+  const bgX = useTransform([x, mouseX], ([vx, vmx]) => (vx as number) * 0.1 + (vmx as number))
+  const bgY = useTransform([y, mouseY], ([vy, vmy]) => (vy as number) * 0.1 + (vmy as number))
+
   const root = useMemo<RelatedInscriptionSummary>(() => ({
     inscription_id: chronicle.meta.inscription_id,
     inscription_number: chronicle.meta.inscription_number,
@@ -83,10 +179,10 @@ export function GenealogyTree({ chronicle }: Props) {
   ])
 
   const protocol = chronicle.collection_context.protocol
-  const parents = protocol.parents?.items ?? []
-  const grandparents = protocol.grandparents?.items ?? []
-  const greatGrandparents = protocol.greatGrandparents?.items ?? []
-  const children = protocol.children?.items ?? []
+  const parents = useMemo(() => protocol.parents?.items ?? [], [protocol.parents?.items])
+  const grandparents = useMemo(() => protocol.grandparents?.items ?? [], [protocol.grandparents?.items])
+  const greatGrandparents = useMemo(() => protocol.greatGrandparents?.items ?? [], [protocol.greatGrandparents?.items])
+  const children = useMemo(() => protocol.children?.items ?? [], [protocol.children?.items])
   const totalChildren = protocol.children?.total_count ?? 0
 
   /**
@@ -143,13 +239,14 @@ export function GenealogyTree({ chronicle }: Props) {
       const treeWidth = treeRef.current.offsetWidth
       const treeHeight = treeRef.current.offsetHeight
       
-      const padding = 120
-      const availableWidth = containerRect.width - padding
-      const availableHeight = containerRect.height - padding
+      const padding = 0
+      const availableWidth = containerRect.width
+      const availableHeight = containerRect.height
       
       const scaleX = availableWidth / treeWidth
       const scaleY = availableHeight / treeHeight
-      const autoScale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.15), 1.0)
+      // Add a 10% zoom boost to make it feel "closer" by default
+      const autoScale = Math.min(Math.max(Math.min(scaleX, scaleY) * 1.1, 0.15), 1.2)
       
       scale.set(autoScale)
       x.set(0)
@@ -222,7 +319,7 @@ export function GenealogyTree({ chronicle }: Props) {
           className="node-card glass-card genealogy-node-more"
           style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center", justifyContent: "center", textAlign: "center", flex: 1, boxSizing: "border-box" }}
         >
-          <div className="node-more-label" style={{ fontSize: "0.65rem", color: "var(--text-primary)", fontWeight: 500, lineHeight: 1.2, marginBottom: "2px" }}>
+          <div className="node-more-label" style={{ fontSize: "0.65rem", color: "var(--accent-primary)", fontWeight: 600, lineHeight: 1.2, marginBottom: "2px" }}>
             View full lineage
           </div>
           <div className="node-more-links" style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
@@ -245,13 +342,14 @@ export function GenealogyTree({ chronicle }: Props) {
     const treeWidth = treeRef.current.offsetWidth;
     const treeHeight = treeRef.current.offsetHeight;
     
-    const padding = 120;
-    const availableWidth = containerRect.width - padding;
-    const availableHeight = containerRect.height - padding;
+    const padding = 0;
+    const availableWidth = containerRect.width;
+    const availableHeight = containerRect.height;
     
     const scaleX = availableWidth / treeWidth;
     const scaleY = availableHeight / treeHeight;
-    const autoScale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.15), 1.0);
+    // Add a 10% zoom boost to make it feel "closer" by default
+    const autoScale = Math.min(Math.max(Math.min(scaleX, scaleY) * 1.1, 0.15), 1.2);
     
     // Scale is already linked to a spring, so we just set it
     scale.set(autoScale);
@@ -268,6 +366,8 @@ export function GenealogyTree({ chronicle }: Props) {
       style={{ touchAction: "none" }}
       onDoubleClick={handleDoubleClick}
     >
+      <GenealogyBackground x={bgX} y={bgY} />
+
       <motion.div 
         className="genealogy-tree" 
         ref={treeRef}
@@ -302,17 +402,17 @@ export function GenealogyTree({ chronicle }: Props) {
           
           {/* Ancestry Connections (Hierarchical fallback guarantees connectivity) */}
           
-          {/* 1. Root -> Parents */}
+          {/* 1. Parents -> Root (Flowing down) */}
           {parents.map((p) => (
             <Connection 
               key={`root-parent-${p.inscription_id}`}
-              startId="node-root"
-              endId={`node-${p.inscription_id}`}
+              startId={`node-${p.inscription_id}`}
+              endId="node-root"
               nodePositions={nodePositions}
             />
           ))}
 
-          {/* 2. Ancestor -> Older Ancestor */}
+          {/* 2. Older Ancestor -> Ancestor (Flowing down) */}
           {[
             { current: parents, olderLevel: grandparents },
             { current: grandparents, olderLevel: greatGrandparents }
@@ -321,7 +421,10 @@ export function GenealogyTree({ chronicle }: Props) {
               const explicitRelations = node.related_to_ids || [];
               const validExplicitRelations = explicitRelations.filter(id => allKnownIds.has(id));
 
-              // If node lacks explicit upward connections, connect to all nodes in the next older level
+              // For connections, we want to go from OlderLevel to Current node
+              // But node.related_to_ids contains IDs of OLDER nodes (parents)
+              // So we connect OlderId -> NodeId
+              
               const relationsToUse = validExplicitRelations.length > 0 
                 ? validExplicitRelations 
                 : olderLevel.map(n => n.inscription_id);
@@ -329,8 +432,8 @@ export function GenealogyTree({ chronicle }: Props) {
               return relationsToUse.map((relatedId) => (
                 <Connection 
                   key={`${node.inscription_id}-${relatedId}`}
-                  startId={`node-${node.inscription_id}`}
-                  endId={relatedId === root.inscription_id ? "node-root" : `node-${relatedId}`}
+                  startId={`node-${relatedId}`}
+                  endId={`node-${node.inscription_id}`}
                   nodePositions={nodePositions}
                 />
               ))
@@ -357,7 +460,7 @@ export function GenealogyTree({ chronicle }: Props) {
               inscription={ggp}
               label="Great-Grandparent"
               isFeatured={ggp.inscription_id === oldestNodeId}
-              onClick={() => setSelectedNode(ggp)}
+              onTap={() => setSelectedNode(ggp)}
             />
           ))}
           {greatGrandparents.length > 9 && renderMoreCard(greatGrandparents.length - 9, false)}
@@ -372,7 +475,7 @@ export function GenealogyTree({ chronicle }: Props) {
               inscription={gp}
               label="Grandparent"
               isFeatured={gp.inscription_id === oldestNodeId}
-              onClick={() => setSelectedNode(gp)}
+              onTap={() => setSelectedNode(gp)}
             />
           ))}
           {grandparents.length > 9 && renderMoreCard(grandparents.length - 9, false)}
@@ -387,7 +490,7 @@ export function GenealogyTree({ chronicle }: Props) {
               inscription={p}
               label="Parent"
               isFeatured={p.inscription_id === oldestNodeId}
-              onClick={() => setSelectedNode(p)}
+              onTap={() => setSelectedNode(p)}
             />
           ))}
           {parents.length > 9 && renderMoreCard(parents.length - 9, false)}
@@ -400,7 +503,7 @@ export function GenealogyTree({ chronicle }: Props) {
             inscription={root}
             label="Root"
             isRoot
-            onClick={() => setSelectedNode(root)}
+            onTap={() => setSelectedNode(root)}
           />
         </div>
 
@@ -413,7 +516,7 @@ export function GenealogyTree({ chronicle }: Props) {
                 id={`node-${child.inscription_id}`}
                 inscription={child}
                 compact
-                onClick={() => setSelectedNode(child)}
+                onTap={() => setSelectedNode(child)}
               />
             ))}
             {totalChildren > 9 && renderMoreCard(totalChildren - 9, true)}

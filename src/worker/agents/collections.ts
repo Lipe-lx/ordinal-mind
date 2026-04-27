@@ -481,7 +481,7 @@ async function fetchProtocolRelations(
   sourceCatalog: SourceCatalogItem[],
   relatedToId?: string
 ): Promise<ProtocolRelationSet | null> {
-  const data = await fetchOptionalJson<ParentInscriptionsResponse | ChildInscriptionsResponse>(url, {
+  const data = await fetchOptionalJson<ParentInscriptionsResponse | ChildInscriptionsResponse | string[]>(url, {
     sourceCatalog,
     sourceType: `protocol_${kind}`,
     urlOrRef: url,
@@ -491,6 +491,17 @@ async function fetchProtocolRelations(
   })
 
   if (!data) return null
+
+  // Handle case where data is a plain array (common in some ord server versions/endpoints)
+  if (Array.isArray(data)) {
+    return {
+      items: data.slice(0, limit).map(item => toRelatedInscriptionSummary(item, relatedToId)),
+      total_count: data.length,
+      more: false,
+      source_ref: url,
+      partial: data.length > limit,
+    }
+  }
 
   const rawItems =
     kind === "parents"
@@ -2119,9 +2130,19 @@ function toRegistryMatch(
 }
 
 function toRelatedInscriptionSummary(
-  item: RecursiveInscriptionSummary,
+  item: RecursiveInscriptionSummary | string,
   relatedToId?: string
 ): RelatedInscriptionSummary {
+  // Handle case where item is just a string (inscription ID)
+  if (typeof item === "string") {
+    return {
+      inscription_id: item,
+      inscription_number: null,
+      content_url: `${ORDINALS_BASE_URL}/content/${item}`,
+      related_to_ids: relatedToId ? [relatedToId] : undefined,
+    }
+  }
+
   return {
     inscription_id: item.id,
     inscription_number: item.number ?? null,

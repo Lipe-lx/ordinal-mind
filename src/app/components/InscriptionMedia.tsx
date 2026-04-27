@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { detectMediaKind, getMediaPreviewMode, buildOrdinalsPreviewUrl } from "../lib/media"
+import { detectMediaKind, getMediaPreviewMode, buildOrdinalsPreviewUrl, isEmojiOnly } from "../lib/media"
 import type { RelatedInscriptionSummary } from "../lib/types"
 
 interface Props {
@@ -105,8 +105,10 @@ function TextPreview({
 
   if (text === null) return <div className="media-placeholder">Loading text...</div>
 
+  const isEmoji = isEmojiOnly(text || "")
+
   return (
-    <div className={`media-text-preview ${className}`}>
+    <div className={`media-text-preview ${isEmoji ? "is-emoji" : ""} ${className}`}>
       <pre>{text}</pre>
       <div className="media-text-meta">{contentType}</div>
     </div>

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react"
-import { getMediaPreviewMode } from "../lib/media"
+import { useEffect, useRef, useState, useMemo, useCallback } from "react"
+import { getMediaPreviewMode, isEmojiOnly } from "../lib/media"
 import { SatRarityBadge, CharmBadge } from "./SatBadge"
 import type { ChronicleResponse } from "../lib/types"
 
@@ -29,15 +29,14 @@ export function InscriptionPreview({
   const [isDragging, setIsDragging] = useState(false)
   const [zoom, setZoom] = useState(1)
   const containerRef = useRef<HTMLDivElement>(null)
-  const imgRef = useRef<HTMLImageElement>(null)
-  const lastMousePos = useRef({ x: 0, y: 0 })
-  const isInteractiveImage = previewMode === "image" && !renderFallback
+  const contentRef = useRef<HTMLDivElement | HTMLImageElement>(null)
+  const lastMousePos = useRef({ x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 })
+  const isInteractive = (previewMode === "image" || previewMode === "text") && !renderFallback
 
   const isMain = activeChronicle.meta.inscription_id === initialChronicle.meta.inscription_id
 
-
-  const updateTransform = (x: number, y: number, dragging: boolean, currentZoom: number) => {
-    if (!containerRef.current || !imgRef.current) return
+  const updateTransform = useCallback((x: number, y: number, dragging: boolean, currentZoom: number) => {
+    if (!containerRef.current || !contentRef.current) return
 
     const rect = containerRef.current.getBoundingClientRect()
     const relX = x - rect.left
@@ -57,19 +56,19 @@ export function InscriptionPreview({
       scale = 0.95 * currentZoom
       skewX = (relX - centerX) / 20
       skewY = (relY - centerY) / 20
-      imgRef.current.style.transition = "transform 0.05s linear"
+      contentRef.current.style.transition = "transform 0.05s linear"
     } else {
-      imgRef.current.style.transition = "transform 0.1s ease-out"
+      contentRef.current.style.transition = "transform 0.1s ease-out"
     }
 
-    imgRef.current.style.transform = `
+    contentRef.current.style.transform = `
       rotateX(${rotateX}deg)
       rotateY(${rotateY}deg)
       scale(${scale})
       skew(${skewX}deg, ${skewY}deg)
     `
 
-    imgRef.current.style.filter = dragging
+    contentRef.current.style.filter = dragging
       ? `brightness(${1 + Math.abs(rotateX + rotateY) / 1000}) contrast(1.1)`
       : "none"
 
@@ -77,24 +76,33 @@ export function InscriptionPreview({
     const py = (relY / rect.height) * 100
     containerRef.current.style.setProperty("--mouse-x", `${px}%`)
     containerRef.current.style.setProperty("--mouse-y", `${py}%`)
-  }
+  }, [containerRef, contentRef])
+
+  const resetTransform = useCallback(() => {
+    if (!contentRef.current) return
+
+    contentRef.current.style.transition =
+      "transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease"
+    contentRef.current.style.transform =
+      `rotateX(0deg) rotateY(0deg) scale(${zoom}) skew(0deg, 0deg)`
+    contentRef.current.style.filter = "none"
+  }, [contentRef, zoom])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isInteractiveImage) return
+    if (!isInteractive) return
     lastMousePos.current = { x: e.clientX, y: e.clientY }
     updateTransform(e.clientX, e.clientY, isDragging, zoom)
   }
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container || !isInteractiveImage) return
+    if (!container || !isInteractive) return
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const delta = e.deltaY * -0.001
       setZoom(prev => {
         const nextZoom = Math.min(Math.max(0.5, prev + delta), 5)
-        // Immediately update transform for smooth feedback
         updateTransform(lastMousePos.current.x, lastMousePos.current.y, isDragging, nextZoom)
         return nextZoom
       })
@@ -102,11 +110,11 @@ export function InscriptionPreview({
 
     container.addEventListener("wheel", onWheel, { passive: false })
     return () => container.removeEventListener("wheel", onWheel)
-  }, [isInteractiveImage, isDragging, zoom])
+  }, [isInteractive, isDragging, updateTransform])
 
   // Global mouse tracking when dragging
   useEffect(() => {
-    if (!isDragging || !isInteractiveImage) return
+    if (!isDragging || !isInteractive) return
 
     const handleWindowMouseMove = (e: MouseEvent) => {
       lastMousePos.current = { x: e.clientX, y: e.clientY }
@@ -125,24 +133,13 @@ export function InscriptionPreview({
       window.removeEventListener("mousemove", handleWindowMouseMove)
       window.removeEventListener("mouseup", handleWindowMouseUp)
     }
-  }, [isDragging, isInteractiveImage, zoom])
-
-  const resetTransform = () => {
-    if (!imgRef.current) return
-
-    setZoom(1)
-    imgRef.current.style.transition =
-      "transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease"
-    imgRef.current.style.transform =
-      "rotateX(0deg) rotateY(0deg) scale(1) skew(0deg, 0deg)"
-    imgRef.current.style.filter = "none"
-  }
+  }, [isDragging, isInteractive, zoom, resetTransform, updateTransform])
 
   return (
     <div
       className={[
         "chronicle-card-content-preview",
-        isInteractiveImage ? "is-interactive" : "",
+        isInteractive ? "is-interactive" : "",
         previewMode === "text" && !renderFallback ? "is-text" : "",
         isSwitching ? "is-loading" : "",
       ]
@@ -150,9 +147,9 @@ export function InscriptionPreview({
         .join(" ")}
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      onMouseDown={isInteractiveImage ? () => setIsDragging(true) : undefined}
+      onMouseDown={isInteractive ? () => setIsDragging(true) : undefined}
       onMouseUp={
-        isInteractiveImage
+        isInteractive
           ? () => {
               setIsDragging(false)
               resetTransform()
@@ -160,7 +157,7 @@ export function InscriptionPreview({
           : undefined
       }
       onMouseLeave={
-        isInteractiveImage && !isDragging
+        isInteractive && !isDragging
           ? () => {
               resetTransform()
             }
@@ -272,11 +269,12 @@ export function InscriptionPreview({
           contentType={media_context.content_type}
           contentUrl={media_context.content_url}
           onFallback={setRenderFallback}
+          innerRef={contentRef}
         />
       ) : (
         <img
           key={activeChronicle.meta.inscription_id}
-          ref={imgRef}
+          ref={contentRef as React.RefObject<HTMLImageElement>}
           src={media_context.content_url}
           alt={`Inscription #${meta.inscription_number}`}
           loading="lazy"
@@ -308,10 +306,12 @@ function TextPreview({
   contentType,
   contentUrl,
   onFallback,
+  innerRef,
 }: {
   contentType: string
   contentUrl: string
   onFallback: (value: boolean) => void
+  innerRef?: React.Ref<HTMLDivElement | HTMLImageElement>
 }) {
   const [state, setState] = useState<{
     status: "loading" | "ready"
@@ -322,6 +322,8 @@ function TextPreview({
     text: "",
     truncated: false,
   })
+
+  const isEmoji = useMemo(() => isEmojiOnly(state.text), [state.text])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -370,7 +372,10 @@ function TextPreview({
   }
 
   return (
-    <div className="chronicle-card-text-preview">
+    <div 
+      ref={innerRef}
+      className={`chronicle-card-text-preview ${isEmoji ? "is-emoji" : ""}`}
+    >
       <pre>{state.text}</pre>
       <div className="chronicle-card-text-meta">
         <span>{contentType}</span>
