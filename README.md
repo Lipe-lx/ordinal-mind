@@ -30,14 +30,18 @@ Ordinal Mind provides a verifiable temporal tree of Bitcoin assets, optional LLM
 │   └── worker/             # Cloudflare Worker (Orchestrator)
 │       ├── agents/         # Specialized data fetchers
 │       │   ├── ordinals.ts # ordinals.com on-chain data
-│       │   ├── mempool.ts  # mempool.space UTXO tracking
-│       │   ├── unisat.ts   # UniSat API (Rarity & Marketplace)
-│       │   ├── collections.ts # Satflow & Ord.net metadata
-│       │   └── xsearch.ts  # X mentions via DDG scraping
+│       │   ├── mempool.ts  # mempool.space forward transfer tracking
+│       │   ├── unisat.ts   # UniSat API (Rarity & Indexer)
+│       │   ├── collections.ts # Multi-source collection context
+│       │   ├── mentions/   # Social signal aggregation (Google Trends)
+│       │   └── webResearch.ts # SearXNG, Wikipedia, and DDG research
 │       ├── timeline.ts     # Event tree construction & deduplication
 │       ├── resolver.ts     # Input normalization (Inscription/Address)
+│       ├── rarity.ts       # Rarity calculation engine
+│       ├── validation.ts   # Cross-source data validation
 │       ├── cache.ts        # KV TTL & Caching logic
-│       └── index.ts        # Worker Entry Point & Orchestration
+│       ├── db.ts           # Validation storage
+│       └── index.ts        # Worker Entry Point, SSE Streaming & Orchestration
 ├── wrangler.jsonc          # Cloudflare Worker configuration
 ├── vite.config.ts          # Vite build & plugin configuration
 └── AGENTS.md               # Product rules and implementation guidelines
@@ -46,10 +50,11 @@ Ordinal Mind provides a verifiable temporal tree of Bitcoin assets, optional LLM
 ## Core Features
 
 *   **Verifiable Timeline**: Deterministic merging of on-chain transfers, genesis data, and marketplace activity.
-*   **Chronicle Card**: Premium, interactive UI with 3D hover effects for asset visualization.
-*   **Collection Intelligence**: Cross-referencing multiple sources (Ord.net, Satflow) for accurate provenance.
-*   **X Mentions**: Fragile but robust discovery of social context via public scraping.
-*   **Sat Rarity**: Integration with UniSat and on-chain CBOR for satoshis rarity profiles.
+*   **SSE Streaming Pipeline**: Real-time progress feedback during complex multi-source data collection.
+*   **Chronicle Card**: Premium, interactive UI with 3D hover effects and integrated media context.
+*   **Collection Intelligence**: Deep cross-referencing of Satflow, Ord.net, and official registries.
+*   **Collector Signals**: Advanced sentiment and attention analysis using Google Trends and social mentions.
+*   **Sat Rarity & Validation**: Multi-indexer validation (UniSat, Ordinals.com) and CBOR trait enrichment.
 
 ## Getting Started
 

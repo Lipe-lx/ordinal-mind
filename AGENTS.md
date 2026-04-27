@@ -201,19 +201,19 @@ Cache keys should be deterministic and based on normalized identifiers.
 
 ---
 
-## Scraping Rules
+## Scraping & Discovery Rules
 
-X mention discovery through DDG HTML scraping is fragile and must be treated carefully.
+Public signal discovery through SearXNG, Wikipedia, and DDG HTML scraping is fragile and must be treated carefully.
 
-Do not assume scraping always works.
+Do not assume discovery always works.
 
-Respect the implicit rate limit.
+Respect implicit rate limits and instance-specific policies.
 
-Avoid parallelizing scraping aggressively.
+Avoid parallelizing scraping aggressively; use batching and racing where appropriate.
 
 Do not introduce browser automation unless explicitly approved.
 
-Prefer simple, robust HTML parsing.
+Prefer simple, robust HTML parsing via HTMLRewriter or regex.
 
 ---
 

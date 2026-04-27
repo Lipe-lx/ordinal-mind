@@ -1,92 +1,157 @@
-# Data Sources — Ordinal Mind (estado real, Abril 2026)
+# Data Sources — Ordinal Mind
 
-Este documento substitui orientacoes antigas e define a fonte de verdade atual do pipeline.
-
-## Principio central
-- Timeline factual e verificavel primeiro.
-- Nenhum endpoint isolado pode derrubar o Chronicle.
-- Traits/raridade de item NAO dependem de UniSat no fluxo principal.
+The architecture uses a multi-agent approach to aggregate public, cacheable data from multiple sources. Primary on-chain data comes from `ordinals.com`, while `mempool.space` acts as the UTXO indexer for forward transfer tracking. Enrichment is provided by UniSat and specialized web research agents.
 
 ---
 
-## Matriz de fontes (producao)
+## Agent 1 — Ordinals.com (src/worker/agents/ordinals.ts)
 
-| Dominio | Fonte principal | Papel no produto | Observacao |
-|---|---|---|---|
-| Inscricao on-chain | `ordinals.com` | metadados base, sat, owner, genesis, content, CBOR | fonte canonicamente prioritaria para metadados |
-| Historico de transferencias | `mempool.space` | rastreio de UTXO/transfers/sales | degrade graciosamente se falhar |
-| Traits e contexto de colecao | `satflow.com` + `ord.net` | atributos do item, supply/rank quando disponivel, contexto de colecao | fonte principal de traits no produto hoje |
-| Charms/metaprotocol | `open-api.unisat.io` | enriquecimento opcional de inscricao (charms, sat, metaprotocol) | NAO fonte primaria de traits/rank |
-| Menções sociais | `html.duckduckgo.com` (`site:x.com`) | descoberta publica de menções no X | scraping fragil, nunca bloqueia pipeline |
+Base: `https://ordinals.com`
 
----
+Provides raw inscription metadata, sat rarity, and CBOR traits.
 
-## Regras de precedencia para traits/rarity
+```typescript
+// src/worker/agents/ordinals.ts
+export const fetchOrdinals = {
+  async inscription(id: string): Promise<InscriptionMeta> {
+    const res = await fetch(`https://ordinals.com/r/inscription/${id}`, {
+      headers: { Accept: "application/json" },
+    })
+    if (!res.ok) throw new Error(`ordinals.com: inscription ${id} not found`)
 
-Ao montar `unisat_enrichment.rarity` (nome historico de campo), usar esta ordem:
+    const data = await res.json() as any
+    const genesisTxid = id.split("i")[0]
 
-1. `ordinals.com/r/metadata/{id}` (CBOR traits) quando houver traits validos.
-2. Overlay do `satflow.com` para a inscricao (`/ordinal/{id}`), incluindo payloads escapados de `__next_f`.
-3. Fallback de `ord.net` via `verifiedGalleryTraitGroups` quando Satflow nao trouxer traits.
-4. Se nenhuma fonte trouxer traits: retornar sem `trait_context` e manter restante do Chronicle.
+    return {
+      inscription_id: data.id,
+      inscription_number: data.number,
+      sat: data.sat ?? 0,
+      sat_rarity: await fetchSatRarity(data.sat),
+      content_type: data.content_type,
+      content_url: `https://ordinals.com/content/${data.id}`,
+      genesis_block: data.height,
+      genesis_timestamp: data.timestamp ? new Date(data.timestamp * 1000).toISOString() : new Date(0).toISOString(),
+      genesis_fee: data.fee,
+      owner_address: data.address ?? "?",
+      satpoint: data.satpoint,
+      genesis_txid: genesisTxid,
+      genesis_vout: 0,
+      current_output: data.output,
+      collection: data.parent ? { parent_inscription_id: data.parent } : undefined,
+    }
+  },
 
-Observacoes:
-- `rarityRank` pode ser `0` em algumas colecoes; nao tratar `0` como erro automaticamente.
-- Arrays escapados (ex.: `\\"attributes\\":[...]`) devem ser parseados corretamente.
-- Nao inventar traits quando a fonte vier vazia.
-
----
-
-## UniSat no Ordinal Mind (escopo atual)
-
-Uso em producao:
-- Endpoint: `GET /v1/indexer/inscription/info/{inscriptionId}`
-- Campos usados: `charms`, `sat`, `metaprotocol`, `contentLength`.
-
-Nao usar como fonte principal para:
-- `attributes/traits` de item para card de raridade.
-- rank de raridade da colecao.
-- frequencias globais de traits da colecao.
-
-Se UniSat falhar:
-- continuar timeline sem bloqueio.
-- manter arvore temporal factual e fontes publicas ativas.
-
----
-
-## Diagnostico recomendado (quando traits zeram)
-
-1. Verificar logs de overlay:
-- `satflow_overlay_parsed.rarity_trait_count`
-- `ord_net_overlay_parsed.rarity_trait_count`
-- `overlay_resolution.selected_rarity_trait_count`
-
-2. Verificar resumo de pipeline:
-- `stream_rarity_pipeline_summary.cbor_trait_count`
-- `stream_rarity_pipeline_summary.satflow_trait_count`
-- `stream_rarity_pipeline_summary.rarity_trait_count`
-
-3. Se Satflow tiver payload escapado e trait count continuar 0:
-- revisar parser de arrays balanceados em string escapada (`__next_f`).
-
-4. Confirmar que ord.net pode retornar `traits: []` para algumas inscricoes (isso e esperado).
+  async metadata(id: string): Promise<Record<string, string> | null> {
+    // Fetches and decodes CBOR metadata (traits)
+    const res = await fetch(`https://ordinals.com/r/metadata/${id}`)
+    if (!res.ok) return null
+    // ... decoding logic using cbor library ...
+  }
+}
+```
 
 ---
 
-## Requisitos de resiliencia
+## Agent 2 — Mempool.space (src/worker/agents/mempool.ts)
 
-- Falha em X mentions nao invalida on-chain.
-- Falha em UniSat nao invalida traits de Satflow/ord.net.
-- Falha em Satflow deve tentar ord.net fallback.
-- Falha em cache deve tentar fetch fresco.
-- Pipeline sempre retorna o maximo factual possivel.
+Base: `https://mempool.space/api`
+
+Used for **forward transfer tracking** via the outspend API. Starts from genesis and follows the inscription output until it reaches an unspent UTXO.
+
+```typescript
+// src/worker/agents/mempool.ts
+export const fetchMempool = {
+  async outspend(txid: string, vout: number): Promise<OutspendResponse> {
+    const res = await fetch(`https://mempool.space/api/tx/${txid}/outspend/${vout}`)
+    return (await res.json()) as OutspendResponse
+  },
+
+  async traceForward(genesisTxid: string, genesisVout: number): Promise<EnrichedTransfer[]> {
+    let currentTxid = genesisTxid
+    let currentVout = genesisVout
+    const transfers = []
+
+    while (true) {
+      const outspend = await this.outspend(currentTxid, currentVout)
+      if (!outspend.spent || !outspend.txid) break
+
+      const tx = await this.tx(outspend.txid)
+      const transfer = analyzeTransfer(tx, outspend.vin, currentVout)
+      transfers.push(transfer)
+
+      currentTxid = tx.txid
+      currentVout = 0 // FIFO simplified
+    }
+    return transfers
+  }
+}
+```
 
 ---
 
-## Contrato de UX
+## Agent 3 — Mentions & Research (src/worker/agents/mentions & webResearch.ts)
 
-A UI deve sempre comunicar:
-- o que foi encontrado,
-- de qual fonte veio,
-- quando nao houve dados de trait em alguma fonte,
-- sem simular certeza quando os overlays vierem vazios.
+Collects social signals (Google Trends) and web lore (SearXNG, Wikipedia, DDG).
+
+```typescript
+// src/worker/agents/mentions/index.ts
+export async function collectSignals(input: MentionSearchInput): Promise<MentionCollectionResult> {
+  const queries = buildMentionQueries(input)
+  const [trendsResult] = await Promise.all([
+    fetchGoogleTrendsMacro(input),
+  ])
+  // ... building CollectorSignals ...
+}
+
+// src/worker/agents/webResearch.ts
+export async function fetchLoreContext(collectionName: string): Promise<WebResearchContext | null> {
+  // Parallel racing across SearXNG instances, Wikipedia, and DDG Lite
+  const searchResults = await searchSearXNG(collectionName)
+  // ... extracting content via HTMLRewriter ...
+}
+```
+
+---
+
+## Agent 4 — UniSat (src/worker/agents/unisat.ts)
+
+Base: `https://open-api.unisat.io`
+
+Used for charm enrichment and market context.
+
+```typescript
+// src/worker/agents/unisat.ts
+export const fetchUnisat = {
+  async inscription(id: string, apiKey: string) {
+    const res = await fetch(`https://open-api.unisat.io/v1/indexer/inscription/info?inscriptionId=${id}`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    })
+    return res.json()
+  }
+}
+```
+
+---
+
+## timeline.ts — Event Construction
+
+Merges all data into a deterministic chronological tree.
+
+```typescript
+// src/worker/timeline.ts
+export function buildTimeline(
+  meta: InscriptionMeta,
+  transfers: EnrichedTransfer[],
+  socialMentions: SocialMention[],
+  unisatEnrichment?: UnisatEnrichment
+): ChronicleEvent[] {
+  const events: ChronicleEvent[] = []
+
+  // 1. Add Genesis & Sat Context
+  // 2. Add Collection & Recursive Refs
+  // 3. Add Transfers & Sales (with price detection)
+  // 4. Add Social Mentions & Research Lore
+
+  return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+}
+```
