@@ -79,6 +79,7 @@ export function ChronicleCard({
             : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
         }
         onCancel={onCancel}
+        collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
       />
       
       {/* Sources Widget */}

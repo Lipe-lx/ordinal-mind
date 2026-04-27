@@ -148,6 +148,8 @@ export function CollectionContextWidget({ collectionContext }: Props) {
     Boolean(profile?.collector_signals.length) ||
     collectionContext.socials.official_x_profiles.length > 0
 
+  const activeSlug = market.ord_net_match?.collection_slug ?? market.satflow_match?.collection_slug
+
   const evidenceCount = [
     registry.match ? "registry" : null,
     relationGroups.length > 0 ? "on-chain relations" : null,
@@ -230,10 +232,11 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                         value={registry.match.matched_collection}
                         detail={`${registry.match.quality_state.replace("_", " ")} · ${registry.match.match_type} match`}
                         tone="curated"
+                        activeSlug={activeSlug}
                       />
                     )}
                     {identityFacets.map((facet) => (
-                      <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
+                      <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} activeSlug={activeSlug} />
                     ))}
                   </>
                 )}
@@ -241,7 +244,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                 {relationGroups.length > 0 && (
                   <>
                     {relationGroups.map((group) => (
-                      <RelationRow key={group.label} group={group} />
+                      <RelationRow key={group.label} group={group} activeSlug={activeSlug} />
                     ))}
                   </>
                 )}
@@ -259,6 +262,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                     value={market.ord_net_match.collection_name}
                     detail={market.ord_net_match.item_name ?? market.ord_net_match.collection_slug}
                     tone="overlay"
+                    activeSlug={activeSlug}
                   />
                 )}
                 {market.satflow_match && (
@@ -267,10 +271,11 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                     value={market.satflow_match.collection_name}
                     detail={market.satflow_match.item_name ?? market.satflow_match.collection_slug}
                     tone="overlay"
+                    activeSlug={activeSlug}
                   />
                 )}
                 {marketFacets.map((facet) => (
-                  <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
+                  <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} activeSlug={activeSlug} />
                 ))}
                 {marketSignals.slice(0, 4).map((signal) => {
                   if (signal.label === "Satflow collection market") {
@@ -298,8 +303,8 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                                 borderRadius: "3px",
                                 border: "1px solid rgba(255, 255, 255, 0.06)"
                               }}>
-                                <span style={{ fontSize: "0.5rem", fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase" }}>{linkifyBrands(label)}</span>
-                                <span style={{ fontSize: "0.688rem", fontWeight: 600, color: "var(--accent-primary)", fontFamily: "var(--font-mono)" }}>{linkifyBrands(value)}</span>
+                                <span style={{ fontSize: "0.5rem", fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase" }}>{linkifyBrands(label, activeSlug)}</span>
+                                <span style={{ fontSize: "0.688rem", fontWeight: 600, color: "var(--accent-primary)", fontFamily: "var(--font-mono)" }}>{linkifyBrands(value, activeSlug)}</span>
                               </div>
                             )
                           })}
@@ -307,6 +312,25 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                       </div>
                     )
                   }
+                  
+                  // Specific handling for ord.net directory to ensure correct URL format
+                  if (signal.label === "ord.net collection directory") {
+                    let url = signal.source_ref
+                    if ((!url || url.includes("index")) && market.ord_net_match?.collection_slug) {
+                      url = `https://ord.net/collection/${market.ord_net_match.collection_slug}`
+                    }
+                    return (
+                      <EvidenceRow
+                        key={`${signal.label}-${signal.value}`}
+                        label={signal.label}
+                        value={signal.value}
+                        tone="overlay"
+                        href={url}
+                        activeSlug={activeSlug}
+                      />
+                    )
+                  }
+
                   return (
                     <EvidenceRow
                       key={`${signal.label}-${signal.value}`}
@@ -315,6 +339,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                       detail={shortenSource(signal.source_ref)}
                       tone="overlay"
                       href={signal.source_ref}
+                      activeSlug={activeSlug}
                     />
                   )
                 })}
@@ -323,10 +348,9 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                     key={profileLink.url}
                     label="Official X account"
                     value={formatXHandle(profileLink.url)}
-                    detail={`Found via ${shortenSource(profileLink.source_ref)}`}
                     tone="overlay"
                     href={profileLink.url}
-                    ctaLabel="Open X"
+                    activeSlug={activeSlug}
                   />
                 ))}
               </div>
@@ -338,7 +362,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
               <span className="widget-provenance-section-label">Caveats</span>
               <div className="widget-meta-grid" style={{ gap: "1px" }}>
                 {partialFacets.map((facet) => (
-                  <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} />
+                  <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} activeSlug={activeSlug} />
                 ))}
               </div>
             </section>
@@ -363,43 +387,31 @@ function EvidenceRow({
   detail,
   tone,
   href,
-  ctaLabel = "Open",
-}: CollectionPresentationFacet & { href?: string; ctaLabel?: string }) {
+  activeSlug,
+}: CollectionPresentationFacet & { href?: string; activeSlug?: string }) {
   return (
-    <div className={`widget-meta-cell tone-${tone} ${tone !== 'overlay' ? 'provenance-cell' : ''}`}>
-      <span className="widget-meta-label">{linkifyBrands(label)}</span>
-      <span className="widget-meta-value">{linkifyBrands(value)}</span>
-      {detail && <span className="widget-meta-sub">{linkifyBrands(detail)}</span>}
-      {href && (
-        <div style={{ marginTop: "4px" }}>
-          <a 
-            href={href} 
-            target="_blank" 
-            rel="noreferrer" 
-            className="widget-meta-sub"
-            style={{ 
-              color: "var(--accent-primary)", 
-              textDecoration: "none", 
-              display: "inline-flex", 
-              alignItems: "center", 
-              gap: "2px", 
-              fontWeight: 700 
-            }}
-          >
-            {ctaLabel} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+    <div className={`widget-meta-cell tone-${tone}`}>
+      <span className="widget-meta-label">{linkifyBrands(label, activeSlug)}</span>
+      <span className="widget-meta-value">
+        {href ? (
+          <a href={href} target="_blank" rel="noreferrer" className="brand-link" style={{ color: "inherit" }}>
+            {linkifyBrands(value, activeSlug)}
           </a>
-        </div>
-      )}
+        ) : (
+          linkifyBrands(value, activeSlug)
+        )}
+      </span>
+      {detail && <span className="widget-meta-sub">{linkifyBrands(detail, activeSlug)}</span>}
     </div>
   )
 }
 
-function RelationRow({ group }: { group: RelationGroup }) {
+function RelationRow({ group, activeSlug }: { group: RelationGroup, activeSlug?: string }) {
   return (
-    <div className="widget-meta-cell tone-canonical provenance-cell">
-      <span className="widget-meta-label">{linkifyBrands(group.label)}</span>
+    <div className="widget-meta-cell tone-canonical">
+      <span className="widget-meta-label">{linkifyBrands(group.label, activeSlug)}</span>
       <span className="widget-meta-value" style={{ whiteSpace: "normal", fontSize: "0.75rem", lineHeight: "1.3" }}>
-        {linkifyBrands(group.description)}
+        {linkifyBrands(group.description, activeSlug)}
       </span>
       <div className="widget-provenance-relation-list" style={{ marginTop: "4px" }}>
         {group.items.slice(0, 4).map((item) => (

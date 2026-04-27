@@ -23,13 +23,21 @@ export function FactualInfoWidget({ meta }: Props) {
     <div className="glass-card" style={{ padding: "var(--space-md)" }}>
       <div className="widget-meta-grid">
       <MetricCell label="Mint Date" value={formatDate(meta.genesis_timestamp)} />
-      <MetricCell label="Genesis Fee" value={formatBtc(meta.genesis_fee)} />
+      <MetricCell 
+        label="Genesis Fee" 
+        value={formatBtc(meta.genesis_fee)} 
+        href={`https://mempool.space/tx/${meta.genesis_txid}`}
+      />
       <MetricCell 
         label="Genesis Owner" 
         value={truncateAddress(meta.genesis_owner_address ?? "")} 
         href={meta.genesis_owner_address ? `https://mempool.space/address/${meta.genesis_owner_address}` : undefined}
       />
-      <MetricCell label="Genesis Block" value={`#${meta.genesis_block?.toLocaleString()}`} />
+      <MetricCell 
+        label="Genesis Block" 
+        value={`#${meta.genesis_block?.toLocaleString()}`} 
+        href={`https://mempool.space/block/${meta.genesis_block}`}
+      />
       </div>
     </div>
   )

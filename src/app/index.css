@@ -509,17 +509,23 @@ select.input-field option {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  padding: 8px;
   height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 2px;
+  z-index: 110;
+  position: relative;
 }
 
 .chronicle-sidebar-left > * {
   flex-shrink: 0;
+}
+
+/* Spacer between preview and first metadata box */
+.chronicle-sidebar-left > *:nth-child(2) {
+  margin-top: 16px;
 }
 
 /* Custom scrollbar for left sidebar */
@@ -560,12 +566,12 @@ select.input-field option {
 }
 
 .timeline-panel-title {
-  padding: var(--space-sm) var(--space-md);
+  padding: 4px var(--space-md);
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 4px;
   border-bottom: 1px solid var(--border-glass);
   background: rgba(255, 255, 255, 0.015);
   flex-shrink: 0;
@@ -576,9 +582,9 @@ select.input-field option {
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.15em;
   color: var(--text-tertiary);
-  white-space: nowrap;
+  text-align: center;
 }
 
 .timeline-scroll-container {
@@ -642,7 +648,7 @@ select.input-field option {
 .timeline-node {
   position: relative;
   padding: var(--space-sm) var(--space-md);
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-md);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-glass);
@@ -787,7 +793,7 @@ select.input-field option {
 
 /* --- Chronicle Card (left side) --- */
 .chronicle-card {
-  padding: var(--space-lg);
+  padding: var(--space-sm);
   border-radius: var(--radius-xl);
   height: 100%;
   min-height: 0;
@@ -798,7 +804,7 @@ select.input-field option {
   
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 2px;
 }
 
 
@@ -2023,15 +2029,7 @@ select.input-field option {
   color: var(--text-tertiary);
 }
 
-.widget-meta-cell.provenance-cell {
-  border-left: 3px solid transparent;
-  padding-left: 9px; /* 12px - 3px */
-}
-
-.widget-meta-cell.provenance-cell.tone-canonical { border-left-color: var(--accent-primary); }
-.widget-meta-cell.provenance-cell.tone-curated { border-left-color: #60a5fa; }
-.widget-meta-cell.provenance-cell.tone-overlay { border-left-color: #34d399; }
-.widget-meta-cell.provenance-cell.tone-partial { border-left-color: #fbbf24; }
+/* Removed colored markers from provenance cells */
 
 .widget-meta-actions {
   display: flex;
@@ -2623,33 +2621,61 @@ select.input-field option {
   transition: color var(--duration-fast);
 }
 
+.widget-sources-label-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1;
+  min-width: 0;
+}
+
 .widget-sources-label {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 600;
+  font-weight: 700;
   transition: color var(--duration-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.widget-sources-items {
+.widget-sources-items-inline {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.widget-sources-items-inline.is-overflowing {
+  mask-image: linear-gradient(to right, black calc(100% - 30px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 30px), transparent 100%);
+}
+
+.widget-sources-items-inline.is-overflowing::after {
+  content: "...";
+  font-weight: 800;
+  color: var(--text-tertiary);
+  margin-left: -10px;
+  padding-right: 10px;
+  pointer-events: none;
 }
 
 .widget-source-inline {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 1px 6px;
   background: var(--bg-glass);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-smooth);
+  flex-shrink: 0;
+  font-size: 0.625rem;
 }
 
 .widget-source-inline:hover {
@@ -2804,8 +2830,6 @@ select.input-field option {
   border-top: 1px solid var(--border-glass);
   padding-top: var(--space-xs);
 }
-
-
 .narrative-content {
   font-size: 0.875rem;
   line-height: 1.75;
@@ -2814,7 +2838,7 @@ select.input-field option {
 
 .narrative-content p:first-child {
   font-size: 0.938rem;
-  color: var(--text-primary);
+  color: var(--accent-primary) !important;
 }
 
 .narrative-content p:first-child::first-letter {
@@ -2823,15 +2847,36 @@ select.input-field option {
   float: left;
   line-height: 1;
   margin-right: 0.1em;
-  color: var(--accent-primary);
+  color: var(--accent-primary) !important;
+  text-shadow: 0 0 15px var(--accent-glow-strong), 0 0 30px var(--accent-glow);
 }
 
 .narrative-paragraph {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.narrative-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+/* 1º, 3º, 5º... parágrafos -> Laranja Bitcoin */
+.narrative-paragraph:nth-of-type(odd) {
+  color: var(--accent-primary) !important;
+}
+
+/* 2º, 4º, 6º... parágrafos -> Cinza Muted */
+.narrative-paragraph:nth-of-type(even) {
+  color: var(--text-secondary) !important;
 }
 
 .narrative-enhanced {
   color: var(--accent-primary);
+  font-weight: 500;
+}
+
+/* Quando em parágrafo laranja (ímpar), o realce fica branco para contraste */
+.narrative-paragraph:nth-of-type(odd) .narrative-enhanced {
+  color: var(--text-primary) !important;
 }
 
 /* Narrative Loading States */

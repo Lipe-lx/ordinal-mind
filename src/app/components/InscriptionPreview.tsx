@@ -102,7 +102,30 @@ export function InscriptionPreview({
 
     container.addEventListener("wheel", onWheel, { passive: false })
     return () => container.removeEventListener("wheel", onWheel)
-  }, [isInteractiveImage, isDragging]) // Re-bind if interactivity or dragging state changes to ensure correct capture
+  }, [isInteractiveImage, isDragging, zoom])
+
+  // Global mouse tracking when dragging
+  useEffect(() => {
+    if (!isDragging || !isInteractiveImage) return
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      lastMousePos.current = { x: e.clientX, y: e.clientY }
+      updateTransform(e.clientX, e.clientY, true, zoom)
+    }
+
+    const handleWindowMouseUp = () => {
+      setIsDragging(false)
+      resetTransform()
+    }
+
+    window.addEventListener("mousemove", handleWindowMouseMove)
+    window.addEventListener("mouseup", handleWindowMouseUp)
+
+    return () => {
+      window.removeEventListener("mousemove", handleWindowMouseMove)
+      window.removeEventListener("mouseup", handleWindowMouseUp)
+    }
+  }, [isDragging, isInteractiveImage, zoom])
 
   const resetTransform = () => {
     if (!imgRef.current) return
@@ -137,9 +160,8 @@ export function InscriptionPreview({
           : undefined
       }
       onMouseLeave={
-        isInteractiveImage
+        isInteractiveImage && !isDragging
           ? () => {
-              setIsDragging(false)
               resetTransform()
             }
           : undefined

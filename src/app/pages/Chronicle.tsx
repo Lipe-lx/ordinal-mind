@@ -296,7 +296,10 @@ export function Chronicle() {
               />
             </div>
             <div className="timeline-scroll-container">
-              <TemporalTree events={chronicle.events} />
+              <TemporalTree 
+                events={chronicle.events} 
+                collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug} 
+              />
             </div>
           </div>
         </div>

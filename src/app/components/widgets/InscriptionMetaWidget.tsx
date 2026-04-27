@@ -17,21 +17,13 @@ export function InscriptionMetaWidget({ meta, events }: Props) {
     : "—"
 
   const eventCount = events.length
-  const transferCount = events.filter((e) => e.event_type === "transfer" || e.event_type === "sale").length
-  const mentionCount = events.filter((e) => e.event_type === "social_mention").length
-
-  const eventSummary = [
-    transferCount > 0 ? `${transferCount} transfer${transferCount > 1 ? "s" : ""}` : null,
-    mentionCount > 0 ? `${mentionCount} mention${mentionCount > 1 ? "s" : ""}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ") || "genesis only"
 
   return (
     <div className="widget-meta-grid">
       <MetricCell
         label="Inscription"
         value={`#${meta.inscription_number?.toLocaleString() ?? "—"}`}
+        href={`https://ordinals.com/inscription/${meta.inscription_id}`}
       />
       <MetricCell
         label="Sat"
@@ -42,39 +34,23 @@ export function InscriptionMetaWidget({ meta, events }: Props) {
         label="Genesis Block"
         value={meta.genesis_block?.toLocaleString() ?? "—"}
         sub={genesisDate}
+        href={`https://mempool.space/block/${meta.genesis_block}`}
+        subHref={`https://mempool.space/tx/${meta.genesis_txid}`}
       />
       <MetricCell
         label="Content Type"
         value={meta.content_type}
+        href={`https://ordinals.com/content/${meta.inscription_id}`}
       />
       <MetricCell
         label="Events"
         value={`${eventCount} total`}
-        sub={eventSummary}
       />
       <MetricCell
         label="Current Owner"
         value={truncateAddress(meta.owner_address)}
-        actions={
-          <div className="widget-meta-actions">
-            <button
-              className="widget-action-btn"
-              title="Copy address"
-              onClick={() => navigator.clipboard.writeText(meta.owner_address)}
-            >
-              📋
-            </button>
-            <a
-              className="widget-action-btn"
-              href={`https://mempool.space/address/${meta.owner_address}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="View on mempool.space"
-            >
-              🔗
-            </a>
-          </div>
-        }
+        href={`https://mempool.space/address/${meta.owner_address}`}
+        copyValue={meta.owner_address}
       />
     </div>
   )
@@ -88,19 +64,66 @@ function MetricCell({
   sub,
   badge,
   actions,
+  href,
+  subHref,
+  copyValue,
 }: {
   label: string
   value: string
   sub?: string
   badge?: React.ReactNode
   actions?: React.ReactNode
+  href?: string
+  subHref?: string
+  copyValue?: string
 }) {
   return (
     <div className="widget-meta-cell">
-      <span className="widget-meta-label">{label}</span>
-      <span className="widget-meta-value">{value}</span>
-      {badge}
-      {sub && <span className="widget-meta-sub">{sub}</span>}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+        <span className="widget-meta-label" style={{ marginBottom: 0 }}>{label}</span>
+        {badge}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <span className="widget-meta-value">
+          {href ? (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="brand-link" style={{ color: "inherit" }}>
+              {value}
+            </a>
+          ) : (
+            value
+          )}
+        </span>
+        {copyValue && (
+          <button
+            className="widget-action-btn-mini"
+            onClick={() => navigator.clipboard.writeText(copyValue)}
+            title="Copy"
+            style={{ 
+              background: "none", 
+              border: "none", 
+              padding: 0, 
+              cursor: "pointer", 
+              fontSize: "0.75rem",
+              opacity: 0.5,
+              display: "inline-flex",
+              alignItems: "center"
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        )}
+      </div>
+      {sub && (
+        <span className="widget-meta-sub">
+          {subHref ? (
+            <a href={subHref} target="_blank" rel="noopener noreferrer" className="brand-link" style={{ color: "inherit", textDecoration: "none" }}>
+              {sub}
+            </a>
+          ) : (
+            sub
+          )}
+        </span>
+      )}
       {actions}
     </div>
   )

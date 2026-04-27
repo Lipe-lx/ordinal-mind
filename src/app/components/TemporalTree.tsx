@@ -4,6 +4,7 @@ import { linkifyBrands } from "../lib/brandLinks"
 
 interface Props {
   events: ChronicleEvent[]
+  collectionSlug?: string
 }
 
 const EVENT_ICONS: Record<string, string> = {
@@ -56,7 +57,7 @@ function formatBtcPrice(sats: number): string {
   return `${sats.toLocaleString("en-US")} sats`
 }
 
-export function TemporalTree({ events }: Props) {
+export function TemporalTree({ events, collectionSlug }: Props) {
   const hasTransfers = events.some(
     (e) => e.event_type === "transfer" || e.event_type === "sale"
   )
@@ -94,7 +95,7 @@ export function TemporalTree({ events }: Props) {
                   : EVENT_ICONS[event.event_type] ?? "•"}{" "}
                 {event.event_type === "social_mention"
                   ? socialLabel(platform)
-                  : linkifyBrands(EVENT_LABELS[event.event_type] ?? event.event_type)}
+                  : linkifyBrands(EVENT_LABELS[event.event_type] ?? event.event_type, collectionSlug)}
               </span>
               <span className="timeline-node-time">
                 {formatDate(event.timestamp)}
@@ -102,7 +103,7 @@ export function TemporalTree({ events }: Props) {
             </div>
 
             <p className="timeline-node-desc">
-              {linkifyBrands(event.description)}
+              {linkifyBrands(event.description, collectionSlug)}
               {event.event_type === "social_mention" && scope && (
                 <span
                   className="timeline-node-heuristic"

@@ -34,6 +34,8 @@ interface Props {
   emptyMessage?: string
   /** Called when user clicks Cancel */
   onCancel?: () => void
+  /** Optional collection slug for brand linking */
+  collectionSlug?: string
 }
 
 const PHASE_LABELS: Record<string, { icon: string; text: string }> = {
@@ -60,6 +62,7 @@ export function NarrativeRenderer({
   actionLabel = "✨ Generative Chronicle",
   emptyMessage = "Generate an AI-powered Chronicle narrative from the factual timeline above.",
   onCancel,
+  collectionSlug,
 }: Props) {
   const [showLogs, setShowLogs] = useState(false)
 
@@ -134,11 +137,11 @@ export function NarrativeRenderer({
               <ReactMarkdown
                 components={{
                   p: ({ children }) => (
-                    <p className="narrative-paragraph">{enhanceContent(children)}</p>
+                    <p className="narrative-paragraph">{enhanceContent(children, collectionSlug)}</p>
                   ),
                 }}
               >
-                {streamingText}
+                {streamingText.trimStart()}
               </ReactMarkdown>
               <span className="narrative-cursor" />
             </div>
@@ -210,11 +213,11 @@ export function NarrativeRenderer({
           components={{
             // Enhanced paragraph rendering
             p: ({ children }) => (
-              <p className="narrative-paragraph">{enhanceContent(children)}</p>
+              <p className="narrative-paragraph">{enhanceContent(children, collectionSlug)}</p>
             ),
           }}
         >
-          {narrative}
+          {narrative.trim()}
         </ReactMarkdown>
       </div>
     </div>
@@ -233,7 +236,7 @@ function isPhaseComplete(phase: string, currentPhase: string): boolean {
  * Enhance inline content: detect Bitcoin addresses and block heights,
  * wrap them in interactive elements.
  */
-function enhanceContent(children: React.ReactNode): React.ReactNode {
+function enhanceContent(children: React.ReactNode, collectionSlug?: string): React.ReactNode {
   if (typeof children !== "string") return children
 
   const text = children as string
@@ -244,7 +247,7 @@ function enhanceContent(children: React.ReactNode): React.ReactNode {
   const needsEnhancement = addressRegex.test(text) || blockRegex.test(text)
 
   // 2. Apply brand linkification
-  const brandLinked = linkifyBrands(text)
+  const brandLinked = linkifyBrands(text, collectionSlug)
   
   // 3. Wrap in enhanced span if it has on-chain identifiers
   if (needsEnhancement) {
