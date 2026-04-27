@@ -11,7 +11,7 @@ export function BYOKModal({ onClose }: Props) {
   const [config, setConfig] = useState<ByokConfig>(
     KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
   )
-  const [showResearch, setShowResearch] = useState(false)
+  const [activeTab, setActiveTab] = useState<"llm" | "research">("llm")
 
   function handleProviderChange(e: ChangeEvent<HTMLSelectElement>) {
     const newProvider = e.target.value as Provider
@@ -82,122 +82,137 @@ export function BYOKModal({ onClose }: Props) {
             Keys stay in this browser session only. Select your provider and model below.
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginTop: "1.5rem" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Provider</label>
-              <select
-                className="input-field"
-                value={config.provider}
-                onChange={handleProviderChange}
-              >
-                <option value="unknown" disabled>Select Provider...</option>
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
+          <div className="byok-tabs">
+            <button 
+              className={`byok-tab-btn ${activeTab === "llm" ? "active" : ""}`}
+              onClick={() => setActiveTab("llm")}
+            >
+              AI Engine
+            </button>
+            <button 
+              className={`byok-tab-btn ${activeTab === "research" ? "active" : ""}`}
+              onClick={() => setActiveTab("research")}
+            >
+              Research Tools
+            </button>
+          </div>
 
-            {config.provider !== "unknown" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Model</label>
-                <select
-                  className="input-field"
-                  value={config.model}
-                  onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))}
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginTop: "0.5rem", minHeight: "340px" }}>
+            <AnimatePresence mode="wait">
+              {activeTab === "llm" ? (
+                <motion.div 
+                  key="llm"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
                 >
-                  {MODELS[config.provider]?.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Provider</label>
+                    <select
+                      className="input-field"
+                      value={config.provider}
+                      onChange={handleProviderChange}
+                    >
+                      <option value="unknown" disabled>Select Provider...</option>
+                      {PROVIDERS.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>API Key</label>
-              <input
-                className="input-field"
-                type="password"
-                value={config.key}
-                onChange={handleKeyChange}
-                placeholder="Paste your API key here..."
-                autoComplete="off"
-                id="byok-key-input"
-              />
-            </div>
+                  {config.provider !== "unknown" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Model</label>
+                      <select
+                        className="input-field"
+                        value={config.model}
+                        onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))}
+                      >
+                        {MODELS[config.provider]?.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-            <div style={{ marginTop: "1rem" }}>
-              <button 
-                className="btn btn-ghost" 
-                style={{ width: "100%", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--border-subtle)", borderRadius: 0 }}
-                onClick={() => setShowResearch(!showResearch)}
-              >
-                <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>Research Tools (Optional)</span>
-                <span>{showResearch ? "▼" : "▶"}</span>
-              </button>
-              
-              <AnimatePresence>
-                {showResearch && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    style={{ overflow: "hidden", display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}
-                  >
-                    <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
-                      Provide keys for specialized search tools to enable the autonomous research phase.
-                    </p>
-                    
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Brave Search API Key</label>
-                      <input
-                        className="input-field"
-                        type="password"
-                        value={config.researchKeys?.braveSearchApiKey || ""}
-                        onChange={(e) => handleResearchKeyChange("braveSearchApiKey", e.target.value)}
-                        placeholder="BS..."
-                        autoComplete="off"
-                      />
-                    </div>
-                    
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Exa API Key</label>
-                      <input
-                        className="input-field"
-                        type="password"
-                        value={config.researchKeys?.exaApiKey || ""}
-                        onChange={(e) => handleResearchKeyChange("exaApiKey", e.target.value)}
-                        placeholder="exa..."
-                        autoComplete="off"
-                      />
-                    </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>API Key</label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      value={config.key}
+                      onChange={handleKeyChange}
+                      placeholder="Paste your API key here..."
+                      autoComplete="off"
+                      id="byok-key-input"
+                    />
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div 
+                  key="research"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+                >
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: "0 0 0.5rem 0" }}>
+                    Provide keys for specialized search tools to enable the autonomous research phase.
+                  </p>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Brave Search API Key</label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      value={config.researchKeys?.braveSearchApiKey || ""}
+                      onChange={(e) => handleResearchKeyChange("braveSearchApiKey", e.target.value)}
+                      placeholder="BS..."
+                      autoComplete="off"
+                    />
+                  </div>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Exa API Key</label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      value={config.researchKeys?.exaApiKey || ""}
+                      onChange={(e) => handleResearchKeyChange("exaApiKey", e.target.value)}
+                      placeholder="exa..."
+                      autoComplete="off"
+                    />
+                  </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Perplexity API Key</label>
-                      <input
-                        className="input-field"
-                        type="password"
-                        value={config.researchKeys?.perplexityApiKey || ""}
-                        onChange={(e) => handleResearchKeyChange("perplexityApiKey", e.target.value)}
-                        placeholder="pplx..."
-                        autoComplete="off"
-                      />
-                    </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Perplexity API Key</label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      value={config.researchKeys?.perplexityApiKey || ""}
+                      onChange={(e) => handleResearchKeyChange("perplexityApiKey", e.target.value)}
+                      placeholder="pplx..."
+                      autoComplete="off"
+                    />
+                  </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>SerpApi Key (Google Trends)</label>
-                      <input
-                        className="input-field"
-                        type="password"
-                        value={config.researchKeys?.serpapiApiKey || ""}
-                        onChange={(e) => handleResearchKeyChange("serpapiApiKey", e.target.value)}
-                        placeholder="serpapi..."
-                        autoComplete="off"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>SerpApi Key (Google Trends)</label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      value={config.researchKeys?.serpapiApiKey || ""}
+                      onChange={(e) => handleResearchKeyChange("serpapiApiKey", e.target.value)}
+                      placeholder="serpapi..."
+                      autoComplete="off"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="byok-actions" style={{ marginTop: "1.5rem" }}>
