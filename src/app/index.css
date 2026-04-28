@@ -407,19 +407,13 @@ a:hover {
   padding: 4px;
   border-radius: var(--radius-full);
   transition: all var(--duration-normal) var(--ease-smooth);
-  filter: grayscale(1) opacity(0.5);
+  color: var(--accent-primary);
   position: relative;
   outline: none;
 }
 
-.btn-minimal-key:hover,
-.btn-minimal-key.has-key {
-  filter: grayscale(0) opacity(1);
+.btn-minimal-key:hover {
   transform: scale(1.1);
-}
-
-.btn-minimal-key.has-key {
-  color: var(--accent-primary);
 }
 
 .btn-minimal-key::after {
@@ -428,15 +422,10 @@ a:hover {
   inset: -4px;
   border-radius: 50%;
   background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-  opacity: 0;
+  opacity: 1;
   transition: opacity var(--duration-normal) var(--ease-smooth);
   z-index: -1;
   pointer-events: none;
-}
-
-.btn-minimal-key:hover::after,
-.btn-minimal-key.has-key::after {
-  opacity: 1;
 }
 
 /* --- Input Fields --- */
