@@ -213,7 +213,7 @@ export function CollectionContextWidget({ collectionContext, expanded: externalE
             <section className="widget-provenance-section">
               <span className="widget-provenance-section-label">Verified identity</span>
               <div className="widget-meta-grid" style={{ 
-                gridTemplateColumns: (identityFacets.length > 0 || registry.match) && relationGroups.length > 0 ? "1fr 1fr" : "1fr", 
+                gridTemplateColumns: (identityFacets.length > 0 || registry.match) && relationGroups.length > 0 ? "repeat(2, minmax(0, 1fr))" : "1fr", 
                 gap: "1px" 
               }}>
                 {(identityFacets.length > 0 || registry.match) && (

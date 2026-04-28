@@ -72,7 +72,6 @@ export const GenealogyNode = memo(({ id, inscription, label, isRoot, compact, is
         cursor: "pointer",
         userSelect: "none",
         WebkitUserSelect: "none",
-        willChange: "transform" // Promote to compositor layer
       }}
     >
       <div className="node-card glass-card" style={{ transform: "translateZ(30px)" }}>

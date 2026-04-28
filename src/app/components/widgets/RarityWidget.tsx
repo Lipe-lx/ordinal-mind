@@ -45,7 +45,8 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
     return slots
   }, [visibleTraits])
 
-  if (!rarity || rarity.traits.length === 0) return null
+  // Removed early return guard to ensure the board always renders (fluid UI pattern)
+  // if (!rarity || rarity.traits.length === 0) return null
 
   const confidenceIcon = validation
     ? validation.confidence === "high" ? "✓" : validation.confidence === "medium" ? "⚠" : "✗"
@@ -95,7 +96,7 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
         )}
       </div>
 
-      {!!rarity.rarity_rank && (
+      {!!rarity?.rarity_rank && (
         <div className="widget-meta-cell widget-rarity-rank-cell">
           <span className="widget-meta-label">Rarity Rank</span>
           <span className="widget-meta-value">#{rarity.rarity_rank.toLocaleString("en-US")}</span>
@@ -106,27 +107,35 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
       )}
       
       <div className="widget-meta-grid widget-rarity-traits-grid">
-        {traitSlots.map((trait, index) => (
-          <div
-            key={trait ? `${trait.trait_type}-${trait.value}` : `empty-${currentPage}-${index}`}
-            className={`widget-meta-cell ${trait ? "" : "widget-meta-cell-empty"}`.trim()}
-            aria-hidden={!trait}
-          >
-            {trait ? (
-              <>
-                <span className="widget-meta-label">{trait.trait_type}</span>
-                <span className="widget-meta-value">{trait.value}</span>
-                {trait.frequency_pct !== undefined && (
-                  <span className="widget-meta-sub">
-                    {trait.frequency_pct < 1
-                      ? `${trait.frequency_pct.toFixed(2)}%`
-                      : `${Math.round(trait.frequency_pct)}%`} freq
-                  </span>
-                )}
-              </>
-            ) : null}
-          </div>
-        ))}
+        {traitSlots.map((trait, index) => {
+          const isPlaceholder = !trait && index === 0 && traitItems.length === 0
+          return (
+            <div
+              key={trait ? `${trait.trait_type}-${trait.value}` : `empty-${currentPage}-${index}`}
+              className={`widget-meta-cell ${trait || isPlaceholder ? "" : "widget-meta-cell-empty"}`.trim()}
+              aria-hidden={!trait && !isPlaceholder}
+            >
+              {trait ? (
+                <>
+                  <span className="widget-meta-label">{trait.trait_type}</span>
+                  <span className="widget-meta-value">{trait.value}</span>
+                  {trait.frequency_pct !== undefined && (
+                    <span className="widget-meta-sub">
+                      {trait.frequency_pct < 1
+                        ? `${trait.frequency_pct.toFixed(2)}%`
+                        : `${Math.round(trait.frequency_pct)}%`} freq
+                    </span>
+                  )}
+                </>
+              ) : isPlaceholder ? (
+                <>
+                  <span className="widget-meta-label">Attributes</span>
+                  <span className="widget-meta-value" style={{ opacity: 0.5 }}>—</span>
+                </>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
 
       {/* Footer Info (Validation & Source) */}
