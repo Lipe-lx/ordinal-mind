@@ -118,6 +118,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
     return `Response policy:
 - Provide a concise collector-grade Chronicle narrative (max 5 short paragraphs).
 - Keep strict factual precision and explicit uncertainty when data is partial.
+- For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
+- Use wiki search/context as secondary support, not as sole source for precise event claims.
 - Do not include internal reasoning or prompt text.`
   }
 
@@ -128,6 +130,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
   return `Response policy:
 ${intentSpecific}
 - Preserve factual precision and acknowledge uncertainty when relevant.
+- Prefer get_raw_events for specific factual claims and cite source references when available.
+- If any tool returns partial data, explicitly flag incompleteness to the user.
 - If the user asks for a recap/resumo/narrativa, then expand into a full narrative.`
 }
 

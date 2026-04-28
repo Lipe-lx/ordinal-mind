@@ -21,6 +21,8 @@ interface Props {
   synthError: string | null
   inputError: string | null
   lastInputMode: SynthesisMode | null
+  wikiStatusLabel: string
+  wikiStatusError: string | null
   researchLogs: ResearchLog[]
   onSendMessage: (prompt: string) => Promise<void> | void
   onNewThread: () => void
@@ -43,6 +45,8 @@ export function ChronicleCard({
   synthError,
   inputError,
   lastInputMode,
+  wikiStatusLabel,
+  wikiStatusError,
   researchLogs,
   onSendMessage,
   onNewThread,
@@ -122,6 +126,8 @@ export function ChronicleCard({
             error={synthError}
             inputError={inputError}
             inputMode={lastInputMode}
+            wikiStatusLabel={wikiStatusLabel}
+            wikiStatusError={wikiStatusError}
             researchLogs={researchLogs}
             hasKey={hasKey}
             onSend={onSendMessage}

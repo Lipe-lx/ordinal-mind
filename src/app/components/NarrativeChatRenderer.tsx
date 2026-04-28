@@ -17,6 +17,8 @@ interface Props {
   providerName?: string
   modelName?: string
   inputMode?: SynthesisMode | null
+  wikiStatusLabel?: string
+  wikiStatusError?: string | null
   error?: string | null
   inputError?: string | null
   researchLogs?: ResearchLog[]
@@ -42,6 +44,8 @@ export function NarrativeChatRenderer({
   providerName,
   modelName,
   inputMode,
+  wikiStatusLabel,
+  wikiStatusError,
   error,
   inputError,
   researchLogs = [],
@@ -192,6 +196,11 @@ export function NarrativeChatRenderer({
           {error ?? inputError ?? localInputError}
         </p>
       )}
+      {!error && !inputError && !localInputError && wikiStatusError && (
+        <p className="narrative-chat-error" role="status" aria-live="polite">
+          {wikiStatusError}
+        </p>
+      )}
 
       <form className="narrative-chat-input" onSubmit={submit}>
         <textarea
@@ -218,6 +227,7 @@ export function NarrativeChatRenderer({
           <div className="narrative-chat-meta">
             {providerName && modelName && <span className="model-badge">{providerName} · {modelName}</span>}
             {inputMode === "image+context" && <span>image + context</span>}
+            {wikiStatusLabel && <span>{wikiStatusLabel}</span>}
             {elapsed >= 10 && <span>{elapsed}s</span>}
           </div>
           <div className="narrative-chat-actions">

@@ -127,6 +127,8 @@ export function Chronicle() {
     error: synthError,
     inputError,
     lastInputMode,
+    wikiStatusLabel,
+    wikiStatusError,
     sendMessage,
     startNewThread,
     resumeThread,
@@ -248,6 +250,8 @@ export function Chronicle() {
           synthError={synthError}
           inputError={inputError}
           lastInputMode={lastInputMode}
+          wikiStatusLabel={wikiStatusLabel}
+          wikiStatusError={wikiStatusError}
           onSendMessage={sendMessage}
           onNewThread={startNewThread}
           onResumeThread={resumeThread}

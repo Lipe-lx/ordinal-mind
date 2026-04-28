@@ -5,9 +5,6 @@ import type { ChronicleEvent, InscriptionMeta, UnisatEnrichment } from "../app/l
 import type { SocialMention } from "../app/lib/types"
 import type { EnrichedTransfer } from "./agents/mempool"
 
-let _seq = 0
-const uid = () => `ev_${Date.now()}_${_seq++}`
-
 export function buildTimeline(
   meta: InscriptionMeta,
   transfers: EnrichedTransfer[],
@@ -15,10 +12,25 @@ export function buildTimeline(
   unisatEnrichment?: UnisatEnrichment
 ): ChronicleEvent[] {
   const events: ChronicleEvent[] = []
+  const idCounters = new Map<string, number>()
+
+  const makeEventId = (
+    eventType: ChronicleEvent["event_type"],
+    timestamp: string,
+    blockHeight: number,
+    sourceRef: string,
+    description: string
+  ): string => {
+    const seed = `${meta.inscription_id}|${eventType}|${timestamp}|${blockHeight}|${sourceRef}|${description}`
+    const occurrence = (idCounters.get(seed) ?? 0) + 1
+    idCounters.set(seed, occurrence)
+    const hash = stableHash(`${seed}|${occurrence}`)
+    return `ev_${eventType}_${hash}`
+  }
 
   // Genesis event — always present
   events.push({
-    id: uid(),
+    id: makeEventId("genesis", meta.genesis_timestamp, meta.genesis_block, meta.genesis_txid, `genesis:${meta.genesis_block}`),
     timestamp: meta.genesis_timestamp,
     block_height: meta.genesis_block,
     event_type: "genesis",
@@ -36,7 +48,7 @@ export function buildTimeline(
   if (meta.sat_rarity !== "common") {
     const charms = meta.charms ?? (unisatEnrichment?.inscription_info?.charms ?? [])
     events.push({
-      id: uid(),
+      id: makeEventId("sat_context", meta.genesis_timestamp, meta.genesis_block, `sat:${meta.sat}`, `sat:${meta.sat_rarity}:${charms.join(",")}`),
       timestamp: meta.genesis_timestamp,
       block_height: meta.genesis_block,
       event_type: "sat_context",
@@ -59,7 +71,7 @@ export function buildTimeline(
     }
 
     events.push({
-      id: uid(),
+      id: makeEventId("trait_context", meta.genesis_timestamp, meta.genesis_block, "ordinals.com", desc),
       timestamp: meta.genesis_timestamp,
       block_height: meta.genesis_block,
       event_type: "trait_context",
@@ -78,7 +90,13 @@ export function buildTimeline(
   // Collection link
   if (meta.collection) {
     events.push({
-      id: uid(),
+      id: makeEventId(
+        "collection_link",
+        meta.genesis_timestamp,
+        meta.genesis_block,
+        meta.collection.parent_inscription_id,
+        `collection:${meta.collection.name ?? meta.collection.parent_inscription_id}`
+      ),
       timestamp: meta.genesis_timestamp,
       block_height: meta.genesis_block,
       event_type: "collection_link",
@@ -92,7 +110,13 @@ export function buildTimeline(
   const refs = meta.recursive_refs ?? []
   for (const ref of refs) {
     events.push({
-      id: uid(),
+      id: makeEventId(
+        "recursive_ref",
+        meta.genesis_timestamp,
+        meta.genesis_block,
+        ref,
+        `recursive:${ref}`
+      ),
       timestamp: meta.genesis_timestamp,
       block_height: meta.genesis_block,
       event_type: "recursive_ref",
@@ -105,7 +129,13 @@ export function buildTimeline(
   // Transfers and sales — using forward-tracked data with real price detection
   for (const t of transfers) {
     events.push({
-      id: uid(),
+      id: makeEventId(
+        t.is_sale ? "sale" : "transfer",
+        t.confirmed_at ?? new Date(0).toISOString(),
+        t.block_height,
+        t.tx_id,
+        `${t.from_address}->${t.to_address}:${t.is_sale ? "sale" : "transfer"}:${t.value ?? 0}`
+      ),
       timestamp: t.confirmed_at ?? new Date(0).toISOString(),
       block_height: t.block_height,
       event_type: t.is_sale ? "sale" : "transfer",
@@ -129,7 +159,13 @@ export function buildTimeline(
   // Social mentions
   for (const mention of socialMentions) {
     events.push({
-      id: uid(),
+      id: makeEventId(
+        "social_mention",
+        mention.published_at,
+        0,
+        mention.canonical_url,
+        `${mention.platform}:${mention.author_handle ?? ""}:${mention.match_type}`
+      ),
       timestamp: mention.published_at,
       block_height: 0,
       event_type: "social_mention",
@@ -163,6 +199,20 @@ export function buildTimeline(
   })
 
   return events
+}
+
+function stableHash(input: string): string {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash +=
+      (hash << 1) +
+      (hash << 4) +
+      (hash << 7) +
+      (hash << 8) +
+      (hash << 24)
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0")
 }
 
 const truncAddr = (addr: string) =>

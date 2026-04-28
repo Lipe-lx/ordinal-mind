@@ -14,5 +14,12 @@
       "binding": "CHRONICLES_KV",
       "id": "9434dd5bf9394fcc808384e46ff61725"
     }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ordinal-mind-wiki",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
   ]
 }

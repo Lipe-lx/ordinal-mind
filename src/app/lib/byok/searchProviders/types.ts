@@ -8,6 +8,7 @@ export interface SearchResult {
 export interface SearchToolResult {
   tool_name: string
   results: SearchResult[]
+  data?: Record<string, unknown>
   error?: string
 }
 

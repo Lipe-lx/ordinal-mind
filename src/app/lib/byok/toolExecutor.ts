@@ -5,6 +5,7 @@ import { coingeckoProvider } from "./searchProviders/coingecko"
 import { serpapiProvider } from "./searchProviders/serpapi"
 import { serpapiSearchProvider } from "./searchProviders/serpapiSearch"
 import type { SearchToolResult, SearchProviderConfig } from "./searchProviders/types"
+import { executeWikiTool } from "./wikiAdapter"
 
 const PROVIDERS = {
   web_search: braveProvider,
@@ -13,6 +14,13 @@ const PROVIDERS = {
   market_context: coingeckoProvider,
   public_interest: serpapiProvider,
 }
+
+const WIKI_TOOL_NAMES = new Set([
+  "search_wiki",
+  "get_raw_events",
+  "get_timeline",
+  "get_collection_context",
+])
 
 export interface ResearchLog {
   id: string
@@ -57,6 +65,27 @@ export class ToolExecutor {
     this.callCount++
     console.log(`[ToolExecutor] Executing ${toolName} (Call ${this.callCount}/${this.maxCalls})`, args)
     this.onLog?.({ id, tool: toolName, args, status: "running" })
+
+    if (WIKI_TOOL_NAMES.has(toolName)) {
+      try {
+        const payload = await executeWikiTool(toolName, args)
+        const error = typeof payload.error === "string" ? payload.error : undefined
+        const summary = error
+          ? `wiki error: ${error}`
+          : `wiki ok: ${toolName}`
+        this.onLog?.({ id, tool: toolName, args, status: error ? "error" : "done", result: summary, error })
+        return {
+          tool_name: toolName,
+          results: [{ content: summary }],
+          data: payload,
+          error,
+        }
+      } catch (e) {
+        const error = String(e)
+        this.onLog?.({ id, tool: toolName, args, status: "error", error })
+        return { tool_name: toolName, results: [], error }
+      }
+    }
 
     let provider = Object.values(PROVIDERS).find(p => p.name === toolName)
     

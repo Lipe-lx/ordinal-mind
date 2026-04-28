@@ -4,6 +4,8 @@ import { sanitizeNarrative } from "./sanitizer"
 import { ToolExecutor, type ResearchLog } from "./toolExecutor"
 import type { Chronicle } from "../types"
 import type { SynthesisMode } from "./context"
+import { useWikiLifecycle } from "./wikiLifecycle"
+import { buildHybridUserMessage } from "./wikiAdapter"
 import type { ChatMessage, ChatToolLog, ChatThreadSummary } from "./chatTypes"
 import {
   activateChatThread,
@@ -66,7 +68,9 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
   const [lastInputMode, setLastInputMode] = useState<SynthesisMode | null>(null)
   const [researchLogs, setResearchLogs] = useState<ResearchLog[]>([])
   const [toolLogs, setToolLogs] = useState<ChatToolLog[]>([])
+  const [wikiToolUsageCount, setWikiToolUsageCount] = useState(0)
   const [inputError, setInputError] = useState<string | null>(null)
+  const wikiLifecycle = useWikiLifecycle(chronicle)
 
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -87,6 +91,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       setError(null)
       setResearchLogs([])
       setToolLogs([])
+      setWikiToolUsageCount(0)
       setLastInputMode(null)
       autoTurnRef.current = null
       return
@@ -101,6 +106,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     setError(null)
     setResearchLogs([])
     setToolLogs([])
+    setWikiToolUsageCount(0)
     setLastInputMode(null)
     setPhase("idle")
     autoTurnRef.current = null
@@ -168,6 +174,10 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       lastSubmittedRef.current = { prompt: trimmedPrompt, options }
 
       const turnId = buildId("turn")
+      const hybridPrompt = buildHybridUserMessage(trimmedPrompt, {
+        wikiPage: wikiLifecycle.wikiPage,
+        wikiStatus: wikiLifecycle.status,
+      })
       const userMessage: ChatMessage | null = options.silentUserMessage
         ? null
         : {
@@ -259,13 +269,16 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
             }
             return [...prev, nextLog]
           })
+          if (log.status !== "running" && (log.tool.startsWith("get_") || log.tool === "search_wiki")) {
+            setWikiToolUsageCount((count) => count + 1)
+          }
         })
 
         let firstChunk = true
         const result = await adapter.chatStream({
           chronicle,
           history: modelHistory,
-          userMessage: trimmedPrompt,
+          userMessage: hybridPrompt,
           mode,
           intent,
           onChunk: (chunk) => {
@@ -324,7 +337,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         abortRef.current = null
       }
     },
-    [activeThreadId, chronicle, clearTimer, startTimer]
+    [activeThreadId, chronicle, clearTimer, startTimer, wikiLifecycle.status, wikiLifecycle.wikiPage]
   )
 
   const retryLast = useCallback(async () => {
@@ -420,6 +433,11 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     elapsed,
     researchLogs,
     toolLogs,
+    wikiPage: wikiLifecycle.wikiPage,
+    wikiStatus: wikiLifecycle.status,
+    wikiStatusLabel: wikiLifecycle.statusLabel,
+    wikiStatusError: wikiLifecycle.lastError,
+    wikiToolUsageCount,
     lastInputMode,
     sendMessage,
     startNewThread,

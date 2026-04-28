@@ -252,9 +252,11 @@ describe("buildTimeline", () => {
 
       expect(events1.length).toBe(events2.length)
       for (let i = 0; i < events1.length; i++) {
+        expect(events1[i].id).toBe(events2[i].id)
         expect(events1[i].event_type).toBe(events2[i].event_type)
         expect(events1[i].timestamp).toBe(events2[i].timestamp)
         expect(events1[i].description).toBe(events2[i].description)
+        expect(events1[i].id.startsWith("ev_")).toBe(true)
       }
     })
   })

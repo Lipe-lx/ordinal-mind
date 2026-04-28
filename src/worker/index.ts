@@ -17,6 +17,7 @@ import { cacheGet, cachePut } from "./cache"
 import { buildInscriptionRarity } from "./rarity"
 import { validateAcrossSources, mergeCharms } from "./validation"
 import { db } from "./db"
+import { persistRawEvents } from "./wiki/persistEvents"
 import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment, WebResearchContext } from "../app/lib/types"
 import type { MentionCollectionResult } from "./agents/mentions/types"
 import { handleWikiRoute } from "./routes/wiki"
@@ -26,6 +27,7 @@ export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   ENVIRONMENT: string
   UNISAT_API_KEY?: string
+  DB?: D1Database
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -541,6 +543,15 @@ async function handleStandardChronicle(
       : undefined,
   }
 
+  if (env.DB) {
+    void persistRawEvents(env, id, events).catch((err) => {
+      console.error("Raw events persistence failed:", err)
+      diagLog(diagnostics, "wiki_layer0_persist_error", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
+  }
+
   // Cache (fire-and-forget) - only for full scans
   if (!lite) {
     try {
@@ -906,6 +917,15 @@ async function handleStreamingChronicle(
         debug_info: diagnostics?.debug
           ? mentionDebugInfo
           : undefined,
+      }
+
+      if (env.DB) {
+        void persistRawEvents(env, id, events).catch((err) => {
+          console.error("Raw events persistence failed (stream):", err)
+          diagLog(diagnostics, "wiki_layer0_persist_error_stream", {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
       }
 
       // Cache (fire-and-forget)
