@@ -4,69 +4,84 @@ import { runWikiLint } from "../wiki/lint"
 import { handleWikiTool } from "../wiki/tools"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url)
-  const path = url.pathname
+  try {
+    const url = new URL(request.url)
+    const path = url.pathname
 
-  if (request.method === "GET" && path === "/api/wiki/lint") {
-    if (!env.DB) {
-      return json(
-        { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
-        503
-      )
-    }
-    const report = await runWikiLint(env)
-    return json(report)
-  }
-
-  if (request.method === "POST" && path === "/api/wiki/ingest") {
-    return handleIngest(request, env)
-  }
-
-  if (request.method === "POST" && path.startsWith("/api/wiki/tools/")) {
-    const toolName = path.replace("/api/wiki/tools/", "")
-    return handleWikiTool(toolName, request, env)
-  }
-
-  if (request.method === "GET" && path.startsWith("/api/wiki/") && !path.startsWith("/api/wiki/tools/")) {
-    if (!env.DB) {
-      return json(
-        { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
-        503
-      )
+    if (request.method === "GET" && path === "/api/wiki/lint") {
+      if (!env.DB) {
+        return json(
+          { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
+          503
+        )
+      }
+      const report = await runWikiLint(env)
+      return json(report)
     }
 
-    const slug = decodeURIComponent(path.replace("/api/wiki/", ""))
-    const row = await env.DB.prepare(`
+    if (request.method === "POST" && path === "/api/wiki/ingest") {
+      return handleIngest(request, env)
+    }
+
+    if (request.method === "POST" && path.startsWith("/api/wiki/tools/")) {
+      const toolName = path.replace("/api/wiki/tools/", "")
+      return handleWikiTool(toolName, request, env)
+    }
+
+    if (request.method === "GET" && path.startsWith("/api/wiki/") && !path.startsWith("/api/wiki/tools/")) {
+      if (!env.DB) {
+        return json(
+          { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
+          503
+        )
+      }
+
+      const slug = decodeURIComponent(path.replace("/api/wiki/", ""))
+      const row = await env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,
              cross_refs_json, source_event_ids_json, generated_at,
              byok_provider, unverified_count, view_count, updated_at
       FROM wiki_pages
       WHERE slug = ?
       LIMIT 1
-    `)
-      .bind(slug)
-      .first<Record<string, unknown>>()
+      `)
+        .bind(slug)
+        .first<Record<string, unknown>>()
 
-    if (!row) {
-      return json({ ok: false, error: "wiki_page_not_found", slug }, 404)
-    }
+      if (!row) {
+        return json({ ok: false, error: "wiki_page_not_found", slug }, 404)
+      }
 
-    void env.DB.prepare(`
+      void env.DB.prepare(`
       UPDATE wiki_pages
       SET view_count = view_count + 1,
           updated_at = datetime('now')
       WHERE slug = ?
     `)
-      .bind(slug)
-      .run()
+        .bind(slug)
+        .run()
 
-    return json({
-      ok: true,
-      ...toWikiPageResponse(row),
-    })
+      return json({
+        ok: true,
+        ...toWikiPageResponse(row),
+      })
+    }
+
+    return json({ ok: false, error: "wiki_route_not_found" }, 404)
+  } catch (error) {
+    if (isMissingWikiSchemaError(error)) {
+      return json(
+        {
+          ok: false,
+          error: "wiki_schema_missing",
+          phase: "fail_soft",
+          detail: "wiki tables are not initialized in D1",
+        },
+        503
+      )
+    }
+    throw error
   }
-
-  return json({ ok: false, error: "wiki_route_not_found" }, 404)
 }
 
 function toWikiPageResponse(row: Record<string, unknown>): Record<string, unknown> {
@@ -92,6 +107,12 @@ function safeJsonParse<T>(value: string, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function isMissingWikiSchemaError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  return message.includes("no such table") || message.includes("no such module: fts5")
 }
 
 function json(data: unknown, status = 200): Response {
