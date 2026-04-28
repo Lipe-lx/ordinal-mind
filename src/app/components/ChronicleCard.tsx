@@ -47,7 +47,6 @@ export function ChronicleCard({
 
   return (
     <div className="chronicle-card glass-card">
-      <CollectionContextWidget collectionContext={chronicle.collection_context} />
       {chronicle.collector_signals.evidence_count > 0 && (
         <CollectorSignalsPanel chronicle={chronicle} />
       )}

@@ -174,7 +174,7 @@ body::before {
 #root {
   position: relative;
   z-index: 1;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -646,10 +646,20 @@ select.input-field option {
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  min-height: 0;
+}
+
+.timeline-panel-header {
+  transition: background var(--duration-normal) var(--ease-smooth);
+  flex-shrink: 0;
+}
+
+.timeline-panel-header:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .timeline-panel-title {
-  padding: 4px var(--space-md);
+  padding: 12px var(--space-md);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -659,6 +669,11 @@ select.input-field option {
   background: rgba(255, 255, 255, 0.015);
   flex-shrink: 0;
   z-index: 10;
+  transition: border-color var(--duration-normal) var(--ease-smooth);
+}
+
+.timeline-panel.collapsed .timeline-panel-title {
+  border-bottom-color: transparent;
 }
 
 .timeline-panel-title-text {
@@ -1289,6 +1304,7 @@ select.input-field option {
   line-height: 1.45;
   color: var(--text-secondary);
   display: -webkit-box;
+  line-clamp: 3;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -2210,6 +2226,15 @@ select.input-field option {
   position: relative;
   overflow: hidden;
   isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  transition: flex var(--duration-normal) var(--ease-smooth);
+  flex-shrink: 0;
+}
+
+.widget-provenance.expanded {
+  flex: 1;
+  min-height: 0;
 }
 
 .widget-provenance:not(.expanded) {
@@ -2259,6 +2284,7 @@ select.input-field option {
   gap: var(--space-md);
   user-select: none;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .widget-provenance:not(.expanded) .widget-provenance-header {
@@ -2403,15 +2429,18 @@ select.input-field option {
 
 .widget-provenance-body {
   display: grid;
+  align-content: start;
+  grid-auto-rows: min-content;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md) var(--space-md);
-  max-height: clamp(13rem, 38vh, 22rem);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .widget-provenance-body::-webkit-scrollbar {
-  width: 5px;
+  width: 4px;
 }
 
 .widget-provenance-body::-webkit-scrollbar-track {
@@ -2419,12 +2448,12 @@ select.input-field option {
 }
 
 .widget-provenance-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
 }
 
 .widget-provenance-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .widget-provenance-section {
@@ -2743,7 +2772,7 @@ select.input-field option {
   flex-direction: column;
   gap: var(--space-sm);
   margin-top: var(--space-lg);
-  padding-top: var(--space-md);
+  padding: var(--space-md) var(--space-sm) 0;
   border-top: 1px dashed var(--border-glass);
   font-size: 0.688rem;
   color: var(--text-tertiary);
@@ -2794,6 +2823,8 @@ select.input-field option {
   overflow: hidden;
   white-space: nowrap;
   flex: 1;
+  padding: 4px 0;
+  margin: -4px 0;
 }
 
 .widget-sources-items-inline.is-overflowing {
@@ -2828,6 +2859,26 @@ select.input-field option {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(247, 147, 26, 0.4);
   transform: translateY(-1px);
+}
+
+.widget-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  cursor: help;
+  transition: color 0.2s ease;
+  opacity: 0.7;
+}
+
+.widget-info-icon:hover {
+  color: var(--accent-primary);
+  opacity: 1;
+}
+
+.widget-info-icon svg {
+  width: 13px;
+  height: 13px;
 }
 
 .widget-sources-expanded-list {
@@ -3381,6 +3432,7 @@ select.input-field option {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }

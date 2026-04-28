@@ -5,6 +5,8 @@ import { linkifyBrands } from "../../lib/brandLinks"
 
 interface Props {
   collectionContext: CollectionContext
+  expanded?: boolean
+  onToggle?: (expanded: boolean) => void
 }
 
 function IssueBadge({ issue }: { issue: string }) {
@@ -26,8 +28,36 @@ function IssueBadge({ issue }: { issue: string }) {
   )
 }
 
-export function CollectionContextWidget({ collectionContext }: Props) {
-  const [expanded, setExpanded] = useState(false)
+function InfoTooltip({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  return (
+    <>
+      <span
+        ref={ref}
+        className="widget-info-icon"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 16v-4" />
+          <path d="M12 8h.01" />
+        </svg>
+      </span>
+      <PortalTooltip text={text} anchorRef={ref} visible={visible} />
+    </>
+  )
+}
+
+export function CollectionContextWidget({ collectionContext, expanded: externalExpanded, onToggle }: Props) {
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  const isExpanded = externalExpanded !== undefined ? externalExpanded : internalExpanded
+  const setExpanded = (val: boolean) => {
+    if (onToggle) onToggle(val)
+    else setInternalExpanded(val)
+  }
   const { presentation, protocol, registry, market, profile } = collectionContext
   const hasContent =
     presentation.facets.length > 0 ||
@@ -128,11 +158,11 @@ export function CollectionContextWidget({ collectionContext }: Props) {
   })
 
   return (
-    <div className={`widget-provenance ${expanded ? "expanded" : ""}`}>
+    <div className={`widget-provenance ${isExpanded ? "expanded" : ""}`}>
       <button
         type="button"
         className="widget-provenance-header"
-        onClick={() => hasDetails && setExpanded(!expanded)}
+        onClick={() => hasDetails && setExpanded(!isExpanded)}
         disabled={!hasDetails}
       >
         <div className="widget-provenance-header-left">
@@ -164,7 +194,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 style={{
-                  transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+                  transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.2s ease-out"
                 }}
               >
@@ -175,7 +205,7 @@ export function CollectionContextWidget({ collectionContext }: Props) {
         </div>
       </button>
 
-      {expanded && (
+      {isExpanded && (
         <div className="widget-provenance-body">
 
 
@@ -353,7 +383,12 @@ function EvidenceRow({
 }: CollectionPresentationFacet & { href?: string; activeSlug?: string }) {
   return (
     <div className={`widget-meta-cell tone-${tone}`}>
-      <span className="widget-meta-label">{linkifyBrands(label, activeSlug)}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+        <span className="widget-meta-label" style={{ marginBottom: 0 }}>
+          {linkifyBrands(label, activeSlug)}
+        </span>
+        {detail && <InfoTooltip text={detail} />}
+      </div>
       <span className="widget-meta-value">
         {href ? (
           <a href={href} target="_blank" rel="noreferrer" className="brand-link" style={{ color: "inherit" }}>
@@ -363,7 +398,6 @@ function EvidenceRow({
           linkifyBrands(value, activeSlug)
         )}
       </span>
-      {detail && <span className="widget-meta-sub">{linkifyBrands(detail, activeSlug)}</span>}
     </div>
   )
 }
@@ -371,11 +405,13 @@ function EvidenceRow({
 function RelationRow({ group, activeSlug }: { group: RelationGroup, activeSlug?: string }) {
   return (
     <div className="widget-meta-cell tone-canonical">
-      <span className="widget-meta-label">{linkifyBrands(group.label, activeSlug)}</span>
-      <span className="widget-meta-value" style={{ whiteSpace: "normal", fontSize: "0.75rem", lineHeight: "1.3" }}>
-        {linkifyBrands(group.description, activeSlug)}
-      </span>
-      <div className="widget-provenance-relation-list" style={{ marginTop: "4px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+        <span className="widget-meta-label" style={{ marginBottom: 0 }}>
+          {linkifyBrands(group.label, activeSlug)}
+        </span>
+        <InfoTooltip text={group.description} />
+      </div>
+      <div className="widget-provenance-relation-list">
         {group.items.slice(0, 4).map((item) => (
           <a
             key={item.inscription_id}

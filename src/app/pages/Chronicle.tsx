@@ -1,11 +1,11 @@
-import { useEffect, useReducer, useCallback, useRef } from "react"
+import { useEffect, useReducer, useCallback, useRef, useState } from "react"
 import { useLoaderData, useLocation, useNavigate, useOutletContext } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
 import { ChronicleSidebar } from "../components/ChronicleSidebar"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
-import { FactualInfoWidget } from "../components/widgets/FactualInfoWidget"
+import { CollectionContextWidget } from "../components/widgets/CollectionContextWidget"
 import { KeyStore } from "../lib/byok"
 import { useSynthesize } from "../lib/byok/useSynthesize"
 import type { LayoutOutletContext } from "../components/Layout"
@@ -132,6 +132,7 @@ export function Chronicle() {
   const homePath = `/${location.search}`
   const { setHeaderCenter, openBYOK } = useOutletContext<LayoutOutletContext>()
   const autoSynthesizedRef = useRef<string | null>(null)
+  const [rightSidebarMode, setRightSidebarMode] = useState<"provenance" | "timeline">("timeline")
 
   const handleShare = useCallback(() => {
     if (!chronicle) return
@@ -272,25 +273,77 @@ export function Chronicle() {
           onShare={handleShare}
         />
 
-        {/* Right Sidebar: Factual Genesis + Temporal Timeline */}
+        {/* Right Sidebar: Collection Context + Temporal Timeline */}
         <div className="chronicle-sidebar-right">
-          <FactualInfoWidget meta={chronicle.meta} />
+          <div style={{ 
+            flex: rightSidebarMode === "provenance" ? 1 : 0, 
+            minHeight: rightSidebarMode === "provenance" ? 0 : "fit-content",
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            <CollectionContextWidget 
+              collectionContext={chronicle.collection_context} 
+              expanded={rightSidebarMode === "provenance"}
+              onToggle={(isExpanded) => setRightSidebarMode(isExpanded ? "provenance" : "timeline")}
+            />
+          </div>
           
-          <div className="timeline-panel">
-            <div className="timeline-panel-title">
-              <span className="timeline-panel-title-text">Temporal Timeline</span>
-              <OwnershipWidget
-                events={chronicle.events}
-                genesisAddress={chronicle.meta.genesis_owner_address}
-                currentOwnerAddress={chronicle.meta.owner_address}
-              />
-            </div>
-            <div className="timeline-scroll-container">
-              <TemporalTree 
-                events={chronicle.events} 
-                collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug} 
-              />
-            </div>
+          <div className={`timeline-panel ${rightSidebarMode === "timeline" ? "expanded" : "collapsed"}`} style={{ 
+            flex: rightSidebarMode === "timeline" ? 1 : 0, 
+            minHeight: rightSidebarMode === "timeline" ? 0 : "fit-content" 
+          }}>
+            <button 
+              className="timeline-panel-header" 
+              onClick={() => setRightSidebarMode("timeline")}
+              style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left", cursor: rightSidebarMode === "timeline" ? "default" : "pointer" }}
+            >
+              <div className="timeline-panel-title" style={{ position: "relative" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", gap: "8px" }}>
+                  <span className="timeline-panel-title-text">Temporal Timeline</span>
+                  <OwnershipWidget
+                    events={chronicle.events}
+                    genesisAddress={chronicle.meta.genesis_owner_address}
+                    currentOwnerAddress={chronicle.meta.owner_address}
+                  />
+                </div>
+                
+                <div style={{ 
+                  position: "absolute", 
+                  right: "var(--space-md)", 
+                  top: "50%", 
+                  transform: "translateY(-50%)",
+                  display: "flex",
+                  alignItems: "center"
+                }}>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      transform: rightSidebarMode === "timeline" ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s ease-out",
+                      color: "var(--text-tertiary)",
+                      opacity: rightSidebarMode === "timeline" ? 0 : 0.6
+                    }}
+                  >
+                    <polyline points="18 15 12 9 6 15" />
+                  </svg>
+                </div>
+              </div>
+            </button>
+            {rightSidebarMode === "timeline" && (
+              <div className="timeline-scroll-container">
+                <TemporalTree 
+                  events={chronicle.events} 
+                  collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug} 
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

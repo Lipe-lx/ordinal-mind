@@ -48,7 +48,7 @@ export function SourcesWidget({ sources }: Props) {
       >
         <div className="widget-sources-label-group">
           <div className="widget-sources-label">
-            Verified via
+            Sources
           </div>
           {!expanded && (
             <div 
