@@ -126,9 +126,10 @@ GenealogyBackground.displayName = "GenealogyBackground"
 
 interface Props {
   chronicle: ChronicleResponse
+  onShare?: () => void
 }
 
-export function GenealogyTree({ chronicle }: Props) {
+export function GenealogyTree({ chronicle, onShare }: Props) {
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number, y: number }>>({})
   
@@ -625,6 +626,24 @@ export function GenealogyTree({ chronicle }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Share Button (fixed at bottom right) */}
+      {onShare && (
+        <div className="genealogy-share-container" style={{ 
+          position: "absolute", 
+          bottom: "var(--space-md)", 
+          right: "var(--space-md)",
+          zIndex: 100 
+        }}>
+          <button 
+            className="btn-share-narrative"
+            onClick={onShare}
+            title="Share this Genealogy"
+          >
+            ✦ Share
+          </button>
+        </div>
+      )}
     </div>
   )
 }

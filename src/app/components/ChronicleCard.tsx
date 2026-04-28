@@ -103,7 +103,7 @@ export function ChronicleCard({
           collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
         />
       ) : (
-        <GenealogyTree chronicle={chronicle} />
+        <GenealogyTree chronicle={chronicle} onShare={onShare} />
       )}
       
       {/* Sources Widget */}

@@ -3042,15 +3042,15 @@ select.input-field option {
   font-weight: 700;
   padding: 6px 14px;
   background: rgba(255, 255, 255, 0.02);
-  color: var(--text-tertiary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--accent-primary);
+  border: 1px solid rgba(247, 147, 26, 0.2);
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-spring);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   backdrop-filter: blur(8px);
-  opacity: 0.5;
+  opacity: 0.9;
   display: flex;
   align-items: center;
   gap: 6px;
