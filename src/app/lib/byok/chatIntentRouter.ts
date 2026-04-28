@@ -192,7 +192,7 @@ function structuredFallback(
   return { intent: "clarification_request", confidence: 0.51, reason: "fallback_default_clarify" }
 }
 
-function resolveMode(normalized: string, intent: ChatIntent, history: ChatMessage[]): ChatResponseMode {
+function resolveMode(normalized: string, intent: ChatIntent, _history: ChatMessage[]): ChatResponseMode {
   if (intent === "chronicle_query" && NARRATIVE_REQUEST_HINTS.some((hint) => normalized.includes(hint))) {
     return "narrative"
   }

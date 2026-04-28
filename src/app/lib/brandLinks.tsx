@@ -1,11 +1,5 @@
 import React from "react"
 
-const BRANDS = [
-  { name: "Satflow", url: "https://www.satflow.com/" },
-  { name: "ord.net", url: "https://ord.net/" },
-  { name: "Ord.net", url: "https://ord.net/" },
-]
-
 export function linkifyBrands(text: string, collectionSlug?: string): React.ReactNode {
   if (!text) return text
   

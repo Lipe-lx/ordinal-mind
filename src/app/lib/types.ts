@@ -138,7 +138,7 @@ export interface MediaContext {
 }
 
 export interface RelatedInscriptionSummary {
-  item: any
+  item?: unknown
   inscription_id: string
   inscription_number: number | null
   content_type?: string

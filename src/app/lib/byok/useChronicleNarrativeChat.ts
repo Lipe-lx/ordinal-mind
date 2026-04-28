@@ -58,6 +58,7 @@ function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
 }
 
 export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
+  const inscriptionId = chronicle?.meta.inscription_id ?? null
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [threadHistory, setThreadHistory] = useState<ChatThreadSummary[]>([])
@@ -83,40 +84,49 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
   }, [messages])
 
   useEffect(() => {
-    if (!chronicle) {
-      setMessages([])
-      setActiveThreadId(null)
-      setThreadHistory([])
+    const timeoutId = window.setTimeout(() => {
+      if (!inscriptionId) {
+        setMessages([])
+        setActiveThreadId(null)
+        setThreadHistory([])
+        setStreamingText("")
+        setError(null)
+        setResearchLogs([])
+        setToolLogs([])
+        setWikiToolUsageCount(0)
+        setLastInputMode(null)
+        autoTurnRef.current = null
+        return
+      }
+
+      const workspace = ensureChatWorkspace(inscriptionId)
+      const snapshot = loadChatThread(inscriptionId, workspace.activeThreadId)
+      setActiveThreadId(workspace.activeThreadId)
+      setThreadHistory(listChatThreads(inscriptionId))
+      setMessages(truncateMessagesByTurns(snapshot?.messages ?? []))
       setStreamingText("")
       setError(null)
       setResearchLogs([])
       setToolLogs([])
       setWikiToolUsageCount(0)
       setLastInputMode(null)
+      setPhase("idle")
       autoTurnRef.current = null
-      return
-    }
+    }, 0)
 
-    const workspace = ensureChatWorkspace(chronicle.meta.inscription_id)
-    const snapshot = loadChatThread(chronicle.meta.inscription_id, workspace.activeThreadId)
-    setActiveThreadId(workspace.activeThreadId)
-    setThreadHistory(listChatThreads(chronicle.meta.inscription_id))
-    setMessages(truncateMessagesByTurns(snapshot?.messages ?? []))
-    setStreamingText("")
-    setError(null)
-    setResearchLogs([])
-    setToolLogs([])
-    setWikiToolUsageCount(0)
-    setLastInputMode(null)
-    setPhase("idle")
-    autoTurnRef.current = null
-  }, [chronicle?.meta.inscription_id])
+    return () => window.clearTimeout(timeoutId)
+  }, [inscriptionId])
 
   useEffect(() => {
-    if (!chronicle || !activeThreadId) return
-    saveChatThread(chronicle.meta.inscription_id, messages, activeThreadId)
-    setThreadHistory(listChatThreads(chronicle.meta.inscription_id))
-  }, [chronicle, messages, activeThreadId])
+    if (!inscriptionId || !activeThreadId) return
+
+    saveChatThread(inscriptionId, messages, activeThreadId)
+    const timeoutId = window.setTimeout(() => {
+      setThreadHistory(listChatThreads(inscriptionId))
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [inscriptionId, messages, activeThreadId])
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {

@@ -64,11 +64,15 @@ export function ChatHistoryModal({
   }, [open, onClose])
 
   useEffect(() => {
-    if (!open) {
+    if (open) return
+
+    const timeoutId = window.setTimeout(() => {
       setEditingThreadId(null)
       setEditingValue("")
       setPendingDeleteThreadId(null)
-    }
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
   }, [open])
 
   const sortedThreads = useMemo(

@@ -159,15 +159,3 @@ function truncateAddr(addr: string): string {
   if (!addr || addr.length < 16) return addr || "?"
   return `${addr.slice(0, 8)}…${addr.slice(-5)}`
 }
-
-function formatShortDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
-  } catch {
-    return iso.substring(0, 10)
-  }
-}

@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react"
 import { KeyStore } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
-import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
 import { NarrativeChatRenderer } from "./NarrativeChatRenderer"
 import type { ChronicleResponse, MentionProviderDebug, SocialSignalProvider } from "../lib/types"
