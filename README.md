@@ -50,11 +50,12 @@ Ordinal Mind provides a verifiable temporal tree of Bitcoin assets, optional LLM
 ## Core Features
 
 *   **Verifiable Timeline**: Deterministic merging of on-chain transfers, genesis data, and marketplace activity.
-*   **SSE Streaming Pipeline**: Real-time progress feedback during complex multi-source data collection.
-*   **Chronicle Card**: Premium, interactive UI with 3D hover effects and integrated media context.
+*   **SSE Streaming Pipeline**: Real-time progress feedback during complex multi-source data collection via `TransformStream`.
+*   **Chronicle Card**: Premium, interactive UI with motion effects and integrated media context.
+*   **BYOK Intelligence**: Secure client-side AI synthesis using user-provided keys (Anthropic, OpenAI, Gemini, OpenRouter).
 *   **Collection Intelligence**: Deep cross-referencing of Satflow, Ord.net, and official registries.
-*   **Collector Signals**: Advanced sentiment and attention analysis using Google Trends and social mentions.
-*   **Sat Rarity & Validation**: Multi-indexer validation (UniSat, Ordinals.com) and CBOR trait enrichment.
+*   **Collector Signals**: Advanced sentiment and attention analysis using multi-source mentions and trends.
+*   **Sat Rarity & Validation**: Multi-indexer validation and CBOR metadata enrichment.
 
 ## Getting Started
 
