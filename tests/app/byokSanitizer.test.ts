@@ -22,6 +22,15 @@ A coleção Runestone aparece com supply de 112.4K na Satflow.
     expect(sanitizeNarrativePreview(raw)).toBe("A coleção Runestone aparece")
   })
 
+  it("hides reasoning before the final answer tag and accepts an unclosed final block", () => {
+    const raw = "`. * Directness: High.\n\n*Refining the answer:*\nExistem aproximadamente 112.400 Runestones na coleção.<final_answer>Existem aproximadamente 112.400 Runestones. A distribuição foi planejada como airdrop para 112.383 carteiras."
+
+    expect(sanitizeNarrativePreview("`. * Directness: High.\n\n*Refining the answer:*")).toBe("")
+    expect(sanitizeNarrative(raw)).toBe(
+      "Existem aproximadamente 112.400 Runestones. A distribuição foi planejada como airdrop para 112.383 carteiras."
+    )
+  })
+
   it("ignores literal placeholder final answer blocks and recovers from factual analysis", () => {
     const raw = `User Question: "quatans runestone existem?" (How many runestones exist?)
 
@@ -51,11 +60,12 @@ Does the data specify the total supply of Runes (the protocol/tokens)? No. It sp
     )
   })
 
-  it("strips thinking tags from streaming preview", () => {
+  it("waits for the final answer block before showing streaming preview", () => {
     const raw = `<think>I should inspect the data first.</think>
 Answer: A coleção tem 112.4K Runestones nos dados disponíveis.`
 
-    expect(sanitizeNarrativePreview(raw)).toBe(
+    expect(sanitizeNarrativePreview(raw)).toBe("")
+    expect(sanitizeNarrative(raw)).toBe(
       "A coleção tem 112.4K Runestones nos dados disponíveis."
     )
   })

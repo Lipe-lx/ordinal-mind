@@ -115,6 +115,10 @@ function extractFinalAnswerBlock(raw: string): string | undefined {
   return answer.trim()
 }
 
+function hasFinalAnswerStart(raw: string): boolean {
+  return /<final_answer>/i.test(raw)
+}
+
 function isSubstantiveAnswer(text: string | undefined | null): text is string {
   if (!text) return false
 
@@ -375,6 +379,10 @@ export function sanitizeNarrativePreview(raw: string): string {
   const taggedAnswer = extractFinalAnswerBlock(raw)
   if (taggedAnswer !== undefined) {
     return isSubstantiveAnswer(taggedAnswer) ? sanitizeNarrative(taggedAnswer) : ""
+  }
+
+  if (!hasFinalAnswerStart(raw)) {
+    return ""
   }
 
   const cleaned = sanitizeNarrative(raw)

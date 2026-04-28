@@ -25,6 +25,10 @@ export class GeminiAdapter implements LLMAdapter {
   }
 
   async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
+    if (isGemmaModel(this.model)) {
+      return await this.request(chronicle, false, false, undefined, undefined, toolExecutor, undefined, true)
+    }
+
     try {
       return await this.request(chronicle, false, true, undefined, undefined, toolExecutor, undefined, true)
     } catch (err) {
@@ -42,6 +46,10 @@ export class GeminiAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
+    if (isGemmaModel(this.model)) {
+      return await this.request(chronicle, true, false, onChunk, signal, toolExecutor, undefined, true)
+    }
+
     try {
       return await this.request(chronicle, true, true, onChunk, signal, toolExecutor, undefined, true)
     } catch (err) {
@@ -79,6 +87,20 @@ export class GeminiAdapter implements LLMAdapter {
       { mode, intent }
     )
     const enableVision = history.length === 0
+
+    if (isGemmaModel(this.model)) {
+      return await this.request(
+        chronicle,
+        true,
+        false,
+        onChunk,
+        signal,
+        toolExecutor,
+        conversationPrompt,
+        enableVision
+      )
+    }
+
     try {
       return await this.request(
         chronicle,
@@ -311,6 +333,10 @@ function extractGeminiText(data: GeminiResponse): string {
       ?.map((part) => part.text ?? "")
       .join("") ?? ""
   )
+}
+
+function isGemmaModel(model: string): boolean {
+  return /^gemma[-_]/i.test(model)
 }
 
 
