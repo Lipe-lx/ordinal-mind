@@ -192,23 +192,25 @@ export function GenealogyTree({ chronicle }: Props) {
     if (!treeRef.current) return
     
     const treeRect = treeRef.current.getBoundingClientRect()
-    const currentScale = springScale.get() || scale.get() || 1
+    // Calculate the ACTUAL rendered scale from DOM to be independent of spring state
+    const actualScale = treeRect.width / treeRef.current.offsetWidth || 1
     
     const positions: Record<string, { x: number, y: number }> = {}
     
     const nodes = treeRef.current.querySelectorAll(".genealogy-node")
     nodes.forEach(node => {
-      if (node.id) {
-        const rect = node.getBoundingClientRect()
-        positions[node.id] = {
-          x: (rect.left - treeRect.left + rect.width / 2) / currentScale,
-          y: (rect.top - treeRect.top + rect.height / 2) / currentScale
+      const nodeEl = node as HTMLElement
+      if (nodeEl.id) {
+        const rect = nodeEl.getBoundingClientRect()
+        positions[nodeEl.id] = {
+          x: (rect.left - treeRect.left + rect.width / 2) / actualScale,
+          y: (rect.top - treeRect.top + rect.height / 2) / actualScale
         }
       }
     })
     
     setNodePositions(positions)
-  }, [scale, springScale])
+  }, [])
 
   // Setup ResizeObserver for robust measurement
   useEffect(() => {
@@ -239,7 +241,6 @@ export function GenealogyTree({ chronicle }: Props) {
       const treeWidth = treeRef.current.offsetWidth
       const treeHeight = treeRef.current.offsetHeight
       
-      const padding = 0
       const availableWidth = containerRect.width
       const availableHeight = containerRect.height
       
@@ -279,14 +280,14 @@ export function GenealogyTree({ chronicle }: Props) {
     return () => container.removeEventListener("wheel", onWheel)
   }, [scale])
 
-  // Pre-calculate all known IDs to validate explicit relationships
-  const allKnownIds = useMemo(() => new Set([
-    root.inscription_id,
-    ...parents.map(n => n.inscription_id),
-    ...grandparents.map(n => n.inscription_id),
-    ...greatGrandparents.map(n => n.inscription_id),
-    ...children.map(n => n.inscription_id)
-  ]), [root.inscription_id, parents, grandparents, greatGrandparents, children]);
+  // Re-measure when scale stabilizes or changes significantly
+  useEffect(() => {
+    const unsubscribe = springScale.on("change", () => {
+      // Use requestAnimationFrame to ensure we measure AFTER the browser layout cycle
+      requestAnimationFrame(measurePositions)
+    })
+    return () => unsubscribe()
+  }, [springScale, measurePositions])
 
   // Identify the single oldest progenitor in the visible tree
   const oldestNodeId = useMemo(() => {
@@ -299,7 +300,7 @@ export function GenealogyTree({ chronicle }: Props) {
     if (candidates.length === 0) return null
     
     // Sort by inscription number to find the absolute oldest
-    return [...candidates].sort((a, b) => {
+    return candidates.slice().sort((a, b) => {
       const numA = a.inscription_number ?? Infinity
       const numB = b.inscription_number ?? Infinity
       return numA - numB
@@ -342,7 +343,6 @@ export function GenealogyTree({ chronicle }: Props) {
     const treeWidth = treeRef.current.offsetWidth;
     const treeHeight = treeRef.current.offsetHeight;
     
-    const padding = 0;
     const availableWidth = containerRect.width;
     const availableHeight = containerRect.height;
     
@@ -400,55 +400,102 @@ export function GenealogyTree({ chronicle }: Props) {
             </filter>
           </defs>
           
-          {/* Ancestry Connections (Hierarchical fallback guarantees connectivity) */}
-          
-          {/* 1. Parents -> Root (Flowing down) */}
-          {parents.map((p) => (
-            <Connection 
-              key={`root-parent-${p.inscription_id}`}
-              startId={`node-${p.inscription_id}`}
-              endId="node-root"
-              nodePositions={nodePositions}
-            />
-          ))}
+          {/* Universal Connector: Global Relationship & Hierarchical Fallback */}
+          {(() => {
+            const levels = [
+              { id: "ggp", items: greatGrandparents.slice(0, 9), label: "Great-Grandparent" },
+              { id: "gp", items: grandparents.slice(0, 9), label: "Grandparent" },
+              { id: "p", items: parents.slice(0, 9), label: "Parent" },
+              { id: "root", items: [root], label: "Root" },
+              { id: "child", items: children.slice(0, 9), label: "Child" }
+            ];
 
-          {/* 2. Older Ancestor -> Ancestor (Flowing down) */}
-          {[
-            { current: parents, olderLevel: grandparents },
-            { current: grandparents, olderLevel: greatGrandparents }
-          ].flatMap(({ current, olderLevel }) => 
-            current.map((node) => {
-              const explicitRelations = node.related_to_ids || [];
-              const validExplicitRelations = explicitRelations.filter(id => allKnownIds.has(id));
+            // Create a lookup for all rendered nodes across the tree
+            const renderedNodesMap = new Map();
+            levels.forEach(lvl => lvl.items.forEach(item => {
+              const id = item.inscription_id === root.inscription_id ? "node-root" : `node-${item.inscription_id}`;
+              renderedNodesMap.set(item.inscription_id, { item, levelId: lvl.id, domId: id });
+            }));
 
-              // For connections, we want to go from OlderLevel to Current node
-              // But node.related_to_ids contains IDs of OLDER nodes (parents)
-              // So we connect OlderId -> NodeId
-              
-              const relationsToUse = validExplicitRelations.length > 0 
-                ? validExplicitRelations 
-                : olderLevel.map(n => n.inscription_id);
+            return levels.flatMap((currentLevel, levelIdx) => {
+              return currentLevel.items.flatMap((node) => {
+                const nodeDomId = node.inscription_id === root.inscription_id ? "node-root" : `node-${node.inscription_id}`;
+                const explicitRelations = node.related_to_ids || [];
+                
+                // 1. Prioritize ANY explicit parent that is rendered anywhere in the tree
+                const renderedExplicitParents = explicitRelations
+                  .map(id => renderedNodesMap.get(id))
+                  .filter(p => p && nodePositions[p.domId]);
 
-              return relationsToUse.map((relatedId) => (
-                <Connection 
-                  key={`${node.inscription_id}-${relatedId}`}
-                  startId={`node-${relatedId}`}
-                  endId={`node-${node.inscription_id}`}
-                  nodePositions={nodePositions}
-                />
-              ))
-            })
-          )}
+                if (renderedExplicitParents.length > 0) {
+                  return renderedExplicitParents.map((p) => (
+                    <Connection 
+                      key={`${node.inscription_id}-${p.item.inscription_id}`}
+                      startId={p.domId}
+                      endId={nodeDomId}
+                      nodePositions={nodePositions}
+                    />
+                  ));
+                }
 
-          {/* Root -> Children Connections */}
-          {children.slice(0, 9).map((child) => (
-            <Connection 
-              key={`root-child-${child.inscription_id}`}
-              startId="node-root" 
-              endId={`node-${child.inscription_id}`} 
-              nodePositions={nodePositions}
-            />
-          ))}
+                // 2. Fallback Hierarchical Logic
+                
+                // Root fallback: Connect to all rendered Parents
+                if (currentLevel.id === "root") {
+                  const parentLevel = levels.find(l => l.id === "p");
+                  return (parentLevel?.items || [])
+                    .filter(p => nodePositions[`node-${p.inscription_id}`])
+                    .map(p => (
+                      <Connection 
+                        key={`root-p-${p.inscription_id}-fallback`}
+                        startId={`node-${p.inscription_id}`}
+                        endId="node-root"
+                        nodePositions={nodePositions}
+                      />
+                    ));
+                }
+
+                // Child fallback: Connect to Root
+                if (currentLevel.id === "child") {
+                  if (!nodePositions["node-root"]) return null;
+                  return (
+                    <Connection 
+                      key={`child-root-${node.inscription_id}-fallback`}
+                      startId="node-root"
+                      endId={nodeDomId}
+                      nodePositions={nodePositions}
+                    />
+                  );
+                }
+
+                // Ancestor fallback (p -> gp, gp -> ggp): Connect to the closest non-empty level ABOVE
+                let fallbackLevelIdx = -1;
+                for (let i = levelIdx - 1; i >= 0; i--) {
+                  if (levels[i].items.length > 0) {
+                    fallbackLevelIdx = i;
+                    break;
+                  }
+                }
+
+                if (fallbackLevelIdx !== -1) {
+                  const fallbackLevel = levels[fallbackLevelIdx];
+                  return fallbackLevel.items
+                    .map(p => ({ item: p, domId: p.inscription_id === root.inscription_id ? "node-root" : `node-${p.inscription_id}` }))
+                    .filter(p => nodePositions[p.domId])
+                    .map((p) => (
+                      <Connection 
+                        key={`${node.inscription_id}-${p.item.inscription_id}-fallback`}
+                        startId={p.domId}
+                        endId={nodeDomId}
+                        nodePositions={nodePositions}
+                      />
+                    ));
+                }
+
+                return null;
+              });
+            });
+          })()}
         </svg>
 
         {/* Great-Grandparents Row */}

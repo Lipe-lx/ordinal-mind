@@ -4244,7 +4244,6 @@ select.input-field option {
 
 /* SVG Path Glow */
 .genealogy-path {
-  filter: drop-shadow(0 0 8px var(--accent-glow));
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: stroke-width 0.3s ease, stroke-opacity 0.3s ease;
