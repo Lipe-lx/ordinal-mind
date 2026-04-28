@@ -40,8 +40,7 @@ const Connection = memo(({ startId, endId, nodePositions }: ConnectionProps) => 
       stroke="url(#connection-grad)"
       strokeWidth="3.5"
       fill="none"
-      filter="url(#glow)"
-      style={{ opacity: 0.8 }}
+      style={{ opacity: 0.7 }}
     />
   )
 })
@@ -64,14 +63,7 @@ const GenealogyBackground = memo(({ x, y }: BackgroundProps) => {
   const dotsX = useTransform(x, (v) => v * 0.8)
   const dotsY = useTransform(y, (v) => v * 0.8)
 
-  const [particles] = useState(() => Array.from({ length: 30 }).map((_, i) => ({
-    id: i,
-    size: Math.random() * 3 + 1.5,
-    top: `${Math.random() * 100}%`,
-    left: `${Math.random() * 100}%`,
-    duration: Math.random() * 20 + 10,
-    delay: Math.random() * 10
-  })))
+
 
   return (
     <div className="genealogy-bg">
@@ -91,31 +83,7 @@ const GenealogyBackground = memo(({ x, y }: BackgroundProps) => {
         <div className="genealogy-bg-dots" />
       </motion.div>
 
-      {/* Data Particles */}
-      {particles.map((p) => (
-        <motion.div
-          key={p.id}
-          className="bg-particle"
-          style={{
-            width: p.size,
-            height: p.size,
-            top: p.top,
-            left: p.left,
-          }}
-          animate={{
-            y: [-40, 40],
-            x: [-20, 20],
-            opacity: [0.05, 0.2, 0.05],
-            scale: [1, 1.5, 1],
-          }}
-          transition={{
-            duration: p.duration,
-            repeat: Infinity,
-            delay: p.delay,
-            ease: "linear"
-          }}
-        />
-      ))}
+
 
       <div className="genealogy-bg-scanline" />
     </div>
@@ -129,7 +97,7 @@ interface Props {
   onShare?: () => void
 }
 
-export function GenealogyTree({ chronicle, onShare }: Props) {
+export const GenealogyTree = memo(({ chronicle, onShare }: Props) => {
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number, y: number }>>({})
   
@@ -145,33 +113,19 @@ export function GenealogyTree({ chronicle, onShare }: Props) {
   // Spring physics
   const springScale = useSpring(scale, { stiffness: 120, damping: 24 })
 
-  // Mouse Parallax
-  const mouseX = useMotionValue(0)
-  const mouseY = useMotionValue(0)
+  // Parallax effect only when dragging
+  const bgX = useTransform(x, (vx) => (vx as number) * 0.1)
+  const bgY = useTransform(y, (vy) => (vy as number) * 0.1)
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const { clientX, clientY } = e
-      const { innerWidth, innerHeight } = window
-      // Normalize mouse position from -1 to 1 and multiply by intensity
-      mouseX.set((clientX / innerWidth - 0.5) * 40)
-      mouseY.set((clientY / innerHeight - 0.5) * 40)
-    }
-    window.addEventListener("mousemove", handleMouseMove)
-    return () => window.removeEventListener("mousemove", handleMouseMove)
-  }, [mouseX, mouseY])
-
-  // Combine dragging parallax + mouse parallax for the background layers
-  const bgX = useTransform([x, mouseX], ([vx, vmx]) => (vx as number) * 0.1 + (vmx as number))
-  const bgY = useTransform([y, mouseY], ([vy, vmy]) => (vy as number) * 0.1 + (vmy as number))
-
-  const root = useMemo<RelatedInscriptionSummary>(() => ({
-    inscription_id: chronicle.meta.inscription_id,
-    inscription_number: chronicle.meta.inscription_number,
-    content_type: chronicle.meta.content_type,
-    content_url: chronicle.meta.content_url,
-    genesis_timestamp: chronicle.meta.genesis_timestamp,
-  }), [
+  const root = useMemo<RelatedInscriptionSummary>(() => {
+    return {
+      inscription_id: chronicle.meta.inscription_id,
+      inscription_number: chronicle.meta.inscription_number,
+      content_type: chronicle.meta.content_type,
+      content_url: chronicle.meta.content_url,
+      genesis_timestamp: chronicle.meta.genesis_timestamp,
+    } as unknown as RelatedInscriptionSummary
+  }, [
     chronicle.meta.inscription_id,
     chronicle.meta.inscription_number,
     chronicle.meta.content_type,
@@ -186,31 +140,114 @@ export function GenealogyTree({ chronicle, onShare }: Props) {
   const children = useMemo(() => protocol.children?.items ?? [], [protocol.children?.items])
   const totalChildren = protocol.children?.total_count ?? 0
 
+  const levels = useMemo(() => [
+    { id: "ggp", items: greatGrandparents.slice(0, 9) },
+    { id: "gp", items: grandparents.slice(0, 9) },
+    { id: "p", items: parents.slice(0, 9) },
+    { id: "root", items: [root] },
+    { id: "child", items: children.slice(0, 9) }
+  ], [greatGrandparents, grandparents, parents, root, children])
+
+  // 1. Memoize the connection map to avoid re-calculating relationship logic on every frame
+  const connections = useMemo(() => {
+    const renderedNodesMap = new Map<string, { item: RelatedInscriptionSummary, levelId: string, domId: string }>()
+    levels.forEach(lvl => lvl.items.forEach(item => {
+      const id = item.inscription_id === root.inscription_id ? "node-root" : `node-${item.inscription_id}`
+      renderedNodesMap.set(item.inscription_id, { item, levelId: lvl.id, domId: id })
+    }))
+
+    return levels.flatMap((currentLevel, levelIdx) => {
+      return currentLevel.items.flatMap((node) => {
+        const nodeDomId = node.inscription_id === root.inscription_id ? "node-root" : `node-${node.inscription_id}`
+        const explicitRelations = node.related_to_ids || []
+        
+        const renderedExplicitParents = explicitRelations
+          .map(id => renderedNodesMap.get(id))
+          .filter((p): p is { item: RelatedInscriptionSummary, levelId: string, domId: string } => !!p)
+
+        if (renderedExplicitParents.length > 0) {
+          return renderedExplicitParents.map((p) => ({
+            startId: p.domId,
+            endId: nodeDomId,
+            key: `${node.inscription_id}-${p.item.inscription_id}`
+          }))
+        }
+
+        if (currentLevel.id === "root") {
+          const parentLevel = levels.find(l => l.id === "p")
+          return (parentLevel?.items || []).map(p => ({
+            startId: `node-${p.inscription_id}`,
+            endId: "node-root",
+            key: `root-p-${p.inscription_id}-fallback`
+          }))
+        }
+
+        if (currentLevel.id === "child") {
+          return [{
+            startId: "node-root",
+            endId: nodeDomId,
+            key: `child-root-${node.inscription_id}-fallback`
+          }]
+        }
+
+        let fallbackLevelIdx = -1
+        for (let i = levelIdx - 1; i >= 0; i--) {
+          if (levels[i].items.length > 0) {
+            fallbackLevelIdx = i
+            break
+          }
+        }
+
+        if (fallbackLevelIdx !== -1) {
+          const fallbackLevel = levels[fallbackLevelIdx]
+          return fallbackLevel.items.map(p => ({
+            startId: p.inscription_id === root.inscription_id ? "node-root" : `node-${p.inscription_id}`,
+            endId: nodeDomId,
+            key: `${node.inscription_id}-${p.inscription_id}-fallback`
+          }))
+        }
+
+        return []
+      })
+    })
+  }, [levels, root])
+
+  const isMeasuring = useRef(false)
   /**
    * Measure all node positions relative to the tree container.
+   * Throttled via requestAnimationFrame to ensure high performance during zoom/pan.
    */
   const measurePositions = useCallback(() => {
-    if (!treeRef.current) return
+    if (!treeRef.current || isMeasuring.current) return
     
-    const treeRect = treeRef.current.getBoundingClientRect()
-    // Calculate the ACTUAL rendered scale from DOM to be independent of spring state
-    const actualScale = treeRect.width / treeRef.current.offsetWidth || 1
-    
-    const positions: Record<string, { x: number, y: number }> = {}
-    
-    const nodes = treeRef.current.querySelectorAll(".genealogy-node")
-    nodes.forEach(node => {
-      const nodeEl = node as HTMLElement
-      if (nodeEl.id) {
-        const rect = nodeEl.getBoundingClientRect()
-        positions[nodeEl.id] = {
-          x: (rect.left - treeRect.left + rect.width / 2) / actualScale,
-          y: (rect.top - treeRect.top + rect.height / 2) / actualScale
-        }
+    isMeasuring.current = true
+    requestAnimationFrame(() => {
+      if (!treeRef.current) {
+        isMeasuring.current = false
+        return
       }
+
+      const treeRect = treeRef.current.getBoundingClientRect()
+      // Calculate the ACTUAL rendered scale from DOM to be independent of spring state
+      const actualScale = treeRect.width / treeRef.current.offsetWidth || 1
+      
+      const positions: Record<string, { x: number, y: number }> = {}
+      
+      const nodes = treeRef.current.querySelectorAll(".genealogy-node")
+      nodes.forEach(node => {
+        const nodeEl = node as HTMLElement
+        if (nodeEl.id) {
+          const rect = nodeEl.getBoundingClientRect()
+          positions[nodeEl.id] = {
+            x: (rect.left - treeRect.left + rect.width / 2) / actualScale,
+            y: (rect.top - treeRect.top + rect.height / 2) / actualScale
+          }
+        }
+      })
+      
+      setNodePositions(positions)
+      isMeasuring.current = false
     })
-    
-    setNodePositions(positions)
   }, [])
 
   // Setup ResizeObserver for robust measurement
@@ -281,14 +318,9 @@ export function GenealogyTree({ chronicle, onShare }: Props) {
     return () => container.removeEventListener("wheel", onWheel)
   }, [scale])
 
-  // Re-measure when scale stabilizes or changes significantly
-  useEffect(() => {
-    const unsubscribe = springScale.on("change", () => {
-      // Use requestAnimationFrame to ensure we measure AFTER the browser layout cycle
-      requestAnimationFrame(measurePositions)
-    })
-    return () => unsubscribe()
-  }, [springScale, measurePositions])
+  // Note: We removed the springScale.on("change") listener here because the SVG 
+  // is nested within the scaled container. Connections remain stable during zoom.
+
 
   // Identify the single oldest progenitor in the visible tree
   const oldestNodeId = useMemo(() => {
@@ -385,118 +417,26 @@ export function GenealogyTree({ chronicle, onShare }: Props) {
         >
           <defs>
             <linearGradient id="connection-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="var(--accent-glow)" stopOpacity="0.1" />
-              <stop offset="20%" stopColor="var(--accent-primary)" stopOpacity="0.4" />
-              <stop offset="50%" stopColor="var(--accent-primary)" stopOpacity="0.8" />
-              <stop offset="80%" stopColor="var(--accent-primary)" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.1" />
+              <stop offset="0%" stopColor="var(--accent-glow)" stopOpacity="0.05" />
+              <stop offset="20%" stopColor="var(--accent-primary)" stopOpacity="0.3" />
+              <stop offset="50%" stopColor="var(--accent-primary)" stopOpacity="0.6" />
+              <stop offset="80%" stopColor="var(--accent-primary)" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.05" />
             </linearGradient>
-            {/* filterUnits="userSpaceOnUse" prevents the blur from being clipped when drawing perfectly straight lines (width=0) */}
-            <filter id="glow" filterUnits="userSpaceOnUse" x="-5000" y="-5000" width="10000" height="10000">
-              <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-              <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
           </defs>
           
           {/* Universal Connector: Global Relationship & Hierarchical Fallback */}
-          {(() => {
-            const levels = [
-              { id: "ggp", items: greatGrandparents.slice(0, 9), label: "Great-Grandparent" },
-              { id: "gp", items: grandparents.slice(0, 9), label: "Grandparent" },
-              { id: "p", items: parents.slice(0, 9), label: "Parent" },
-              { id: "root", items: [root], label: "Root" },
-              { id: "child", items: children.slice(0, 9), label: "Child" }
-            ];
-
-            // Create a lookup for all rendered nodes across the tree
-            const renderedNodesMap = new Map();
-            levels.forEach(lvl => lvl.items.forEach(item => {
-              const id = item.inscription_id === root.inscription_id ? "node-root" : `node-${item.inscription_id}`;
-              renderedNodesMap.set(item.inscription_id, { item, levelId: lvl.id, domId: id });
-            }));
-
-            return levels.flatMap((currentLevel, levelIdx) => {
-              return currentLevel.items.flatMap((node) => {
-                const nodeDomId = node.inscription_id === root.inscription_id ? "node-root" : `node-${node.inscription_id}`;
-                const explicitRelations = node.related_to_ids || [];
-                
-                // 1. Prioritize ANY explicit parent that is rendered anywhere in the tree
-                const renderedExplicitParents = explicitRelations
-                  .map(id => renderedNodesMap.get(id))
-                  .filter(p => p && nodePositions[p.domId]);
-
-                if (renderedExplicitParents.length > 0) {
-                  return renderedExplicitParents.map((p) => (
-                    <Connection 
-                      key={`${node.inscription_id}-${p.item.inscription_id}`}
-                      startId={p.domId}
-                      endId={nodeDomId}
-                      nodePositions={nodePositions}
-                    />
-                  ));
-                }
-
-                // 2. Fallback Hierarchical Logic
-                
-                // Root fallback: Connect to all rendered Parents
-                if (currentLevel.id === "root") {
-                  const parentLevel = levels.find(l => l.id === "p");
-                  return (parentLevel?.items || [])
-                    .filter(p => nodePositions[`node-${p.inscription_id}`])
-                    .map(p => (
-                      <Connection 
-                        key={`root-p-${p.inscription_id}-fallback`}
-                        startId={`node-${p.inscription_id}`}
-                        endId="node-root"
-                        nodePositions={nodePositions}
-                      />
-                    ));
-                }
-
-                // Child fallback: Connect to Root
-                if (currentLevel.id === "child") {
-                  if (!nodePositions["node-root"]) return null;
-                  return (
-                    <Connection 
-                      key={`child-root-${node.inscription_id}-fallback`}
-                      startId="node-root"
-                      endId={nodeDomId}
-                      nodePositions={nodePositions}
-                    />
-                  );
-                }
-
-                // Ancestor fallback (p -> gp, gp -> ggp): Connect to the closest non-empty level ABOVE
-                let fallbackLevelIdx = -1;
-                for (let i = levelIdx - 1; i >= 0; i--) {
-                  if (levels[i].items.length > 0) {
-                    fallbackLevelIdx = i;
-                    break;
-                  }
-                }
-
-                if (fallbackLevelIdx !== -1) {
-                  const fallbackLevel = levels[fallbackLevelIdx];
-                  return fallbackLevel.items
-                    .map(p => ({ item: p, domId: p.inscription_id === root.inscription_id ? "node-root" : `node-${p.inscription_id}` }))
-                    .filter(p => nodePositions[p.domId])
-                    .map((p) => (
-                      <Connection 
-                        key={`${node.inscription_id}-${p.item.inscription_id}-fallback`}
-                        startId={p.domId}
-                        endId={nodeDomId}
-                        nodePositions={nodePositions}
-                      />
-                    ));
-                }
-
-                return null;
-              });
-            });
-          })()}
+          {connections.map(conn => {
+            if (!nodePositions[conn.startId] || !nodePositions[conn.endId]) return null
+            return (
+              <Connection 
+                key={conn.key}
+                startId={conn.startId}
+                endId={conn.endId}
+                nodePositions={nodePositions}
+              />
+            )
+          })}
         </svg>
 
         {/* Great-Grandparents Row */}
@@ -646,4 +586,7 @@ export function GenealogyTree({ chronicle, onShare }: Props) {
       )}
     </div>
   )
-}
+})
+
+GenealogyTree.displayName = "GenealogyTree"
+

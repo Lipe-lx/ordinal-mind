@@ -43,10 +43,18 @@ export function ChronicleCard({
 
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
-  const [activeTab, setActiveTab] = useState<"narrative" | "genealogy">("narrative")
+  const [layoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
+
+  const toggleExpand = (target: "narrative" | "genealogy") => {
+    if (layoutMode === target) {
+      setLayoutMode("split")
+    } else {
+      setLayoutMode(target)
+    }
+  }
 
   return (
-    <div className="chronicle-card glass-card">
+    <div className={`chronicle-card glass-card layout-mode-${layoutMode}`}>
       {chronicle.collector_signals.evidence_count > 0 && (
         <CollectorSignalsPanel chronicle={chronicle} />
       )}
@@ -63,48 +71,57 @@ export function ChronicleCard({
           🔑 Set your API key to generate narratives
         </p>
       )}
-      {/* Tab Switcher */}
+      {/* Tab Switcher / Expansion Toggles */}
       <div className="chronicle-tabs">
         <button 
-          className={`chronicle-tab ${activeTab === "narrative" ? "active" : ""}`}
-          onClick={() => setActiveTab("narrative")}
+          className={`chronicle-tab ${layoutMode === "narrative" ? "active is-expanded" : ""}`}
+          onClick={() => toggleExpand("narrative")}
         >
-          Chronicle Narrative
+          <span>Chronicle Narrative</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-right">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
         </button>
         <button 
-          className={`chronicle-tab ${activeTab === "genealogy" ? "active" : ""}`}
-          onClick={() => setActiveTab("genealogy")}
+          className={`chronicle-tab ${layoutMode === "genealogy" ? "active is-expanded" : ""}`}
+          onClick={() => toggleExpand("genealogy")}
         >
-          Genealogical Tree
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-left">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span>Genealogical Tree</span>
         </button>
       </div>
 
-      {activeTab === "narrative" ? (
-        <NarrativeRenderer
-          narrative={narrative}
-          streamingText={streamingText}
-          phase={phase}
-          elapsed={elapsed}
-          providerName={config?.provider}
-          modelName={config?.model}
-          error={synthError}
-          inputMode={lastInputMode}
-          researchLogs={researchLogs}
-          researchEnabled={!!config?.researchKeys && Object.keys(config.researchKeys).length > 0}
-          onGenerate={hasKey ? onSynthesize : onOpenBYOK}
-          actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
-          emptyMessage={
-            hasKey
-              ? "Generate an AI-powered Chronicle narrative from the factual timeline above."
-              : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
-          }
-          onCancel={onCancel}
-          onShare={onShare}
-          collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
-        />
-      ) : (
-        <GenealogyTree chronicle={chronicle} onShare={onShare} />
-      )}
+      <div className={`chronicle-layout-wrapper layout-mode-${layoutMode}`}>
+        <div className="chronicle-layout-panel is-narrative">
+          <NarrativeRenderer
+            narrative={narrative}
+            streamingText={streamingText}
+            phase={phase}
+            elapsed={elapsed}
+            providerName={config?.provider}
+            modelName={config?.model}
+            error={synthError}
+            inputMode={lastInputMode}
+            researchLogs={researchLogs}
+            researchEnabled={!!config?.researchKeys && Object.keys(config.researchKeys).length > 0}
+            onGenerate={hasKey ? onSynthesize : onOpenBYOK}
+            actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
+            emptyMessage={
+              hasKey
+                ? "Generate an AI-powered Chronicle narrative from the factual timeline above."
+                : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
+            }
+            onCancel={onCancel}
+            onShare={onShare}
+            collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
+          />
+        </div>
+        <div className="chronicle-layout-panel is-genealogy">
+          <GenealogyTree chronicle={chronicle} onShare={onShare} />
+        </div>
+      </div>
       
       {/* Sources Widget */}
       <div style={{ marginTop: "auto" }}>

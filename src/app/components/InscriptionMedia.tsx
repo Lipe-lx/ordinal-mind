@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, memo } from "react"
 import { detectMediaKind, getMediaPreviewMode, buildOrdinalsPreviewUrl, isEmojiOnly } from "../lib/media"
 import type { RelatedInscriptionSummary } from "../lib/types"
 
@@ -10,7 +10,10 @@ interface Props {
 
 const MAX_TEXT_PREVIEW_BYTES = 12 * 1024 // Slightly smaller for nodes
 
-export function InscriptionMedia({ inscription, className, loading = "lazy" }: Props) {
+/**
+ * InscriptionMedia component optimized with memoization.
+ */
+export const InscriptionMedia = memo(({ inscription, className, loading = "lazy" }: Props) => {
   const [renderFallback, setRenderFallback] = useState(false)
   const contentType = inscription.content_type || "image/png"
   const kind = detectMediaKind(contentType)
@@ -75,7 +78,9 @@ export function InscriptionMedia({ inscription, className, loading = "lazy" }: P
       onError={() => setRenderFallback(true)}
     />
   )
-}
+})
+
+InscriptionMedia.displayName = "InscriptionMedia"
 
 function TextPreview({ 
   contentType, 
@@ -114,3 +119,4 @@ function TextPreview({
     </div>
   )
 }
+

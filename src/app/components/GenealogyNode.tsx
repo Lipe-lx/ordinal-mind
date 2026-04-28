@@ -1,5 +1,5 @@
 import { motion, useMotionValue, useTransform, useSpring } from "motion/react"
-import React from "react"
+import React, { memo, useRef } from "react"
 import type { RelatedInscriptionSummary } from "../lib/types"
 import { InscriptionMedia } from "./InscriptionMedia"
 
@@ -13,7 +13,11 @@ interface Props {
   onTap?: () => void
 }
 
-export function GenealogyNode({ id, inscription, label, isRoot, compact, isFeatured, onTap }: Props) {
+/**
+ * GenealogyNode component optimized with React.memo and dimension caching
+ * to ensure smooth 60fps interaction during 3D tilt.
+ */
+export const GenealogyNode = memo(({ id, inscription, label, isRoot, compact, isFeatured, onTap }: Props) => {
   const numberLabel = inscription.inscription_number != null ? `#${inscription.inscription_number}` : "Pending"
 
   const mouseX = useMotionValue(0)
@@ -26,8 +30,16 @@ export function GenealogyNode({ id, inscription, label, isRoot, compact, isFeatu
   const rotateX = useTransform(springY, [-0.5, 0.5], [8, -8])
   const rotateY = useTransform(springX, [-0.5, 0.5], [-8, 8])
 
+  // Optimization: Cache dimensions on entry to avoid layout thrashing during mouse move
+  const rectRef = useRef<DOMRect | null>(null)
+
+  const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    rectRef.current = e.currentTarget.getBoundingClientRect()
+  }
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
+    if (!rectRef.current) return
+    const rect = rectRef.current
     const x = (e.clientX - rect.left) / rect.width - 0.5
     const y = (e.clientY - rect.top) / rect.height - 0.5
     mouseX.set(x)
@@ -37,6 +49,7 @@ export function GenealogyNode({ id, inscription, label, isRoot, compact, isFeatu
   const handleMouseLeave = () => {
     mouseX.set(0)
     mouseY.set(0)
+    rectRef.current = null
   }
 
   return (
@@ -46,6 +59,7 @@ export function GenealogyNode({ id, inscription, label, isRoot, compact, isFeatu
       whileHover={{ scale: 1.05, y: -8, transition: { duration: 0.3 } }}
       whileTap={{ scale: 0.98 }}
       onTap={onTap}
+      onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       initial={{ opacity: 0, y: 20 }}
@@ -57,7 +71,8 @@ export function GenealogyNode({ id, inscription, label, isRoot, compact, isFeatu
         transformStyle: "preserve-3d",
         cursor: "pointer",
         userSelect: "none",
-        WebkitUserSelect: "none"
+        WebkitUserSelect: "none",
+        willChange: "transform" // Promote to compositor layer
       }}
     >
       <div className="node-card glass-card" style={{ transform: "translateZ(30px)" }}>
@@ -89,4 +104,7 @@ export function GenealogyNode({ id, inscription, label, isRoot, compact, isFeatu
       </div>
     </motion.div>
   )
-}
+})
+
+GenealogyNode.displayName = "GenealogyNode"
+

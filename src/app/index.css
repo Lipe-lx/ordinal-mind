@@ -892,6 +892,8 @@ select.input-field option {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  container-type: inline-size;
+  container-name: card;
 }
 
 
@@ -2991,6 +2993,7 @@ select.input-field option {
   margin-top: var(--space-xs);
   flex: 1;
   min-height: 0;
+  width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: var(--space-sm);
@@ -3024,6 +3027,9 @@ select.input-field option {
   line-height: 1.75;
   color: var(--text-secondary);
   padding: var(--space-md) var(--space-xl);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 .narrative-content p:first-child {
   font-size: 0.938rem;
@@ -3677,11 +3683,20 @@ select.input-field option {
 /* --- Chronicle Tabs --- */
 .chronicle-tabs {
   display: flex;
+  justify-content: center;
   gap: var(--space-md);
   padding: 0 var(--space-md);
   border-bottom: 1px solid var(--border-glass);
   margin-bottom: var(--space-md);
   flex-shrink: 0;
+  transition: all var(--duration-normal) var(--ease-smooth);
+}
+
+.layout-mode-split .chronicle-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0;
 }
 
 .chronicle-tab {
@@ -3693,9 +3708,13 @@ select.input-field option {
   border: none;
   cursor: pointer;
   position: relative;
-  transition: color var(--duration-fast) var(--ease-smooth);
+  transition: all var(--duration-fast) var(--ease-smooth);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
 .chronicle-tab:hover {
@@ -3715,6 +3734,173 @@ select.input-field option {
   height: 2px;
   background: var(--accent-primary);
   box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.chronicle-tab.is-expanded::after {
+  height: 3px;
+  box-shadow: 0 0 15px var(--accent-glow-strong);
+}
+
+.tab-arrow {
+  opacity: 0.4;
+  transition: all var(--duration-normal) var(--ease-spring);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chronicle-tab:hover .tab-arrow {
+  opacity: 1;
+}
+
+.chronicle-tab.active .tab-arrow {
+  opacity: 1;
+  color: var(--accent-primary);
+}
+
+.tab-arrow.is-right {
+  /* gap handles the spacing now */
+}
+
+.tab-arrow.is-left {
+  /* gap handles the spacing now */
+}
+
+.chronicle-tab.is-expanded .tab-arrow {
+  transform: rotate(180deg);
+}
+
+@container card (max-width: 600px) {
+  .chronicle-tabs {
+    gap: var(--space-xs);
+    padding: 0 var(--space-xs);
+  }
+  .chronicle-tab {
+    font-size: 0.65rem;
+    padding: var(--space-xs) var(--space-sm);
+  }
+}
+
+/* --- Chronicle Layout Modes --- */
+.chronicle-layout-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  gap: 1px;
+  background: var(--border-glass);
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.chronicle-layout-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  transition: flex 0.6s var(--ease-smooth), opacity 0.4s ease, transform 0.6s var(--ease-smooth);
+  position: relative;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.chronicle-layout-panel.is-narrative {
+  background: transparent;
+}
+
+.chronicle-layout-panel.is-genealogy {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* Modes */
+.layout-mode-narrative .chronicle-layout-panel.is-genealogy {
+  flex: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(20px);
+}
+
+.layout-mode-genealogy .chronicle-layout-panel.is-narrative {
+  flex: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-20px);
+}
+
+.layout-mode-split .chronicle-layout-panel {
+  flex: 1;
+  opacity: 1;
+  transform: none;
+}
+
+/* --- Responsive Panel Typography (Container Queries) --- */
+@container (max-width: 850px) {
+  .narrative-content {
+    font-size: 0.813rem;
+    padding: var(--space-md) var(--space-md);
+    line-height: 1.6;
+  }
+}
+
+@container (max-width: 600px) {
+  .narrative-content {
+    font-size: 0.75rem;
+    padding: var(--space-sm) var(--space-sm);
+  }
+  
+  .narrative-content p:first-child {
+    font-size: 0.813rem;
+  }
+  
+  .narrative-content p:first-child::first-letter {
+    font-size: 1.5rem;
+  }
+
+  .narrative-paragraph {
+    margin-bottom: var(--space-md);
+  }
+
+  .narrative-loading {
+    padding: var(--space-sm);
+  }
+
+  .narrative-loading-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+
+  .narrative-model-badge {
+    font-size: 0.6rem;
+  }
+
+  .narrative-logs-toggle-text {
+    font-size: 0.62rem;
+  }
+
+  .narrative-logs-count {
+    font-size: 0.6rem;
+    padding: 1px 4px;
+  }
+  
+  /* Compact lists for narrow view */
+  .narrative-content ul, .narrative-content ol {
+    padding-left: 1rem;
+    margin-bottom: var(--space-md);
+  }
+}
+
+@container (max-width: 450px) {
+  .narrative-content {
+    font-size: 0.7rem;
+    padding: var(--space-xs) var(--space-xs);
+  }
+
+  .narrative-content p:first-child::first-letter {
+    font-size: 1.2rem;
+  }
 }
 
 /* --- Genealogy Tree --- */
@@ -3757,6 +3943,7 @@ select.input-field option {
   height: 200%;
   transform-style: preserve-3d;
   will-change: transform;
+  backface-visibility: hidden;
 }
 
 .genealogy-bg-grid {
@@ -3791,14 +3978,7 @@ select.input-field option {
   mask-image: radial-gradient(circle at center, black 20%, transparent 80%);
 }
 
-.bg-particle {
-  position: absolute;
-  background: #fff;
-  border-radius: 50%;
-  filter: blur(1px) drop-shadow(0 0 5px rgba(255, 255, 255, 0.8));
-  opacity: 0.3;
-  pointer-events: none;
-}
+
 
 .genealogy-bg-scanline {
   position: absolute;
@@ -4305,5 +4485,6 @@ select.input-field option {
 
 .genealogy-path.animate-flow {
   stroke-dasharray: 20 20;
-  animation: energy-flow 2s linear infinite;
+  animation: energy-flow 3s linear infinite;
+  will-change: stroke-dashoffset;
 }
