@@ -149,6 +149,8 @@ function extractInlineDataCheckAnswer(text: string): string | null {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean)
 
   for (const line of lines) {
+    if (!isInlineDataCheckLine(line)) continue
+
     const match = line.match(/\?\s*((?:No|Yes|Não|Nao|Sim)\.?\s+[\s\S]+)$/i)
     if (match?.[1]) {
       return cleanFinalAnswerLabel(match[1])
@@ -156,6 +158,10 @@ function extractInlineDataCheckAnswer(text: string): string | null {
   }
 
   return null
+}
+
+function isInlineDataCheckLine(line: string): boolean {
+  return /\b(data|dados|provided|fornecid[oa]s|specif(?:y|ies)|especifica|source data|current data|dados atuais)\b/i.test(line)
 }
 
 /**

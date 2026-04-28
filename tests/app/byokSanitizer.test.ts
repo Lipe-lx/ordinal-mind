@@ -21,4 +21,14 @@ Answer: A coleção tem 112.4K Runestones nos dados disponíveis.`
       "A coleção tem 112.4K Runestones nos dados disponíveis."
     )
   })
+
+  it("does not treat language checks as the final answer", () => {
+    const raw = `User Question: "quantas runas existem?"
+Is the user asking in Portuguese? Yes (Portuguese).
+Does the provided data specify the total supply of Runes? No. Os dados disponíveis informam apenas o supply da coleção Runestone: 112.4K.`
+
+    expect(sanitizeNarrative(raw)).toBe(
+      "No. Os dados disponíveis informam apenas o supply da coleção Runestone: 112.4K."
+    )
+  })
 })
