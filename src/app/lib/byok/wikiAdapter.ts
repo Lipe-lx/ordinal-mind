@@ -73,13 +73,52 @@ export async function generateWikiDraftWithByok(params: {
   const entityType = params.entityType ?? "inscription"
 
   const prompt = buildWikiDraftPrompt(chronicle, slug, entityType)
-  const raw = await runByokPrompt(config, prompt)
-  if (!raw) return null
+  let raw: string
+  try {
+    raw = await runByokPrompt(config, prompt)
+  } catch (error) {
+    logWikiDraftDiagnostic("warn", "byok_request_failed", {
+      provider: config.provider,
+      model: config.model,
+      reason: error instanceof Error ? error.message : "unknown_error",
+    })
+    return buildLocalWikiDraft(chronicle, config.provider, slug, entityType)
+  }
+
+  if (!raw) {
+    logWikiDraftDiagnostic("warn", "byok_empty_response", {
+      provider: config.provider,
+      model: config.model,
+    })
+    return buildLocalWikiDraft(chronicle, config.provider, slug, entityType)
+  }
 
   const parsed = parseFirstJsonObject(raw)
-  if (!parsed || typeof parsed !== "object") return null
+  if (!parsed || typeof parsed !== "object") {
+    logWikiDraftDiagnostic("warn", "byok_invalid_json", {
+      provider: config.provider,
+      model: config.model,
+      response_chars: raw.length,
+    })
+    return buildLocalWikiDraft(chronicle, config.provider, slug, entityType)
+  }
 
-  return sanitizeWikiDraft(parsed as Record<string, unknown>, config.provider, slug, entityType)
+  const draft = sanitizeWikiDraft(parsed as Record<string, unknown>, config.provider, slug, entityType)
+  if (!draft) {
+    logWikiDraftDiagnostic("warn", "byok_unusable_draft", {
+      provider: config.provider,
+      model: config.model,
+    })
+    return buildLocalWikiDraft(chronicle, config.provider, slug, entityType)
+  }
+
+  logWikiDraftDiagnostic("info", "byok_draft_generated", {
+    provider: config.provider,
+    model: config.model,
+    source_event_count: draft.source_event_ids.length,
+    section_count: draft.sections.length,
+  })
+  return draft
 }
 
 function buildWikiDraftPrompt(
@@ -168,7 +207,9 @@ async function runOpenAIStylePrompt(params: {
     }),
   })
 
-  if (!response.ok) return ""
+  if (!response.ok) {
+    throw new Error(await responseErrorLabel(response, "openai_style_request_failed"))
+  }
 
   const json = await response.json() as {
     choices?: Array<{ message?: { content?: string | null } }>
@@ -194,7 +235,9 @@ async function runAnthropicPrompt(config: ByokConfig, prompt: string): Promise<s
     }),
   })
 
-  if (!response.ok) return ""
+  if (!response.ok) {
+    throw new Error(await responseErrorLabel(response, "anthropic_request_failed"))
+  }
 
   const json = await response.json() as {
     content?: Array<{ type?: string; text?: string }>
@@ -220,13 +263,79 @@ async function runGeminiPrompt(config: ByokConfig, prompt: string): Promise<stri
     }),
   })
 
-  if (!response.ok) return ""
+  if (!response.ok) {
+    throw new Error(await responseErrorLabel(response, "gemini_request_failed"))
+  }
 
   const json = await response.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
   }
 
   return json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? ""
+}
+
+function buildLocalWikiDraft(
+  chronicle: Chronicle,
+  provider: string,
+  fallbackSlug: string,
+  entityType: "inscription"
+): WikiPageDraft | null {
+  const sourceEvents = chronicle.events.filter((event) => event.id)
+  if (sourceEvents.length === 0) return null
+
+  const genesisEvent = sourceEvents.find((event) => event.event_type === "genesis") ?? sourceEvents[0]
+  const inscriptionNumber = Number.isFinite(chronicle.meta.inscription_number)
+    ? `#${chronicle.meta.inscription_number}`
+    : chronicle.meta.inscription_id
+  const title = chronicle.collection_context.presentation.full_label
+    ?? chronicle.collection_context.presentation.item_label
+    ?? `Inscription ${inscriptionNumber}`
+  const genesisDate = formatEventDate(genesisEvent.timestamp)
+  const overviewParts = [
+    `${title} is a Bitcoin Ordinals inscription recorded at block ${chronicle.meta.genesis_block}.`,
+    genesisDate ? `Its genesis event is dated ${genesisDate}.` : "",
+  ].filter(Boolean)
+
+  const timelineEvents = sourceEvents
+    .slice()
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+    .slice(0, 6)
+
+  const timelineBody = timelineEvents
+    .map((event) => {
+      const date = formatEventDate(event.timestamp)
+      const prefix = date ? `${date}: ` : ""
+      return `${prefix}${event.description}`
+    })
+    .join(" ")
+
+  const sections = [
+    {
+      heading: "Overview",
+      body: overviewParts.join(" "),
+      source_event_ids: [genesisEvent.id],
+    },
+    {
+      heading: "Timeline",
+      body: timelineBody || "The available Chronicle events describe the inscription's public on-chain history.",
+      source_event_ids: timelineEvents.map((event) => event.id),
+    },
+  ].filter((section) => section.body && section.source_event_ids.length > 0)
+
+  const sourceEventIds = Array.from(new Set(sections.flatMap((section) => section.source_event_ids)))
+  if (sourceEventIds.length === 0) return null
+
+  return {
+    slug: fallbackSlug,
+    entity_type: entityType,
+    title,
+    summary: overviewParts.slice(0, 2).join(" ") || `${title} has a source-backed Chronicle timeline.`,
+    sections,
+    cross_refs: [],
+    source_event_ids: sourceEventIds,
+    generated_at: new Date().toISOString(),
+    byok_provider: `${provider}:local_factual_fallback`,
+  }
 }
 
 function sanitizeWikiDraft(
@@ -299,4 +408,55 @@ function parseFirstJsonObject(text: string): unknown | null {
   } catch {
     return null
   }
+}
+
+async function responseErrorLabel(response: Response, fallback: string): Promise<string> {
+  const text = await response.text().catch(() => "")
+  const detail = parseProviderError(text)
+  return detail
+    ? `${fallback}:${response.status}:${detail}`
+    : `${fallback}:${response.status}`
+}
+
+function parseProviderError(text: string): string {
+  if (!text) return ""
+  try {
+    const json = JSON.parse(text) as {
+      error?: { message?: unknown; type?: unknown; code?: unknown } | string
+    }
+    if (typeof json.error === "string") return limitDiagnostic(json.error)
+    const message = typeof json.error?.message === "string" ? json.error.message : ""
+    const type = typeof json.error?.type === "string" ? json.error.type : ""
+    const code = typeof json.error?.code === "string" ? json.error.code : ""
+    return limitDiagnostic([type, code, message].filter(Boolean).join(":"))
+  } catch {
+    return limitDiagnostic(text)
+  }
+}
+
+function limitDiagnostic(value: string): string {
+  return value.replace(/\s+/g, " ").slice(0, 180)
+}
+
+function formatEventDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toISOString().slice(0, 10)
+}
+
+function logWikiDraftDiagnostic(
+  level: "info" | "warn",
+  event: string,
+  detail: Record<string, unknown>
+): void {
+  if (typeof console === "undefined") return
+  const payload = {
+    event,
+    ...detail,
+  }
+  if (level === "warn") {
+    console.warn("[OrdinalMind][WikiDraft]", payload)
+    return
+  }
+  console.info("[OrdinalMind][WikiDraft]", payload)
 }

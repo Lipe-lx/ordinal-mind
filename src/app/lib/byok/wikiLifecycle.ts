@@ -277,11 +277,23 @@ async function ingestWikiDraft(draft: WikiPageDraft): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(draft),
     })
-    if (!response.ok) return false
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+      logWikiLifecycleDiagnostic("warn", "wiki_ingest_failed", {
+        slug: draft.slug,
+        status: response.status,
+        error: typeof payload.error === "string" ? payload.error : "unknown_error",
+      })
+      return false
+    }
 
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
     return payload.ok === true
-  } catch {
+  } catch (error) {
+    logWikiLifecycleDiagnostic("warn", "wiki_ingest_request_failed", {
+      slug: draft.slug,
+      reason: error instanceof Error ? error.message : "unknown_error",
+    })
     return false
   }
 }
@@ -329,4 +341,21 @@ function wikiHealthFallback(status: WikiHealth["status"]): WikiHealth {
     missing_objects: status === "ready" ? [] : ["raw_chronicle_events", "wiki_pages"],
     checked_at: new Date().toISOString(),
   }
+}
+
+function logWikiLifecycleDiagnostic(
+  level: "info" | "warn",
+  event: string,
+  detail: Record<string, unknown>
+): void {
+  if (typeof console === "undefined") return
+  const payload = {
+    event,
+    ...detail,
+  }
+  if (level === "warn") {
+    console.warn("[OrdinalMind][WikiLifecycle]", payload)
+    return
+  }
+  console.info("[OrdinalMind][WikiLifecycle]", payload)
 }

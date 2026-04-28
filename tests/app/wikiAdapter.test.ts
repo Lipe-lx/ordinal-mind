@@ -98,6 +98,7 @@ describe("wikiAdapter", () => {
   })
 
   it("generates and sanitizes wiki draft using BYOK provider", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined)
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       choices: [
         {
@@ -127,5 +128,46 @@ describe("wikiAdapter", () => {
     expect(draft).not.toBeNull()
     expect(draft?.source_event_ids).toContain("ev_genesis_1")
     expect(draft?.sections.length).toBe(1)
+  })
+
+  it("falls back to a factual local wiki draft when BYOK request fails", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { message: "model unavailable" },
+    }), { status: 400 })))
+
+    const draft = await generateWikiDraftWithByok({
+      chronicle,
+      config: { provider: "openai", model: "gpt-5.4", key: "sk-test" },
+      slug: "inscription:abc123i0",
+    })
+
+    expect(draft).not.toBeNull()
+    expect(draft?.byok_provider).toBe("openai:local_factual_fallback")
+    expect(draft?.source_event_ids).toEqual(["ev_genesis_1"])
+    expect(draft?.sections[0]?.heading).toBe("Overview")
+  })
+
+  it("falls back to a factual local wiki draft when BYOK returns non-JSON text", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [
+        {
+          message: {
+            content: "I cannot produce JSON for this.",
+          },
+        },
+      ],
+    }), { status: 200 })))
+
+    const draft = await generateWikiDraftWithByok({
+      chronicle,
+      config: { provider: "openai", model: "gpt-5.4", key: "sk-test" },
+      slug: "inscription:abc123i0",
+    })
+
+    expect(draft).not.toBeNull()
+    expect(draft?.byok_provider).toBe("openai:local_factual_fallback")
+    expect(draft?.summary).toContain("block 800000")
   })
 })
