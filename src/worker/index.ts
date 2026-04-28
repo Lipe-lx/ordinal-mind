@@ -544,10 +544,12 @@ async function handleStandardChronicle(
   }
 
   if (env.DB) {
-    void persistRawEvents(env, id, events).catch((err) => {
-      console.error("Raw events persistence failed:", err)
+    void persistRawEvents(env, id, events).then((result) => {
+      if (result.ok) return
+      console.warn(`Raw events persistence skipped: ${result.status}`)
       diagLog(diagnostics, "wiki_layer0_persist_error", {
-        error: err instanceof Error ? err.message : String(err),
+        status: result.status,
+        error: result.error ?? null,
       })
     })
   }
@@ -920,10 +922,12 @@ async function handleStreamingChronicle(
       }
 
       if (env.DB) {
-        void persistRawEvents(env, id, events).catch((err) => {
-          console.error("Raw events persistence failed (stream):", err)
+        void persistRawEvents(env, id, events).then((result) => {
+          if (result.ok) return
+          console.warn(`Raw events persistence skipped (stream): ${result.status}`)
           diagLog(diagnostics, "wiki_layer0_persist_error_stream", {
-            error: err instanceof Error ? err.message : String(err),
+            status: result.status,
+            error: result.error ?? null,
           })
         })
       }

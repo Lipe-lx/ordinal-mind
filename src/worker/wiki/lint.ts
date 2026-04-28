@@ -87,13 +87,7 @@ async function collectBrokenCrossRefs(
   const broken: Array<{ slug: string; broken_ref: string }> = []
 
   for (const page of pages) {
-    let refs: string[] = []
-    try {
-      const parsed = JSON.parse(page.cross_refs_json ?? "[]")
-      refs = Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
-    } catch {
-      refs = []
-    }
+    const refs = parseCrossRefs(page.cross_refs_json)
 
     for (const ref of refs) {
       const exists = await env.DB.prepare(
@@ -109,4 +103,13 @@ async function collectBrokenCrossRefs(
   }
 
   return broken
+}
+
+function parseCrossRefs(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value ?? "[]")
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
+  } catch {
+    return []
+  }
 }

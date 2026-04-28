@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
 import type { Chronicle } from "../types"
-import type { WikiLifecycleStatus, WikiPage, WikiPageDraft } from "../wikiTypes"
+import type { WikiHealth, WikiLifecycleStatus, WikiPage, WikiPageDraft } from "../wikiTypes"
 import { KeyStore, type ByokConfig } from "./index"
 import { generateWikiDraftWithByok } from "./wikiAdapter"
 import { isSlugFlaggedForRegeneration, maybeRunWikiLint } from "../wikiLint"
@@ -22,11 +22,17 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
 
   useEffect(() => {
     if (!chronicle) {
-      setWikiPage(null)
-      setStatus("idle")
-      setLastError(null)
+      let resetCancelled = false
       regenerateInFlightRef.current = null
-      return
+      scheduleMicrotask(() => {
+        if (resetCancelled) return
+        setWikiPage(null)
+        setStatus("idle")
+        setLastError(null)
+      })
+      return () => {
+        resetCancelled = true
+      }
     }
 
     let cancelled = false
@@ -36,6 +42,16 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
     const run = async () => {
       setStatus("loading")
       setLastError(null)
+
+      const health = await fetchWikiHealth()
+      if (cancelled) return
+
+      if (!isWikiHealthReady(health)) {
+        setWikiPage(null)
+        setStatus("not_initialized")
+        setLastError(null)
+        return
+      }
 
       const fetched = await fetchWikiPage(slug)
       if (cancelled) return
@@ -54,9 +70,12 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
       const keyConfig = KeyStore.get()
       const canGenerate = Boolean(keyConfig?.key && keyConfig.provider !== "unknown")
 
-      const shouldRefresh = fetched.page
-        ? isWikiPageStale(fetched.page)
-        : fetched.error === "wiki_page_not_found"
+      const shouldRefresh = shouldAttemptWikiRegeneration({
+        health,
+        canGenerate,
+        page: fetched.page,
+        fetchError: fetched.error,
+      })
 
       if (canGenerate && shouldRefresh) {
         setStatus("refreshing")
@@ -80,6 +99,7 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
       }
 
       scheduleIdle(async () => {
+        if (!isWikiHealthReady(health)) return
         const report = await maybeRunWikiLint()
         if (cancelled) return
 
@@ -121,8 +141,11 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
       case "refreshing":
         return "Wiki stale: refreshing"
       case "unavailable":
-      case "missing":
         return "Wiki unavailable"
+      case "missing":
+        return "Wiki page missing"
+      case "not_initialized":
+        return "Wiki not initialized"
       default:
         return ""
     }
@@ -188,6 +211,21 @@ interface FetchWikiResult {
   error: string | null
 }
 
+export async function fetchWikiHealth(): Promise<WikiHealth> {
+  try {
+    const response = await fetch("/api/wiki/health", { method: "GET" })
+    const body = await response.json().catch(() => ({})) as Partial<WikiHealth>
+
+    if (isWikiHealth(body)) {
+      return body
+    }
+
+    return wikiHealthFallback("schema_missing")
+  } catch {
+    return wikiHealthFallback("db_unavailable")
+  }
+}
+
 export async function fetchWikiPage(slug: string): Promise<FetchWikiResult> {
   try {
     const response = await fetch(`/api/wiki/${encodeURIComponent(slug)}`)
@@ -207,6 +245,22 @@ export async function fetchWikiPage(slug: string): Promise<FetchWikiResult> {
   } catch {
     return { page: null, error: "wiki_unavailable" }
   }
+}
+
+export function isWikiHealthReady(health: WikiHealth): boolean {
+  return health.ready === true && health.status === "ready"
+}
+
+export function shouldAttemptWikiRegeneration(params: {
+  health: WikiHealth
+  canGenerate: boolean
+  page: WikiPage | null
+  fetchError: string | null
+  now?: number
+}): boolean {
+  if (!params.canGenerate || !isWikiHealthReady(params.health)) return false
+  if (params.page) return isWikiPageStale(params.page, params.now)
+  return params.fetchError === "wiki_page_not_found"
 }
 
 export function isWikiPageStale(page: WikiPage, now = Date.now()): boolean {
@@ -239,4 +293,40 @@ function scheduleIdle(callback: () => void): void {
     return
   }
   window.setTimeout(callback, 50)
+}
+
+function scheduleMicrotask(callback: () => void): void {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(callback)
+    return
+  }
+  setTimeout(callback, 0)
+}
+
+function isWikiHealth(value: Partial<WikiHealth>): value is WikiHealth {
+  return (
+    typeof value.ready === "boolean"
+    && (
+      value.status === "ready"
+      || value.status === "db_unavailable"
+      || value.status === "schema_missing"
+      || value.status === "schema_incomplete"
+    )
+    && Array.isArray(value.present_objects)
+    && Array.isArray(value.missing_objects)
+    && typeof value.checked_at === "string"
+  )
+}
+
+function wikiHealthFallback(status: WikiHealth["status"]): WikiHealth {
+  return {
+    ok: status === "ready",
+    ready: status === "ready",
+    status,
+    error: status === "ready" ? undefined : status === "db_unavailable" ? "wiki_db_unavailable" : `wiki_${status}`,
+    phase: status === "ready" ? undefined : "fail_soft",
+    present_objects: [],
+    missing_objects: status === "ready" ? [] : ["raw_chronicle_events", "wiki_pages"],
+    checked_at: new Date().toISOString(),
+  }
 }

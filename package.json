@@ -13,7 +13,11 @@
     "test": "vitest run",
     "test:smoke": "vitest run tests/worker/chronicleSmoke.test.ts",
     "test:watch": "vitest",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "db:migrate:local": "wrangler d1 migrations apply ordinal-mind-wiki --local",
+    "db:migrate:remote": "wrangler d1 migrations apply ordinal-mind-wiki --remote",
+    "db:migrations:list:local": "wrangler d1 migrations list ordinal-mind-wiki --local",
+    "db:migrations:list:remote": "wrangler d1 migrations list ordinal-mind-wiki --remote"
   },
   "dependencies": {
     "cbor": "^10.0.12",

@@ -3,10 +3,23 @@ import worker, { type Env } from "../../src/worker/index"
 
 type Row = Record<string, unknown>
 
+const FULL_SCHEMA_OBJECTS = [
+  "raw_chronicle_events",
+  "wiki_pages",
+  "wiki_log",
+  "wiki_fts",
+]
+
 class FakeD1Database {
   rawEvents: Row[] = []
   wikiPages: Row[] = []
   wikiLog: Row[] = []
+  schemaObjects: Set<string>
+  failViewCountUpdate = false
+
+  constructor(schemaObjects: string[] = FULL_SCHEMA_OBJECTS) {
+    this.schemaObjects = new Set(schemaObjects)
+  }
 
   prepare(sql: string): FakeD1Statement {
     return new FakeD1Statement(this, sql)
@@ -53,6 +66,13 @@ class FakeD1Statement {
 
   private execSelect(): Row[] {
     const sql = this.norm()
+
+    if (sql.includes("from sqlite_schema")) {
+      return this.params
+        .map((name) => String(name))
+        .filter((name) => this.db.schemaObjects.has(name))
+        .map((name) => ({ name }))
+    }
 
     if (sql.includes("select id from raw_chronicle_events where id in")) {
       const ids = this.params as string[]
@@ -233,6 +253,10 @@ class FakeD1Statement {
     }
 
     if (sql.includes("update wiki_pages") && sql.includes("set view_count = view_count + 1")) {
+      if (this.db.failViewCountUpdate) {
+        throw new Error("D1_ERROR: no such table: wiki_pages: SQLITE_ERROR")
+      }
+
       const slug = String(this.params[0] ?? "")
       const row = this.db.wikiPages.find((page) => String(page.slug) === slug)
       if (row) {
@@ -386,8 +410,37 @@ function seedDb(): FakeD1Database {
 }
 
 describe("wiki routes backend", () => {
+  it("reports wiki health for ready, missing, and incomplete schemas", async () => {
+    const readyEnv = createEnv({ withDb: true, db: seedDb() })
+    const readyRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/health"), readyEnv)
+    expect(readyRes.status).toBe(200)
+    const readyBody = await readyRes.json() as Record<string, unknown>
+    expect(readyBody.status).toBe("ready")
+    expect(readyBody.ready).toBe(true)
+
+    const missingEnv = createEnv({ withDb: true, db: new FakeD1Database([]) })
+    const missingRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/health"), missingEnv)
+    expect(missingRes.status).toBe(503)
+    const missingBody = await missingRes.json() as Record<string, unknown>
+    expect(missingBody.status).toBe("schema_missing")
+    expect(missingBody.error).toBe("wiki_schema_missing")
+
+    const incompleteEnv = createEnv({ withDb: true, db: new FakeD1Database(["raw_chronicle_events"]) })
+    const incompleteRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/health"), incompleteEnv)
+    expect(incompleteRes.status).toBe(503)
+    const incompleteBody = await incompleteRes.json() as Record<string, unknown>
+    expect(incompleteBody.status).toBe("schema_incomplete")
+    expect(incompleteBody.error).toBe("wiki_schema_incomplete")
+  })
+
   it("fail-soft when DB is missing, without breaking cache-backed tools", async () => {
     const env = createEnv()
+
+    const healthReq = new Request("https://ordinalmind.local/api/wiki/health")
+    const healthRes = await worker.fetch(healthReq, env)
+    expect(healthRes.status).toBe(503)
+    const healthBody = await healthRes.json() as Record<string, unknown>
+    expect(healthBody.error).toBe("wiki_db_unavailable")
 
     const pageReq = new Request("https://ordinalmind.local/api/wiki/inscription:abc123i0")
     const pageRes = await worker.fetch(pageReq, env)
@@ -419,6 +472,55 @@ describe("wiki routes backend", () => {
     expect(collectionRes.status).toBe(200)
     const collectionBody = await collectionRes.json() as Record<string, unknown>
     expect(collectionBody.error).toBe("wiki_db_unavailable")
+  })
+
+  it("returns fail-soft wiki schema errors for page, ingest, lint, and DB-backed tools", async () => {
+    const env = createEnv({ withDb: true, db: new FakeD1Database([]) })
+
+    const pageRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/inscription:abc123i0"), env)
+    expect(pageRes.status).toBe(503)
+    const pageBody = await pageRes.json() as Record<string, unknown>
+    expect(pageBody.error).toBe("wiki_schema_missing")
+
+    const ingestRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug: "inscription:abc123i0",
+        entity_type: "inscription",
+        title: "#7",
+        summary: "summary",
+        sections: [{ heading: "Overview", body: "Body", source_event_ids: ["ev_genesis_1"] }],
+        cross_refs: [],
+        source_event_ids: ["ev_genesis_1"],
+        generated_at: "2026-04-28T00:00:00.000Z",
+        byok_provider: "openai",
+      }),
+    }), env)
+    expect(ingestRes.status).toBe(503)
+    const ingestBody = await ingestRes.json() as Record<string, unknown>
+    expect(ingestBody.error).toBe("wiki_schema_missing")
+
+    const lintRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/lint"), env)
+    expect(lintRes.status).toBe(503)
+
+    const searchRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/tools/search_wiki", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "frogs" }),
+    }), env)
+    expect(searchRes.status).toBe(200)
+    const searchBody = await searchRes.json() as Record<string, unknown>
+    expect(searchBody.error).toBe("wiki_schema_missing")
+    expect(searchBody.partial).toBe(true)
+
+    const rawRes = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/tools/get_raw_events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inscription_id: "abc123i0" }),
+    }), env)
+    const rawBody = await rawRes.json() as Record<string, unknown>
+    expect(rawBody.error).toBe("wiki_schema_missing")
   })
 
   it("ingests wiki pages and marks unverified claims", async () => {
@@ -518,5 +620,31 @@ describe("wiki routes backend", () => {
     expect(res.status).toBe(404)
     const body = await res.json() as Record<string, unknown>
     expect(body.error).toBe("wiki_page_not_found")
+  })
+
+  it("does not fail page reads when view count update fails", async () => {
+    const db = seedDb()
+    db.wikiPages.push({
+      slug: "inscription:abc123i0",
+      entity_type: "inscription",
+      title: "#7",
+      summary: "Test summary",
+      sections_json: JSON.stringify([]),
+      cross_refs_json: JSON.stringify([]),
+      source_event_ids_json: JSON.stringify(["ev_genesis_1"]),
+      generated_at: "2026-04-28T00:00:00.000Z",
+      byok_provider: "openai",
+      unverified_count: 0,
+      view_count: 0,
+      updated_at: "2026-04-28T00:00:00.000Z",
+    })
+    db.failViewCountUpdate = true
+
+    const env = createEnv({ withDb: true, db })
+    const res = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/inscription:abc123i0"), env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.ok).toBe(true)
+    expect(body.slug).toBe("inscription:abc123i0")
   })
 })

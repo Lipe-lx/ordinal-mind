@@ -1,13 +1,11 @@
 import type { Env } from "../index"
+import { getWikiSchemaFailure } from "./schema"
 import type { WikiPageDraft, WikiSection } from "./types"
 
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
-  if (!env.DB) {
-    return json(
-      { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
-      503
-    )
-  }
+  const schemaFailure = await getWikiSchemaFailure(env)
+  if (schemaFailure) return json(schemaFailure, 503)
+  if (!env.DB) return json({ ok: false, error: "wiki_db_unavailable", phase: "fail_soft" }, 503)
 
   let payload: unknown
   try {
@@ -91,6 +89,9 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       })
     )
     .run()
+    .catch(() => {
+      // Audit logs are best-effort; page ingestion has already succeeded.
+    })
 
   return json({ ok: true, slug: draft.slug, unverified_count: unverifiedIds.length })
 }

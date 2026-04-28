@@ -63,8 +63,12 @@ This is the current structure and responsibility map of the repository.
 ### Entry and routing
 
 - `index.ts`: Worker entrypoint, `/api/chronicle` orchestration, SSE streaming, `/api/wiki/*` delegation.
-- `routes/wiki.ts`: minimal wiki namespace router.
-- `wiki/tools.ts`: `get_timeline` and `get_collection_context` tools (cache-backed).
+- `routes/wiki.ts`: wiki namespace router, page reads, health, ingest, lint, and tool dispatch.
+- `wiki/schema.ts`: centralized D1 schema readiness checks and fail-soft wiki error shaping.
+- `wiki/persistEvents.ts`: immutable raw Chronicle event persistence to D1.
+- `wiki/ingest.ts`: validates BYOK-generated wiki drafts against Layer 0 source event IDs before persistence.
+- `wiki/tools.ts`: D1/FTS-backed wiki tools plus cache-backed timeline and collection fallbacks.
+- `wiki/lint.ts`: client-triggered integrity checks for stale, orphaned, unverified, or broken wiki pages.
 
 ### Data agents
 
@@ -99,9 +103,10 @@ This is the current structure and responsibility map of the repository.
 
 - `resolver.test.ts`, `timeline.test.ts`, `rarity.test.ts`, `mempool.test.ts`, `collections.test.ts`, etc.
 - `chronicleSmoke.test.ts`: scan pipeline smoke.
-- `wikiRoutes.test.ts`: wiki route/tool contract behavior.
+- `wikiRoutes.test.ts`: wiki health, ingest, search/tools, fail-soft schema behavior, and page-read contracts.
+- `wikiPersistEvents.test.ts`: raw event persistence, insert-or-ignore behavior, and missing-schema degradation.
 
 ## Current Known Boundaries
 
-- Wiki is currently contract-first (`/api/wiki/*` minimal); no full ingest/search persistence layer yet.
+- Wiki requires D1 migrations locally and remotely; use `npm run db:migrate:local` for `npm run dev` and `npm run db:migrate:remote` for deployed D1.
 - Typecheck currently fails on a known preexisting type mismatch in `src/worker/agents/collections.ts` unrelated to chat/docs updates.

@@ -1,8 +1,9 @@
 import { cacheGet } from "../cache"
 import type { Env } from "../index"
+import { getWikiSchemaFailure, isMissingWikiSchemaError, toWikiToolUnavailable } from "./schema"
 
 export async function handleWikiTool(toolName: string, request: Request, env: Env): Promise<Response> {
-  let payload: Record<string, unknown> = {}
+  let payload: Record<string, unknown>
   try {
     payload = (await request.json()) as Record<string, unknown>
   } catch {
@@ -24,6 +25,19 @@ export async function handleWikiTool(toolName: string, request: Request, env: En
         return json({ ok: false, error: "unknown_tool", tool: toolName }, 404)
     }
   } catch (err) {
+    if (isMissingWikiSchemaError(err)) {
+      return json(
+        {
+          ok: false,
+          error: "wiki_schema_missing",
+          status: "schema_missing",
+          partial: true,
+          phase: "fail_soft",
+        },
+        200
+      )
+    }
+
     return json(
       {
         ok: false,
@@ -36,9 +50,9 @@ export async function handleWikiTool(toolName: string, request: Request, env: En
 }
 
 async function searchWiki(input: Record<string, unknown>, env: Env): Promise<Record<string, unknown>> {
-  if (!env.DB) {
-    return { ok: false, error: "wiki_db_unavailable", partial: true }
-  }
+  const schemaFailure = await getWikiSchemaFailure(env)
+  if (schemaFailure) return toWikiToolUnavailable(schemaFailure)
+  if (!env.DB) return { ok: false, error: "wiki_db_unavailable", partial: true }
 
   const query = extractString(input.query)
   if (!query) {
@@ -89,9 +103,9 @@ async function searchWiki(input: Record<string, unknown>, env: Env): Promise<Rec
 }
 
 async function getRawEvents(input: Record<string, unknown>, env: Env): Promise<Record<string, unknown>> {
-  if (!env.DB) {
-    return { ok: false, error: "wiki_db_unavailable", partial: true }
-  }
+  const schemaFailure = await getWikiSchemaFailure(env)
+  if (schemaFailure) return toWikiToolUnavailable(schemaFailure)
+  if (!env.DB) return { ok: false, error: "wiki_db_unavailable", partial: true }
 
   const inscriptionId = extractInscriptionId(input)
   if (!inscriptionId) {
@@ -178,11 +192,11 @@ async function getTimeline(input: Record<string, unknown>, env: Env): Promise<Re
 async function getCollectionContext(input: Record<string, unknown>, env: Env): Promise<Record<string, unknown>> {
   const collectionSlug = extractString(input.collection_slug)
 
-  if (collectionSlug && !env.DB) {
-    return { ok: false, error: "wiki_db_unavailable", partial: true }
-  }
+  if (collectionSlug) {
+    const schemaFailure = await getWikiSchemaFailure(env)
+    if (schemaFailure) return toWikiToolUnavailable(schemaFailure)
+    if (!env.DB) return { ok: false, error: "wiki_db_unavailable", partial: true }
 
-  if (collectionSlug && env.DB) {
     const wikiSlug = `collection:${collectionSlug}`
     const page = await env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,

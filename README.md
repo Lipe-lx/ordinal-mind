@@ -35,10 +35,18 @@ The product remains useful without AI: timeline and source-backed data are the c
   - intent routing (greeting/smalltalk/query/etc.)
   - QA-vs-narrative policy and anti-repetition guardrails
   - localStorage thread memory per inscription + cross-session user-intent memory
-- Wiki base (contract-first, minimal):
+- Chronicle Wiki (D1-backed, fail-soft):
+  - raw event persistence in `raw_chronicle_events`
+  - BYOK-generated wiki page ingest with source-event validation
+  - D1 FTS search and wiki chat tools
+  - schema health endpoint for local/remote D1 readiness
+  - `GET /api/wiki/health`
+  - `POST /api/wiki/ingest`
+  - `POST /api/wiki/tools/search_wiki`
+  - `POST /api/wiki/tools/get_raw_events`
   - `POST /api/wiki/tools/get_timeline`
   - `POST /api/wiki/tools/get_collection_context`
-  - `GET /api/wiki/:slug` placeholder structured 404
+  - `GET /api/wiki/:slug`
 
 ## Stack
 
@@ -61,8 +69,12 @@ npm install
 
 ### Run locally
 ```bash
+npm run db:migrate:local
 npm run dev
 ```
+
+`npm run dev` uses local Miniflare D1 state. If you only apply migrations with
+`--remote`, local dev can still report missing wiki tables.
 
 ### Build
 ```bash
@@ -82,6 +94,7 @@ npm run typecheck
 
 ### Deploy
 ```bash
+npm run db:migrate:remote
 npm run deploy
 ```
 
@@ -90,9 +103,19 @@ npm run deploy
 - `GET /api/chronicle?id=<id|number>`
 - `GET /api/chronicle?id=<id|number>&stream=1`
 - `GET /api/chronicle?id=<id|number>&lite=1`
+- `GET /api/wiki/health`
+- `POST /api/wiki/ingest`
+- `POST /api/wiki/tools/search_wiki`
+- `POST /api/wiki/tools/get_raw_events`
 - `POST /api/wiki/tools/get_timeline`
 - `POST /api/wiki/tools/get_collection_context`
-- `GET /api/wiki/:slug` (contract-first placeholder)
+- `GET /api/wiki/:slug`
+
+## Wiki D1 Troubleshooting
+
+- `no such table: raw_chronicle_events`: run `npm run db:migrate:local` for local dev, or `npm run db:migrate:remote` for deployed D1.
+- `no such table: wiki_pages`: same fix; both wiki migrations must be applied to the D1 database used by the runtime.
+- Local vs remote D1: `vite dev`/Miniflare reads local D1 state by default, while `--remote` applies migrations only to the Cloudflare-hosted database.
 
 ## Security Notes
 

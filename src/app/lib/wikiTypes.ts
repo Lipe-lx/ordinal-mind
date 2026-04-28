@@ -50,8 +50,27 @@ export interface WikiLintReport {
 export interface WikiApiError {
   ok?: false
   error?: string
+  status?: WikiSchemaStatus
   phase?: string
   partial?: boolean
+}
+
+export type WikiSchemaStatus =
+  | "ready"
+  | "db_unavailable"
+  | "schema_missing"
+  | "schema_incomplete"
+
+export interface WikiHealth {
+  ok: boolean
+  ready: boolean
+  status: WikiSchemaStatus
+  error?: string
+  phase?: "fail_soft"
+  detail?: string
+  present_objects: string[]
+  missing_objects: string[]
+  checked_at: string
 }
 
 export type WikiLifecycleStatus =
@@ -61,3 +80,4 @@ export type WikiLifecycleStatus =
   | "refreshing"
   | "unavailable"
   | "missing"
+  | "not_initialized"

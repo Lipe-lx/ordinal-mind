@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { fetchWikiPage, isWikiPageStale } from "../../src/app/lib/byok/wikiLifecycle"
-import type { WikiPage } from "../../src/app/lib/wikiTypes"
+import {
+  fetchWikiHealth,
+  fetchWikiPage,
+  isWikiHealthReady,
+  isWikiPageStale,
+  shouldAttemptWikiRegeneration,
+} from "../../src/app/lib/byok/wikiLifecycle"
+import type { WikiHealth, WikiPage } from "../../src/app/lib/wikiTypes"
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -8,6 +14,26 @@ afterEach(() => {
 })
 
 describe("wikiLifecycle helpers", () => {
+  const readyHealth: WikiHealth = {
+    ok: true,
+    ready: true,
+    status: "ready",
+    present_objects: ["raw_chronicle_events", "wiki_pages", "wiki_log", "wiki_fts"],
+    missing_objects: [],
+    checked_at: "2026-04-28T00:00:00.000Z",
+  }
+
+  const missingHealth: WikiHealth = {
+    ok: false,
+    ready: false,
+    status: "schema_missing",
+    error: "wiki_schema_missing",
+    phase: "fail_soft",
+    present_objects: [],
+    missing_objects: ["raw_chronicle_events", "wiki_pages", "wiki_log", "wiki_fts"],
+    checked_at: "2026-04-28T00:00:00.000Z",
+  }
+
   it("detects stale wiki pages older than 7 days", () => {
     const page: WikiPage = {
       slug: "inscription:abc123i0",
@@ -25,6 +51,37 @@ describe("wikiLifecycle helpers", () => {
 
     const now = Date.parse("2026-04-28T00:00:00.000Z")
     expect(isWikiPageStale(page, now)).toBe(true)
+  })
+
+  it("parses wiki health and detects uninitialized schema", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(missingHealth), { status: 503 })))
+
+    const health = await fetchWikiHealth()
+
+    expect(health.status).toBe("schema_missing")
+    expect(isWikiHealthReady(health)).toBe(false)
+  })
+
+  it("prevents BYOK wiki regeneration when D1 schema is not ready", () => {
+    const shouldRegenerate = shouldAttemptWikiRegeneration({
+      health: missingHealth,
+      canGenerate: true,
+      page: null,
+      fetchError: "wiki_page_not_found",
+    })
+
+    expect(shouldRegenerate).toBe(false)
+  })
+
+  it("allows BYOK wiki regeneration for missing pages only when wiki health is ready", () => {
+    const shouldRegenerate = shouldAttemptWikiRegeneration({
+      health: readyHealth,
+      canGenerate: true,
+      page: null,
+      fetchError: "wiki_page_not_found",
+    })
+
+    expect(shouldRegenerate).toBe(true)
   })
 
   it("handles 404 fetch result as wiki_page_not_found", async () => {

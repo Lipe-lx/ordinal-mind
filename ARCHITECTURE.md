@@ -26,7 +26,8 @@ graph TD
   Chat --> UI[Timeline + Narrative + Genealogy]
 
   C -->|POST /api/wiki/tools/*| W
-  W --> Wiki[Wiki Tool Routes (contract-first)]
+  W --> Wiki[D1 Chronicle Wiki]
+  Wiki --> D1[(D1 raw events + wiki pages + FTS)]
 ```
 
 ## Layer 1: Worker Data Plane (Factual)
@@ -79,19 +80,25 @@ graph TD
   - carries user intent from previous sessions
   - avoids replaying assistant long-form text into fresh session behavior
 
-## Layer 3: Wiki Contract-First Plane (Current Minimal)
+## Layer 3: Chronicle Wiki Plane
 
 ### Routes
 
+- `GET /api/wiki/health`
+- `POST /api/wiki/ingest`
+- `POST /api/wiki/tools/search_wiki`
+- `POST /api/wiki/tools/get_raw_events`
 - `POST /api/wiki/tools/get_timeline`
 - `POST /api/wiki/tools/get_collection_context`
-- `GET /api/wiki/:slug` -> structured `404` placeholder
+- `GET /api/wiki/:slug`
 
 ### Current scope
 
-- Contract-first namespace for future LLM Wiki expansion.
-- Tool responses are currently cache-backed from Chronicle payloads.
-- Full ingest/search persistence layer is not yet active in this phase.
+- Layer 0 raw Chronicle events are persisted to D1 after scans using immutable `INSERT OR IGNORE` semantics.
+- Layer 1 wiki pages are generated client-side through BYOK, then validated and persisted by the Worker.
+- D1 FTS powers wiki search with no paid API or server-side LLM calls.
+- `/api/wiki/health` reports local/remote D1 readiness (`ready`, `db_unavailable`, `schema_missing`, `schema_incomplete`).
+- Missing or incomplete wiki schema is fail-soft and must not block Chronicle timeline rendering.
 
 ## Caching Model
 
@@ -111,7 +118,7 @@ graph TD
 
 - If a data source fails: return partial factual chronicle with source diagnostics.
 - If AI/chat fails: timeline and factual widgets remain fully available.
-- If wiki route is unavailable/missing: predictable structured error, no impact on Chronicle core route.
+- If wiki D1 is unavailable, unmigrated, or incomplete: predictable structured error, no impact on Chronicle core route.
 
 ## Why this architecture
 

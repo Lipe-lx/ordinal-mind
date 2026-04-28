@@ -1,6 +1,12 @@
 import type { Env } from "../index"
 import { handleIngest } from "../wiki/ingest"
 import { runWikiLint } from "../wiki/lint"
+import {
+  checkWikiSchema,
+  getWikiSchemaFailure,
+  isMissingWikiSchemaError,
+  wikiHealthStatusCode,
+} from "../wiki/schema"
 import { handleWikiTool } from "../wiki/tools"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
@@ -8,13 +14,14 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
     const url = new URL(request.url)
     const path = url.pathname
 
+    if (request.method === "GET" && path === "/api/wiki/health") {
+      const health = await checkWikiSchema(env)
+      return json(health, wikiHealthStatusCode(health))
+    }
+
     if (request.method === "GET" && path === "/api/wiki/lint") {
-      if (!env.DB) {
-        return json(
-          { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
-          503
-        )
-      }
+      const schemaFailure = await getWikiSchemaFailure(env)
+      if (schemaFailure) return json(schemaFailure, 503)
       const report = await runWikiLint(env)
       return json(report)
     }
@@ -29,12 +36,9 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
     }
 
     if (request.method === "GET" && path.startsWith("/api/wiki/") && !path.startsWith("/api/wiki/tools/")) {
-      if (!env.DB) {
-        return json(
-          { ok: false, error: "wiki_db_unavailable", phase: "fail_soft" },
-          503
-        )
-      }
+      const schemaFailure = await getWikiSchemaFailure(env)
+      if (schemaFailure) return json(schemaFailure, 503)
+      if (!env.DB) return json({ ok: false, error: "wiki_db_unavailable", phase: "fail_soft" }, 503)
 
       const slug = decodeURIComponent(path.replace("/api/wiki/", ""))
       const row = await env.DB.prepare(`
@@ -60,6 +64,9 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
     `)
         .bind(slug)
         .run()
+        .catch(() => {
+          // View counts are non-critical; never break page reads for analytics.
+        })
 
       return json({
         ok: true,
@@ -74,6 +81,7 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
         {
           ok: false,
           error: "wiki_schema_missing",
+          status: "schema_missing",
           phase: "fail_soft",
           detail: "wiki tables are not initialized in D1",
         },
@@ -84,7 +92,7 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
   }
 }
 
-function toWikiPageResponse(row: Record<string, unknown>): Record<string, unknown> {
+export function toWikiPageResponse(row: Record<string, unknown>): Record<string, unknown> {
   return {
     slug: row.slug,
     entity_type: row.entity_type,
@@ -107,12 +115,6 @@ function safeJsonParse<T>(value: string, fallback: T): T {
   } catch {
     return fallback
   }
-}
-
-function isMissingWikiSchemaError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  const message = error.message.toLowerCase()
-  return message.includes("no such table") || message.includes("no such module: fts5")
 }
 
 function json(data: unknown, status = 200): Response {
