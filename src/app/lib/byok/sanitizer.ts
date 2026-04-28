@@ -27,6 +27,7 @@ const PROMPT_ECHO_PATTERNS = [
   /^Task:\s/i,
   /^User Question:\s/i,
   /^Latest user message:\s/i,
+  /^Target Entity:\s/i,
   /^Constraint\s?\d+:/i,
   /^CRITICAL INSTRUCTION:/i,
   /^INSCRIPTION DATA:/i,
@@ -48,6 +49,7 @@ const PROMPT_ECHO_PATTERNS = [
   /^Do NOT include any internal/i,
   /^Return ONLY the \d+ paragraphs/i,
   /^Context:\s/i,
+  /^Collection Name:\s/i,
 ]
 
 /** Lines that are reasoning / self-correction noise */
@@ -102,6 +104,16 @@ const DATA_ECHO_PATTERNS = [
 ]
 
 // --- Core sanitizer ---
+
+function extractFinalAnswerBlock(raw: string): string | undefined {
+  const openMatch = /<final_answer>/i.exec(raw)
+  if (!openMatch) return undefined
+
+  const afterOpen = raw.slice(openMatch.index + openMatch[0].length)
+  const closeMatch = /<\/final_answer>/i.exec(afterOpen)
+  const answer = closeMatch ? afterOpen.slice(0, closeMatch.index) : afterOpen
+  return answer.trim()
+}
 
 function isNoiseLine(line: string): boolean {
   const trimmed = line.trim()
@@ -162,6 +174,66 @@ function extractInlineDataCheckAnswer(text: string): string | null {
 
 function isInlineDataCheckLine(line: string): boolean {
   return /\b(data|dados|provided|fornecid[oa]s|specif(?:y|ies)|especifica|source data|current data|dados atuais)\b/i.test(line)
+}
+
+function extractStructuredSupplyAnswer(text: string): string | null {
+  if (!/\b(?:User Question|Target Entity|Collection Name|Supply)\s*:/i.test(text)) return null
+
+  const fields = new Map<string, string>()
+  let supplySource = ""
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim().replace(/^["“”]+|["“”]+$/g, "")
+    const match = line.match(/^([A-Za-z ]+?)(?:\s*\(([^)]+)\))?:\s*(.+)$/)
+    if (!match) continue
+
+    const key = match[1].trim().toLowerCase()
+    const source = match[2]?.trim() ?? ""
+    const value = match[3].trim().replace(/^["“”]+|["“”]+$/g, "")
+    fields.set(key, value)
+    if (key === "supply") supplySource = source
+  }
+
+  const rawSupply = fields.get("supply")
+  if (!rawSupply) return null
+
+  const supply = normalizeSupply(rawSupply)
+  const collection = normalizeEntityName(
+    fields.get("collection name") ?? fields.get("target entity") ?? "Runestone"
+  )
+  const language = fields.get("language") ?? ""
+  const userQuestion = fields.get("user question") ?? ""
+  const distribution = fields.get("distribution design")
+  const sourceSuffix = supplySource ? ` na ${supplySource}` : ""
+
+  if (isPortugueseText(`${language} ${userQuestion}`)) {
+    const distributionCount = distribution?.match(/\b\d{1,3}(?:,\d{3})+\b/)?.[0]
+    const distributionSentence = distributionCount
+      ? ` O desenho de distribuição menciona airdrop para ${distributionCount} wallets.`
+      : ""
+
+    return `A coleção ${collection} aparece com supply de ${supply}${sourceSuffix}.${distributionSentence}`.trim()
+  }
+
+  return `The ${collection} collection is listed with a supply of ${supply}${sourceSuffix}.`
+}
+
+function normalizeSupply(value: string): string {
+  return value
+    .replace(/\s*\(specifically\s+["“”]?supply\s+[^)"“”]+["“”]?\)/i, "")
+    .replace(/^supply\s+/i, "")
+    .trim()
+}
+
+function normalizeEntityName(value: string): string {
+  return value
+    .replace(/^The\s+/i, "")
+    .replace(/\s+collection\.?$/i, "")
+    .trim()
+}
+
+function isPortugueseText(value: string): boolean {
+  return /\b(portuguese|portugu[eê]s|quant[ao]s?|existem|runas?)\b/i.test(value)
 }
 
 /**
@@ -250,11 +322,18 @@ function deduplicateDrafts(text: string): string {
 export function sanitizeNarrative(raw: string): string {
   if (!raw || typeof raw !== "string") return ""
 
-  const labeledAnswer = extractLabeledFinalAnswer(raw)
-  let text = labeledAnswer ?? raw
+  const taggedAnswer = extractFinalAnswerBlock(raw)
+  const cleanedTaggedAnswer = taggedAnswer === undefined ? undefined : cleanFinalAnswerLabel(taggedAnswer)
+  const labeledAnswer = taggedAnswer === undefined ? extractLabeledFinalAnswer(raw) : null
+  let text = cleanedTaggedAnswer ?? labeledAnswer ?? raw
 
   // Layer 1: Strip XML thinking tags
   text = stripXmlThinkingTags(text)
+
+  const structuredSupplyAnswer = extractStructuredSupplyAnswer(text)
+  if (structuredSupplyAnswer) {
+    return structuredSupplyAnswer
+  }
 
   const inlineDataCheckAnswer = extractInlineDataCheckAnswer(text)
   if (inlineDataCheckAnswer) {
@@ -277,6 +356,11 @@ export function sanitizeNarrative(raw: string): string {
 
 export function sanitizeNarrativePreview(raw: string): string {
   if (!raw || typeof raw !== "string") return ""
+
+  const taggedAnswer = extractFinalAnswerBlock(raw)
+  if (taggedAnswer !== undefined) {
+    return sanitizeNarrative(taggedAnswer)
+  }
 
   const cleaned = sanitizeNarrative(raw)
   if (cleaned) return cleaned

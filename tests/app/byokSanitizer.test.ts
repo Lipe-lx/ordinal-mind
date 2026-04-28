@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest"
 import { sanitizeNarrative, sanitizeNarrativePreview } from "../../src/app/lib/byok/sanitizer"
 
 describe("BYOK sanitizer", () => {
+  it("prefers the explicit final answer block over surrounding reasoning", () => {
+    const raw = `User Question: "quatans runestone existem?"
+Target Entity: The Runestone collection.
+Language: Portuguese.
+<final_answer>
+A coleção Runestone aparece com supply de 112.4K na Satflow.
+</final_answer>`
+
+    expect(sanitizeNarrative(raw)).toBe(
+      "A coleção Runestone aparece com supply de 112.4K na Satflow."
+    )
+  })
+
+  it("streams only content after an open final answer tag", () => {
+    const raw = `User Question: "quatans runestone existem?"
+<final_answer>A coleção Runestone aparece`
+
+    expect(sanitizeNarrativePreview(raw)).toBe("A coleção Runestone aparece")
+  })
+
   it("removes Gemma-style source checks and keeps the direct answer", () => {
     const raw = `User Question: "quantas runas existem?" (How many Runes are there?)
 Context: The user is asking about "Runes" in the context of the "Runestone" collection/protocol. * Source Data Check:
@@ -29,6 +49,22 @@ Does the provided data specify the total supply of Runes? No. Os dados disponív
 
     expect(sanitizeNarrative(raw)).toBe(
       "No. Os dados disponíveis informam apenas o supply da coleção Runestone: 112.4K."
+    )
+  })
+
+  it("turns Gemma structured supply analysis into a direct Portuguese answer", () => {
+    const raw = `User Question: "quatans runestone existem?" (How many runestones exist?)
+
+Target Entity: The Runestone collection.
+Context: The user has been asking about "runas" (Runes) and now "runestone".
+Language: Portuguese.
+Collection Name: Runestone
+
+Supply (Satflow): 112.4K (specifically "supply 112.4K")
+Distribution Design: "Designed as an airdrop to 112,383 wallets"`
+
+    expect(sanitizeNarrative(raw)).toBe(
+      "A coleção Runestone aparece com supply de 112.4K na Satflow. O desenho de distribuição menciona airdrop para 112,383 wallets."
     )
   })
 })
