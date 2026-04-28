@@ -94,10 +94,9 @@ GenealogyBackground.displayName = "GenealogyBackground"
 
 interface Props {
   chronicle: ChronicleResponse
-  onShare?: () => void
 }
 
-export const GenealogyTree = memo(({ chronicle, onShare }: Props) => {
+export const GenealogyTree = memo(({ chronicle }: Props) => {
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number, y: number }>>({})
   
@@ -567,26 +566,8 @@ export const GenealogyTree = memo(({ chronicle, onShare }: Props) => {
         )}
       </AnimatePresence>
       
-      {/* Share Button (fixed at bottom right) */}
-      {onShare && (
-        <div className="genealogy-share-container" style={{ 
-          position: "absolute", 
-          bottom: "var(--space-md)", 
-          right: "var(--space-md)",
-          zIndex: 100 
-        }}>
-          <button 
-            className="btn-share-narrative"
-            onClick={onShare}
-            title="Share this Genealogy"
-          >
-            ✦ Share
-          </button>
-        </div>
-      )}
     </div>
   )
 })
 
 GenealogyTree.displayName = "GenealogyTree"
-

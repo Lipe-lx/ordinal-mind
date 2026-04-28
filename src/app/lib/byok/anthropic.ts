@@ -5,6 +5,9 @@ import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 import type { ToolExecutor } from "./toolExecutor"
+import type { ChatMessage } from "./chatTypes"
+import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
+import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
 
@@ -62,10 +65,10 @@ export class AnthropicAdapter implements LLMAdapter {
 
   async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
     try {
-      return await this.requestWithSystemMessage(chronicle, false, undefined, undefined, toolExecutor)
+      return await this.requestWithSystemMessage(chronicle, false, undefined, undefined, toolExecutor, undefined, true)
     } catch (err) {
       if (isSystemMessageError(err)) {
-        return await this.requestCombined(chronicle, false, undefined, undefined, toolExecutor)
+        return await this.requestCombined(chronicle, false, undefined, undefined, toolExecutor, undefined, true)
       }
       throw err
     }
@@ -78,10 +81,63 @@ export class AnthropicAdapter implements LLMAdapter {
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     try {
-      return await this.requestWithSystemMessage(chronicle, true, onChunk, signal, toolExecutor)
+      return await this.requestWithSystemMessage(chronicle, true, onChunk, signal, toolExecutor, undefined, true)
     } catch (err) {
       if (isSystemMessageError(err)) {
-        return await this.requestCombined(chronicle, true, onChunk, signal, toolExecutor)
+        return await this.requestCombined(chronicle, true, onChunk, signal, toolExecutor, undefined, true)
+      }
+      throw err
+    }
+  }
+
+  async chatStream({
+    chronicle,
+    history,
+    userMessage,
+    mode,
+    intent,
+    onChunk,
+    signal,
+    toolExecutor,
+  }: {
+    chronicle: Chronicle
+    history: ChatMessage[]
+    userMessage: string
+    mode: ChatResponseMode
+    intent: ChatIntent
+    onChunk: (text: string) => void
+    signal?: AbortSignal
+    toolExecutor?: ToolExecutor
+  }): Promise<SynthesisResult> {
+    const conversationPrompt = buildChatTurnPrompt(
+      chronicle,
+      history,
+      userMessage || INITIAL_NARRATIVE_PROMPT,
+      { mode, intent }
+    )
+    const enableVision = history.length === 0
+
+    try {
+      return await this.requestWithSystemMessage(
+        chronicle,
+        true,
+        onChunk,
+        signal,
+        toolExecutor,
+        conversationPrompt,
+        enableVision
+      )
+    } catch (err) {
+      if (isSystemMessageError(err)) {
+        return await this.requestCombined(
+          chronicle,
+          true,
+          onChunk,
+          signal,
+          toolExecutor,
+          conversationPrompt,
+          enableVision
+        )
       }
       throw err
     }
@@ -92,17 +148,21 @@ export class AnthropicAdapter implements LLMAdapter {
     stream: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal,
-    toolExecutor?: ToolExecutor
+    toolExecutor?: ToolExecutor,
+    promptOverride?: string,
+    allowVisionInput = true
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const userPrompt = promptOverride ?? prepared.userPrompt
+    const image = allowVisionInput ? prepared.image : undefined
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters
     })) : undefined
 
-    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(prepared.userPrompt, prepared.image) }]
-    const inputMode = prepared.inputMode
+    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, image) }]
+    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
@@ -175,17 +235,23 @@ export class AnthropicAdapter implements LLMAdapter {
     stream: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal,
-    toolExecutor?: ToolExecutor
+    toolExecutor?: ToolExecutor,
+    promptOverride?: string,
+    allowVisionInput = true
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const userPrompt = promptOverride
+      ? `${prepared.systemPrompt}\n\n${promptOverride}`
+      : prepared.combinedPrompt
+    const image = allowVisionInput ? prepared.image : undefined
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters
     })) : undefined
 
-    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(prepared.combinedPrompt, prepared.image) }]
-    const inputMode = prepared.inputMode
+    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, image) }]
+    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {

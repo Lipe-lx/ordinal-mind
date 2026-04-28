@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useCallback, useRef, useState } from "react"
+import { useEffect, useReducer, useCallback, useState } from "react"
 import { useLoaderData, useLocation, useNavigate, useOutletContext } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
 import { ChronicleCard } from "../components/ChronicleCard"
@@ -6,8 +6,7 @@ import { ChronicleSidebar } from "../components/ChronicleSidebar"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
 import { CollectionContextWidget } from "../components/widgets/CollectionContextWidget"
-import { KeyStore } from "../lib/byok"
-import { useSynthesize } from "../lib/byok/useSynthesize"
+import { useChronicleNarrativeChat } from "../lib/byok/useChronicleNarrativeChat"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ChronicleResponse, ScanProgress as ScanProgressType } from "../lib/types"
 
@@ -118,35 +117,28 @@ export function Chronicle() {
   const debug = new URLSearchParams(location.search).get("debug") === "1"
   const { chronicle, progress, error, isScanning, retry } = useChronicleStream(id, debug)
   const {
-    narrative,
+    messages,
+    activeThreadId,
+    threadHistory,
     streamingText,
     phase,
     elapsed,
     researchLogs,
     error: synthError,
+    inputError,
     lastInputMode,
-    synthesize,
+    sendMessage,
+    startNewThread,
+    resumeThread,
+    renameThread,
+    deleteThread,
+    retryLast,
     cancel,
-  } = useSynthesize()
+  } = useChronicleNarrativeChat(chronicle)
   const navigate = useNavigate()
   const homePath = `/${location.search}`
   const { setHeaderCenter, openBYOK } = useOutletContext<LayoutOutletContext>()
-  const autoSynthesizedRef = useRef<string | null>(null)
   const [rightSidebarMode, setRightSidebarMode] = useState<"provenance" | "timeline">("timeline")
-
-  const handleShare = useCallback(() => {
-    if (!chronicle) return
-    const fullLabel = chronicle.collection_context.presentation.full_label ?? chronicle.collection_context.presentation.item_label
-    const label = fullLabel ? `${fullLabel} (#${chronicle.meta.inscription_number})` : `Inscription #${chronicle.meta.inscription_number}`
-    const text = `${label} — ${chronicle.events.length} events in its Chronicle. Explore on Ordinal Mind.`
-    const url = window.location.href
-
-    if (navigator.share) {
-      navigator.share({ title: "Ordinal Mind Chronicle", text, url }).catch(() => {})
-    } else {
-      navigator.clipboard.writeText(`${text}\n${url}`).catch(() => {})
-    }
-  }, [chronicle])
 
   // Inject inscription title into Layout header when chronicle loads
   useEffect(() => {
@@ -192,20 +184,6 @@ export function Chronicle() {
       setHeaderCenter(null)
     }
   }, [chronicle, setHeaderCenter])
-
-  useEffect(() => {
-    if (!chronicle) return
-    if (!KeyStore.has()) return
-    if (narrative || streamingText) return
-    if (phase !== "idle") return
-
-    const autoKey = chronicle.meta.inscription_id
-    if (autoSynthesizedRef.current === autoKey) return
-
-    autoSynthesizedRef.current = autoKey
-    synthesize(chronicle)
-  }, [chronicle, narrative, phase, streamingText, synthesize])
-
 
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
@@ -260,17 +238,24 @@ export function Chronicle() {
         {/* Center: Provenance, narrative, sources */}
         <ChronicleCard
           chronicle={chronicle}
-          narrative={narrative}
+          messages={messages}
+          activeThreadId={activeThreadId}
+          threadHistory={threadHistory}
           streamingText={streamingText}
           phase={phase}
           elapsed={elapsed}
           researchLogs={researchLogs}
           synthError={synthError}
+          inputError={inputError}
           lastInputMode={lastInputMode}
-          onSynthesize={() => synthesize(chronicle)}
+          onSendMessage={sendMessage}
+          onNewThread={startNewThread}
+          onResumeThread={resumeThread}
+          onRenameThread={renameThread}
+          onDeleteThread={deleteThread}
+          onRetryMessage={retryLast}
           onOpenBYOK={openBYOK}
           onCancel={cancel}
-          onShare={handleShare}
         />
 
         {/* Right Sidebar: Collection Context + Temporal Timeline */}

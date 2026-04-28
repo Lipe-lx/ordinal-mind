@@ -1,70 +1,120 @@
 # Architecture: Ordinal Mind
 
-Ordinal Mind is built on a "Factual First, Zero Custody" architecture. It decouples verifiable data collection from subjective AI synthesis.
+Ordinal Mind uses a factual-first split architecture:
+- Worker builds and serves verifiable Chronicle data from public sources.
+- Client performs optional BYOK AI synthesis/chat on top of that data.
 
-## System Overview
+## High-Level Runtime
 
 ```mermaid
 graph TD
-    User((User)) -->|Input: ID/Addr| Client[React Client]
-    Client -->|API Request| Worker[Cloudflare Worker Orchestrator]
-    
-    subgraph WorkerLayer [Worker Orchestration]
-        Worker --> Resolver[Input Resolver]
-        Resolver --> Agents[Data Agents]
-        Agents --> Ordinals[ordinals.com]
-        Agents --> Mempool[mempool.space]
-        Agents --> UniSat[UniSat API]
-        Agents --> Social[Social Mentions]
-        
-        Agents --> Timeline[Timeline Builder]
-        Timeline --> KV[(Cloudflare KV Cache)]
-    end
-    
-    Worker -->|SSE / JSON| Client
-    
-    subgraph ClientLayer [Client-Side Synthesis]
-        Client --> BYOK[BYOK Engine]
-        BYOK -->|User API Key| LLM[LLM Provider: OpenAI/Anthropic/Gemini]
-        LLM --> Narrative[Chronicle Narrative]
-    end
-    
-    Client --> UI[Temporal Tree + Chronicle Card]
-    Narrative --> UI
+  U[User] --> C[React Client]
+  C -->|GET /api/chronicle| W[Cloudflare Worker]
+  W --> R[Resolver]
+  R --> A[Data Agents]
+  A --> O[ordinals]
+  A --> M[mempool]
+  A --> K[collections/context]
+  A --> S[mentions + research]
+  A --> U2[UniSat optional]
+  A --> T[Timeline + Validation + Rarity]
+  T --> KV[(Cloudflare KV)]
+  W -->|JSON or SSE| C
+
+  C -->|BYOK key in browser| LLM[OpenAI/Anthropic/Gemini/OpenRouter]
+  C --> Chat[Chronicle Narrative Chat]
+  Chat --> UI[Timeline + Narrative + Genealogy]
+
+  C -->|POST /api/wiki/tools/*| W
+  W --> Wiki[Wiki Tool Routes (contract-first)]
 ```
 
-## Core Design Principles
+## Layer 1: Worker Data Plane (Factual)
 
-### 1. Factual Integrity
-The system treats on-chain data as the source of truth. Every event in the timeline must have a `source.ref` (TXID, URL, etc.) that allows for independent verification.
+### Responsibilities
 
-### 2. Zero Custody (BYOK)
-To protect user privacy and minimize server-side risk, LLM API keys are stored only in the browser's `localStorage` and never sent to the worker. All synthesis requests are initiated directly from the client.
+- Normalize input (`resolver.ts`).
+- Fetch from public/indexer sources (`agents/*`).
+- Merge into deterministic chronology (`timeline.ts`).
+- Validate/cross-check (`validation.ts`).
+- Compute enrichment (`rarity.ts`, collection context).
+- Cache public results in KV (`cache.ts`).
 
-### 3. Graceful Degradation
-The product is fully functional without AI. If the BYOK engine is not configured or fails, the user still receives the full factual temporal tree and metadata.
+### API behavior
 
-### 4. Deterministic Orchestration
-Given the same upstream data, the `Timeline Builder` produces identical results. This ensures that the chronicle is a stable record of history.
+- `GET /api/chronicle?id=...`
+  - standard JSON response with full chronicle object
+- `GET /api/chronicle?id=...&stream=1`
+  - SSE progress and final result
+- cache bypass on stream/debug paths
 
-## Data Pipeline
+### Invariants
 
-1.  **Resolution**: The `Resolver` converts inscription numbers or Taproot addresses into a canonical Inscription ID.
-2.  **Parallel Extraction**: Data agents fetch information concurrently from specialized providers (Mempool for transfers, UniSat for rarity, etc.).
-3.  **SSE Streaming**: For fresh scans, the worker streams progress updates to the client using Server-Sent Events (SSE), providing immediate feedback.
-4.  **Verification & Validation**: The `Validation` module cross-references data from different indexers to detect inconsistencies.
-5.  **Merge & Sort**: The `Timeline Engine` performs a chronological sort and deduplication of all discovered events.
-6.  **Caching**: Completed chronicles are cached in Cloudflare KV with appropriate TTLs (long for immutable genesis data, short for volatile market data).
+- Timeline must not depend on AI.
+- Events remain source-backed and ordered.
+- Partial upstream failures degrade gracefully rather than collapsing entire response.
 
-## Caching Strategy
+## Layer 2: Client BYOK Plane (Narrative Chat)
 
-- **Immutable Data**: Genesis metadata and historical blocks are cached with long TTLs.
-- **Volatile Data**: Sales heuristics and marketplace activity use shorter TTLs to ensure freshness.
-- **Cache Keys**: Deterministic keys based on normalized Inscription IDs.
-- **Bypass**: The `?stream=1` or `?debug=1` flags bypass the cache to perform a fresh scan.
+### Responsibilities
 
-## Security Model
+- Keep provider key in browser session storage.
+- Build prompt context from factual chronicle + conversation state.
+- Stream model output directly from provider (no server proxy for user key).
+- Execute optional research tools client-side via `toolExecutor`.
 
-- **No Server-Side Secrets**: No API keys for LLMs are stored on the server.
-- **Public Data Only**: The application only aggregates data that is publicly accessible on the Bitcoin blockchain or web.
-- **Input Sanitization**: Strict regex validation for all user inputs.
+### Chat behavior (current)
+
+- Multi-session per inscription:
+  - create/resume/rename/delete sessions
+  - persisted in `localStorage` (`chatStorage.ts`)
+- Intent routing:
+  - `greeting`, `smalltalk_social`, `acknowledgement`, `chronicle_query`, `clarification_request`, `offtopic_safe`
+- Response policy:
+  - QA mode default for follow-up queries
+  - narrative mode only when explicitly requested
+  - guardrails for repetition and verbosity
+  - short factoid policy: direct answer + optional one evidence sentence
+- Cross-session memory:
+  - carries user intent from previous sessions
+  - avoids replaying assistant long-form text into fresh session behavior
+
+## Layer 3: Wiki Contract-First Plane (Current Minimal)
+
+### Routes
+
+- `POST /api/wiki/tools/get_timeline`
+- `POST /api/wiki/tools/get_collection_context`
+- `GET /api/wiki/:slug` -> structured `404` placeholder
+
+### Current scope
+
+- Contract-first namespace for future LLM Wiki expansion.
+- Tool responses are currently cache-backed from Chronicle payloads.
+- Full ingest/search persistence layer is not yet active in this phase.
+
+## Caching Model
+
+- KV keying by normalized inscription ID.
+- Immutable-ish fields (genesis metadata) benefit from longer lifetime.
+- More volatile context (market/social transfer activity) is refreshed more aggressively.
+- Streaming requests prioritize freshness and observability over cache hits.
+
+## Security and Privacy Model
+
+- BYOK keys never sent to Worker.
+- Worker stores only public data/cache artifacts.
+- No auth/login/wallet flow required for core functionality.
+- Client-side chat storage stores conversation/session metadata only.
+
+## Failure and Degradation Strategy
+
+- If a data source fails: return partial factual chronicle with source diagnostics.
+- If AI/chat fails: timeline and factual widgets remain fully available.
+- If wiki route is unavailable/missing: predictable structured error, no impact on Chronicle core route.
+
+## Why this architecture
+
+- Keeps factual provenance auditable.
+- Keeps sensitive LLM credentials out of server runtime.
+- Allows iterative evolution toward LLM Wiki without breaking current Chronicle UX.

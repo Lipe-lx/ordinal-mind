@@ -5,6 +5,9 @@ import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 import type { ToolExecutor } from "./toolExecutor"
+import type { ChatMessage } from "./chatTypes"
+import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
+import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -23,11 +26,11 @@ export class GeminiAdapter implements LLMAdapter {
 
   async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, false, true, undefined, undefined, toolExecutor)
+      return await this.request(chronicle, false, true, undefined, undefined, toolExecutor, undefined, true)
     } catch (err) {
       if (isSystemInstructionError(err)) {
         console.warn("[GeminiAdapter] systemInstruction not supported, falling back to combined prompt")
-        return await this.request(chronicle, false, false, undefined, undefined, toolExecutor)
+        return await this.request(chronicle, false, false, undefined, undefined, toolExecutor, undefined, true)
       }
       throw err
     }
@@ -40,11 +43,66 @@ export class GeminiAdapter implements LLMAdapter {
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, true, true, onChunk, signal, toolExecutor)
+      return await this.request(chronicle, true, true, onChunk, signal, toolExecutor, undefined, true)
     } catch (err) {
       if (isSystemInstructionError(err)) {
         console.warn("[GeminiAdapter] systemInstruction not supported in stream mode, falling back")
-        return await this.request(chronicle, true, false, onChunk, signal, toolExecutor)
+        return await this.request(chronicle, true, false, onChunk, signal, toolExecutor, undefined, true)
+      }
+      throw err
+    }
+  }
+
+  async chatStream({
+    chronicle,
+    history,
+    userMessage,
+    mode,
+    intent,
+    onChunk,
+    signal,
+    toolExecutor,
+  }: {
+    chronicle: Chronicle
+    history: ChatMessage[]
+    userMessage: string
+    mode: ChatResponseMode
+    intent: ChatIntent
+    onChunk: (text: string) => void
+    signal?: AbortSignal
+    toolExecutor?: ToolExecutor
+  }): Promise<SynthesisResult> {
+    const conversationPrompt = buildChatTurnPrompt(
+      chronicle,
+      history,
+      userMessage || INITIAL_NARRATIVE_PROMPT,
+      { mode, intent }
+    )
+    const enableVision = history.length === 0
+    try {
+      return await this.request(
+        chronicle,
+        true,
+        true,
+        onChunk,
+        signal,
+        toolExecutor,
+        conversationPrompt,
+        enableVision
+      )
+    } catch (err) {
+      if (isSystemInstructionError(err)) {
+        console.warn("[GeminiAdapter] systemInstruction not supported in chat mode, falling back")
+        return await this.request(
+          chronicle,
+          true,
+          false,
+          onChunk,
+          signal,
+          toolExecutor,
+          conversationPrompt,
+          enableVision
+        )
       }
       throw err
     }
@@ -56,9 +114,15 @@ export class GeminiAdapter implements LLMAdapter {
     useSystemInstruction: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal,
-    toolExecutor?: ToolExecutor
+    toolExecutor?: ToolExecutor,
+    promptOverride?: string,
+    allowVisionInput = true
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const userPrompt = promptOverride
+      ? (useSystemInstruction ? promptOverride : `${prepared.systemPrompt}\n\n${promptOverride}`)
+      : (useSystemInstruction ? prepared.userPrompt : prepared.combinedPrompt)
+    const image = allowVisionInput ? prepared.image : undefined
     const action = stream ? "streamGenerateContent" : "generateContent"
     const streamParam = stream ? "&alt=sse" : ""
     const url = `${BASE_URL}/${this.model}:${action}?key=${this.key}${streamParam}`
@@ -84,13 +148,13 @@ export class GeminiAdapter implements LLMAdapter {
       {
         role: "user",
         parts: buildGeminiParts(
-          useSystemInstruction ? prepared.userPrompt : prepared.combinedPrompt,
-          prepared.image
+          userPrompt,
+          image
         ),
       },
     ]
 
-    const inputMode = prepared.inputMode
+    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
 
     for (let i = 0; i < 7; i++) {
       // Build request body

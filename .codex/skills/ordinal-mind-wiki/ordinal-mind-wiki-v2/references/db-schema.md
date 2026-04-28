@@ -64,46 +64,82 @@ CREATE INDEX IF NOT EXISTS idx_wl_ts          ON wiki_log(ts);
 
 ---
 
-## Cloudflare Vectorize Index
+## FTS5 Full-Text Search Index (built into D1 — zero cost)
 
-**Index name:** `ordinal-mind-wiki`  
-**Dimensions:** 384 (matches `@cf/baai/bge-small-en-v1.5`)  
-**Metric:** cosine
+SQLite FTS5 provides BM25-ranked full-text search with zero external dependencies.
+Add this to `migrations/0002_wiki_pages.sql` after the `wiki_pages` table:
 
-Create once:
-```bash
-wrangler vectorize create ordinal-mind-wiki --dimensions=384 --metric=cosine
+```sql
+-- FTS5 virtual table — mirrors title + summary + entity_type for search
+CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5(
+  slug UNINDEXED,
+  entity_type,
+  title,
+  summary,
+  content='wiki_pages',
+  content_rowid='rowid',
+  tokenize='porter ascii'
+);
+
+-- Keep FTS in sync via triggers
+CREATE TRIGGER IF NOT EXISTS wiki_fts_insert AFTER INSERT ON wiki_pages BEGIN
+  INSERT INTO wiki_fts(rowid, slug, entity_type, title, summary)
+  VALUES (new.rowid, new.slug, new.entity_type, new.title, new.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS wiki_fts_update AFTER UPDATE ON wiki_pages BEGIN
+  INSERT INTO wiki_fts(wiki_fts, rowid, slug, entity_type, title, summary)
+  VALUES ('delete', old.rowid, old.slug, old.entity_type, old.title, old.summary);
+  INSERT INTO wiki_fts(rowid, slug, entity_type, title, summary)
+  VALUES (new.rowid, new.slug, new.entity_type, new.title, new.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS wiki_fts_delete AFTER DELETE ON wiki_pages BEGIN
+  INSERT INTO wiki_fts(wiki_fts, rowid, slug, entity_type, title, summary)
+  VALUES ('delete', old.rowid, old.slug, old.entity_type, old.title, old.summary);
+END;
 ```
 
-Each `wiki_pages` row has a corresponding vector where:
-- `id` = `slug`
-- `values` = embedding of `title + " " + summary`
-- `metadata` = `{ slug, entity_type, title }`
-
-### Embedding utility
+### Search query pattern (used in `search_wiki` tool)
 
 ```typescript
-// src/worker/wiki/embed.ts
-export async function generateEmbedding(text: string, env: Env): Promise<number[]> {
-  const result = await env.AI.run('@cf/baai/bge-small-en-v1.5', {
-    text: [text.slice(0, 512)]   // model max input
-  });
-  return result.data[0];
+// BM25-ranked search with optional entity_type filter
+async function ftsSearch(
+  query: string,
+  entityType: string | undefined,
+  limit: number,
+  env: Env
+) {
+  const typeClause = entityType ? `AND entity_type = '${entityType}'` : "";
+  const rows = await env.DB.prepare(`
+    SELECT wp.slug, wp.title, wp.summary, wp.entity_type, wp.unverified_count,
+           bm25(wiki_fts) AS score
+    FROM wiki_fts
+    JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+    WHERE wiki_fts MATCH ?
+      ${typeClause}
+    ORDER BY score           -- lower bm25() = better match in SQLite
+    LIMIT ?
+  `).bind(sanitizeFtsQuery(query), limit).all();
+  return rows.results;
+}
+
+// Escape special FTS5 characters to prevent query injection
+function sanitizeFtsQuery(q: string): string {
+  return q.replace(/['"*^]/g, " ").trim() + "*"; // trailing * for prefix match
 }
 ```
 
 ---
 
-## Env interface additions (`src/worker/types.ts` or wherever `Env` is defined)
+## Env interface additions (`src/worker/types.ts`)
 
 ```typescript
 interface Env {
   // existing
   KV: KVNamespace;
-  // new
+  // new — only D1, nothing else
   DB: D1Database;
-  VECTORIZE: VectorizeIndex;
-  AI: Ai;
 }
 ```
 

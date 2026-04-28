@@ -201,8 +201,7 @@ export async function handleIngest(req: Request, env: Env): Promise<Response> {
     }));
   }
 
-  // 3. Embed and upsert
-  const embedding = await generateEmbedding(draft.summary + " " + draft.title, env);
+  // 3. Upsert into D1 (FTS index is updated automatically via trigger — see db-schema.md)
   await env.DB.prepare(`
     INSERT INTO wiki_pages
       (slug, entity_type, title, summary, sections_json, cross_refs_json,
@@ -221,18 +220,13 @@ export async function handleIngest(req: Request, env: Env): Promise<Response> {
     draft.byok_provider, unverified.length
   ).run();
 
-  await env.VECTORIZE.upsert([{
-    id: draft.slug,
-    values: embedding,
-    metadata: { slug: draft.slug, entity_type: draft.entity_type, title: draft.title }
-  }]);
-
   return Response.json({ ok: true, unverified_count: unverified.length });
 }
 ```
 
-For `generateEmbedding`, use Cloudflare Workers AI (`env.AI.run('@cf/baai/bge-small-en-v1.5', ...)`).
-This requires adding `ai` binding to `wrangler.jsonc`. No external embedding API needed.
+Search is handled by D1 FTS5 (SQLite full-text search built into D1 — zero cost,
+zero external dependency). See `references/db-schema.md` for the FTS virtual table
+and `references/chat-tools.md` for the `search_wiki` query pattern.
 
 ---
 
@@ -243,7 +237,7 @@ the client POSTs to the Worker tool endpoint, receives the result, and continues
 inference. The LLM call itself never leaves the browser.
 
 See **`references/chat-tools.md`** for the full implementation of each tool:
-- `search_wiki` — Vectorize semantic search → ranked wiki pages
+- `search_wiki` — D1 FTS5 full-text search → ranked wiki pages (BM25, zero cost)
 - `get_raw_events` — returns Layer 0 events for an inscription ID or address
 - `get_timeline` — returns the rendered timeline (reuses existing cache)
 - `get_collection_context` — returns collection wiki page + child count
@@ -320,9 +314,9 @@ migrations/
 src/worker/
   wiki/
     persistEvents.ts      ← Layer 0 write after each scan
-    ingest.ts             ← POST /api/wiki/ingest
-    tools.ts              ← GET /api/wiki/tools/* handlers
-    lint.ts               ← integrity checker (cron or on-demand)
+    ingest.ts             ← POST /api/wiki/ingest (validates + persists)
+    tools.ts              ← POST /api/wiki/tools/* handlers (FTS5 search, raw events)
+    lint.ts               ← integrity checker (client-triggered, on-demand)
   routes/
     wiki.ts               ← route multiplexer for /api/wiki/*
 
@@ -339,6 +333,9 @@ src/app/
 
 ## wrangler.jsonc additions
 
+Only one new binding is required — Cloudflare D1. No AI, no Vectorize, no new
+paid services. All intelligence stays client-side.
+
 ```jsonc
 {
   "d1_databases": [
@@ -347,25 +344,15 @@ src/app/
       "database_name": "ordinal-mind-wiki",
       "database_id": "<run: wrangler d1 create ordinal-mind-wiki>"
     }
-  ],
-  "vectorize": [
-    {
-      "binding": "VECTORIZE",
-      "index_name": "ordinal-mind-wiki",
-      "dimensions": 384,
-      "metric": "cosine"
-    }
-  ],
-  "ai": {
-    "binding": "AI"
-  }
+  ]
 }
 ```
 
-Create indexes:
+Create the database and apply migrations:
 ```bash
 wrangler d1 create ordinal-mind-wiki
-wrangler vectorize create ordinal-mind-wiki --dimensions=384 --metric=cosine
+wrangler d1 execute ordinal-mind-wiki --file=migrations/0001_raw_chronicle_events.sql
+wrangler d1 execute ordinal-mind-wiki --file=migrations/0002_wiki_pages.sql
 ```
 
 ---
@@ -380,8 +367,10 @@ Before considering any implementation complete, verify:
 - [ ] Failed wiki generation does not block the existing Chronicle experience
 - [ ] `GET /api/wiki/:slug` returns 404 gracefully (no 500s)
 - [ ] Tool endpoints return partial results on upstream failure, not empty errors
-- [ ] No new paid API dependencies introduced (Workers AI is usage-based, acceptable)
+- [ ] No server-side LLM calls of any kind (generation, embeddings, lint analysis)
+- [ ] No new paid API or billing surface introduced (D1 is included in Workers free tier)
 - [ ] `unverified_count > 0` pages are visually marked in the UI
+- [ ] Lint is triggered client-side only — no Cron Triggers, no scheduled Workers
 
 ---
 
@@ -391,6 +380,6 @@ Read these when implementing the corresponding step:
 
 | File | Read when |
 |---|---|
-| `references/db-schema.md` | Setting up D1 tables and Vectorize index |
+| `references/db-schema.md` | Setting up D1 tables and FTS5 full-text search index |
 | `references/chat-tools.md` | Implementing Worker tool endpoints |
 | `references/lint-ops.md` | Building the wiki integrity checker |

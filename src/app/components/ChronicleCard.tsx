@@ -3,40 +3,55 @@ import { KeyStore } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { CollectionContextWidget } from "./widgets/CollectionContextWidget"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
-import { NarrativeRenderer } from "./NarrativeRenderer"
+import { NarrativeChatRenderer } from "./NarrativeChatRenderer"
 import type { ChronicleResponse, MentionProviderDebug, SocialSignalProvider } from "../lib/types"
-import type { SynthesisPhase } from "../lib/byok/useSynthesize"
+import type { SynthesisPhase } from "../lib/byok/useChronicleNarrativeChat"
 import type { SynthesisMode } from "../lib/byok/context"
 import { GenealogyTree } from "./GenealogyTree"
+import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
 
 interface Props {
   chronicle: ChronicleResponse
-  narrative: string | null
+  messages: ChatMessage[]
+  activeThreadId: string | null
+  threadHistory: ChatThreadSummary[]
   streamingText: string
   phase: SynthesisPhase
   elapsed: number
   synthError: string | null
+  inputError: string | null
   lastInputMode: SynthesisMode | null
   researchLogs: ResearchLog[]
-  onSynthesize: () => void
+  onSendMessage: (prompt: string) => Promise<void> | void
+  onNewThread: () => void
+  onResumeThread: (threadId: string) => void
+  onRenameThread: (threadId: string, title: string) => boolean
+  onDeleteThread: (threadId: string) => boolean
+  onRetryMessage: () => Promise<void> | void
   onOpenBYOK: () => void
   onCancel: () => void
-  onShare: () => void
 }
 
 export function ChronicleCard({
   chronicle,
-  narrative,
+  messages,
+  activeThreadId,
+  threadHistory,
   streamingText,
   phase,
   elapsed,
   synthError,
+  inputError,
   lastInputMode,
   researchLogs,
-  onSynthesize,
+  onSendMessage,
+  onNewThread,
+  onResumeThread,
+  onRenameThread,
+  onDeleteThread,
+  onRetryMessage,
   onOpenBYOK,
   onCancel,
-  onShare,
 }: Props) {
   const hasKey = KeyStore.has()
   const config = KeyStore.get()
@@ -66,7 +81,7 @@ export function ChronicleCard({
           <CollectorSignalsDebug debugInfo={chronicle.debug_info.mention_providers} />
         </details>
       )}
-      {!narrative && !hasKey && (
+      {messages.length === 0 && !hasKey && (
         <p className="chronicle-card-hint" style={{ marginBottom: "var(--space-md)" }}>
           🔑 Set your API key to generate narratives
         </p>
@@ -95,31 +110,33 @@ export function ChronicleCard({
 
       <div className={`chronicle-layout-wrapper layout-mode-${layoutMode}`}>
         <div className="chronicle-layout-panel is-narrative">
-          <NarrativeRenderer
-            narrative={narrative}
+          <NarrativeChatRenderer
+            messages={messages}
+            activeThreadId={activeThreadId}
+            threadHistory={threadHistory}
             streamingText={streamingText}
             phase={phase}
             elapsed={elapsed}
             providerName={config?.provider}
             modelName={config?.model}
             error={synthError}
+            inputError={inputError}
             inputMode={lastInputMode}
             researchLogs={researchLogs}
-            researchEnabled={!!config?.researchKeys && Object.keys(config.researchKeys).length > 0}
-            onGenerate={hasKey ? onSynthesize : onOpenBYOK}
-            actionLabel={hasKey ? "✨ Generative Chronicle" : "🔑 Configure BYOK"}
-            emptyMessage={
-              hasKey
-                ? "Generate an AI-powered Chronicle narrative from the factual timeline above."
-                : "Unlock the client-side Generative Chronicle with your BYOK key. The factual timeline remains available without it."
-            }
+            hasKey={hasKey}
+            onSend={onSendMessage}
+            onNewThread={onNewThread}
+            onResumeThread={onResumeThread}
+            onRenameThread={onRenameThread}
+            onDeleteThread={onDeleteThread}
+            onRetry={onRetryMessage}
             onCancel={onCancel}
-            onShare={onShare}
+            onOpenBYOK={onOpenBYOK}
             collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
           />
         </div>
         <div className="chronicle-layout-panel is-genealogy">
-          <GenealogyTree chronicle={chronicle} onShare={onShare} />
+          <GenealogyTree chronicle={chronicle} />
         </div>
       </div>
       

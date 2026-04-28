@@ -123,59 +123,80 @@ async function getBrokenCrossRefs(pages: any[], env: Env) {
 
 ---
 
-## Cron Trigger Setup (wrangler.jsonc)
+## Client-Side Triggering (no Cron, no scheduled Workers)
 
-```jsonc
-{
-  "triggers": {
-    "crons": ["0 3 * * *"]   // daily at 03:00 UTC
+Lint runs **on-demand only**, triggered by the browser. No server-side scheduled
+jobs, no Cron Triggers, no billing surface.
+
+### Trigger strategy
+
+The client checks once per browser session whether a lint run is needed:
+
+```typescript
+// src/app/lib/wikiLint.ts
+
+const LINT_SESSION_KEY = "ordinal-mind:wiki-lint-checked";
+const LINT_STALE_AFTER_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+export async function maybeRunLint(): Promise<void> {
+  const last = sessionStorage.getItem(LINT_SESSION_KEY);
+  if (last && Date.now() - Number(last) < LINT_STALE_AFTER_MS) return;
+
+  try {
+    await fetch("/api/wiki/lint", { method: "GET", priority: "low" });
+    sessionStorage.setItem(LINT_SESSION_KEY, String(Date.now()));
+  } catch {
+    // Lint failure is silent — never blocks the user
   }
 }
 ```
 
-In `src/worker/index.ts`:
-```typescript
-export default {
-  async fetch(req: Request, env: Env) { /* existing */ },
+Call `maybeRunLint()` inside `WikiChat.tsx` after the component mounts, using
+`requestIdleCallback` so it never competes with UI rendering:
 
-  async scheduled(_event: ScheduledEvent, env: Env) {
-    const report = await runLint(env);
-    // Optionally: POST report to a webhook or store in KV for admin UI
-    await env.KV.put("wiki:lint:latest", JSON.stringify(report), {
-      expirationTtl: 60 * 60 * 24 * 7  // keep for 7 days
-    });
-  }
-};
+```typescript
+useEffect(() => {
+  const id = requestIdleCallback(() => { maybeRunLint(); });
+  return () => cancelIdleCallback(id);
+}, []);
 ```
 
----
+### `GET /api/wiki/lint` endpoint
 
-## On-Demand Lint (dev/admin)
+The lint endpoint is lightweight — it only reads D1, no LLM calls, no writes
+except the `wiki_log` entry. Execution time is well within Worker CPU limits.
 
 ```typescript
-// In handleWikiRoute:
+// In handleWikiRoute (src/worker/routes/wiki.ts):
 if (req.method === "GET" && path === "/api/wiki/lint") {
-  // Optional: add a secret header check for security
   const report = await runLint(env);
   return Response.json(report);
 }
 ```
+
+**Security note:** The lint endpoint exposes no sensitive data (only slugs,
+counts, and timestamps of public wiki content). No auth header required.
+If you want to prevent public enumeration of wiki slugs, add a simple
+`X-Lint-Token` header check using a KV-stored secret.
 
 ---
 
 ## Re-generation Signal
 
 The lint report tells you WHICH pages need work. It does NOT auto-regenerate them
-(that would require server-side LLM). Instead:
+(that requires an LLM — stays client-side). Instead:
 
-1. The lint report is stored in KV as `wiki:lint:latest`
-2. When a user opens a Chronicle page, the client checks if that inscription's
-   wiki slug appears in the lint report (fetched once per session)
-3. If stale or unverified, the BYOK adapter triggers re-generation automatically
-   (same flow as first-time generation)
+1. The lint JSON is returned directly to the browser that triggered it
+2. The client stores the report in `sessionStorage` as `ordinal-mind:wiki-lint-report`
+3. When a user opens any Chronicle page, `WikiChat.tsx` checks if that inscription's
+   slug appears in the lint report (stale or unverified)
+4. If flagged, the BYOK adapter triggers re-generation automatically using the
+   user's own key — same flow as first-time generation
+5. On successful re-ingest, the slug is removed from the in-memory lint report
 
-This preserves the BYOK constraint: re-generation is always user-initiated and
-client-side.
+This keeps the full loop: detect (Worker D1 query) → signal (JSON to client) →
+re-generate (BYOK in browser) → persist (Worker validates + writes D1). The
+server only executes deterministic reads and validated writes — never inference.
 
 ---
 

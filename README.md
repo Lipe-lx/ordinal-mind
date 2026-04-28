@@ -2,94 +2,106 @@
 
 Factual Chronicle engine for Bitcoin Ordinals collectors.
 
-Ordinal Mind provides a verifiable temporal tree of Bitcoin assets, optional LLM-generated narratives, and shareable Chronicle cards, all built on a "factual first" architecture.
+Ordinal Mind takes an inscription ID/number and returns:
+- a verifiable temporal timeline (factual-first)
+- collection and provenance context
+- optional client-side AI chat/narrative (BYOK)
 
-## Core Philosophy
+The product remains useful without AI: timeline and source-backed data are the core.
 
-*   **Factual First**: Every event is traceable to public on-chain or off-chain sources.
-*   **Public Data Only**: No login, no wallet connect, no paid APIs (unless user-provided).
-*   **BYOK (Bring Your Own Key)**: AI synthesis happens strictly client-side. User LLM keys never touch the server.
-*   **Graceful Degradation**: The core experience (temporal tree) remains functional even if AI synthesis fails.
+## Product Principles
 
-## Tech Stack
+- Factual first: timeline events are source-backed and chronologically deterministic.
+- Public data only: no login, no wallet connect, no paid APIs required by default.
+- BYOK only: LLM keys stay in the browser; Worker never proxies/stores user LLM keys.
+- Graceful degradation: if LLM/chat fails, timeline still renders.
 
-*   **Frontend**: React 19, Vite, React Router 7, Motion (animations), React Markdown.
-*   **Backend**: Cloudflare Workers (TypeScript).
-*   **Storage**: Cloudflare KV (Caching public data).
-*   **Testing**: Vitest for unit and smoke testing.
-*   **Styling**: Vanilla CSS with modern design tokens.
+## Current Feature Set
 
-## Project Structure
+- Chronicle pipeline on Worker:
+  - resolver for inscription input
+  - multi-source fetch (ordinals, mempool, collections, mentions, research, UniSat when key exists)
+  - timeline build + validation + rarity + cache
+- SSE scan mode (`/api/chronicle?stream=1`) with progress events.
+- Chronicle UI with:
+  - Temporal Timeline
+  - Chronicle Narrative chat
+  - Genealogical Tree
+  - Sources and collector signals widgets
+- BYOK providers:
+  - OpenAI, Anthropic, Gemini, OpenRouter
+- Chat UX (current):
+  - multi-session history per inscription (new/resume/rename/delete)
+  - intent routing (greeting/smalltalk/query/etc.)
+  - QA-vs-narrative policy and anti-repetition guardrails
+  - localStorage thread memory per inscription + cross-session user-intent memory
+- Wiki base (contract-first, minimal):
+  - `POST /api/wiki/tools/get_timeline`
+  - `POST /api/wiki/tools/get_collection_context`
+  - `GET /api/wiki/:slug` placeholder structured 404
 
-```text
-├── src/
-│   ├── app/                # React Frontend
-│   │   ├── components/     # UI Components (TemporalTree, ChronicleCard, BYOKModal)
-│   │   ├── pages/          # Application Routes (Home, Chronicle)
-│   │   └── lib/            # Client-side logic and BYOK adapters
-│   └── worker/             # Cloudflare Worker (Orchestrator)
-│       ├── agents/         # Specialized data fetchers
-│       │   ├── ordinals.ts # ordinals.com on-chain data
-│       │   ├── mempool.ts  # mempool.space forward transfer tracking
-│       │   ├── unisat.ts   # UniSat API (Rarity & Indexer)
-│       │   ├── collections.ts # Multi-source collection context
-│       │   ├── mentions/   # Social signal aggregation (Google Trends)
-│       │   └── webResearch.ts # SearXNG, Wikipedia, and DDG research
-│       ├── timeline.ts     # Event tree construction & deduplication
-│       ├── resolver.ts     # Input normalization (Inscription/Address)
-│       ├── rarity.ts       # Rarity calculation engine
-│       ├── validation.ts   # Cross-source data validation
-│       ├── cache.ts        # KV TTL & Caching logic
-│       ├── db.ts           # Validation storage
-│       └── index.ts        # Worker Entry Point, SSE Streaming & Orchestration
-├── wrangler.jsonc          # Cloudflare Worker configuration
-├── vite.config.ts          # Vite build & plugin configuration
-└── AGENTS.md               # Product rules and implementation guidelines
-```
+## Stack
 
-## Core Features
+- Frontend: React 19, React Router 7, Vite 6, Motion, React Markdown
+- Backend: Cloudflare Worker (TypeScript)
+- Cache: Cloudflare KV (`CHRONICLES_KV`)
+- Tests: Vitest
+- Styling: CSS tokens in `src/app/index.css`
 
-*   **Verifiable Timeline**: Deterministic merging of on-chain transfers, genesis data, and marketplace activity.
-*   **SSE Streaming Pipeline**: Real-time progress feedback during complex multi-source data collection via `TransformStream`.
-*   **Chronicle Card**: Premium, interactive UI with motion effects and integrated media context.
-*   **BYOK Intelligence**: Secure client-side AI synthesis using user-provided keys (Anthropic, OpenAI, Gemini, OpenRouter).
-*   **Collection Intelligence**: Deep cross-referencing of Satflow, Ord.net, and official registries.
-*   **Collector Signals**: Advanced sentiment and attention analysis using multi-source mentions and trends.
-*   **Sat Rarity & Validation**: Multi-indexer validation and CBOR metadata enrichment.
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
-- Node.js & npm
-- Cloudflare Wrangler (for deployment)
+- Node.js 20+
+- npm
 
-### Installation
+### Install
 ```bash
 npm install
 ```
 
-### Development
+### Run locally
 ```bash
-# Run Vite dev server and Wrangler locally
 npm run dev
 ```
 
-### Testing
+### Build
 ```bash
-# Run all tests
-npm run test
+npm run build
+```
 
-# Run smoke tests only
+### Tests
+```bash
+npm run test
 npm run test:smoke
 ```
 
-### Deployment
+### Typecheck
 ```bash
-# Build and deploy to Cloudflare Pages/Workers
+npm run typecheck
+```
+
+### Deploy
+```bash
 npm run deploy
 ```
 
-## Security & Privacy
-- **Zero Custody**: No user secrets or keys are ever stored or proxied.
-- **Deterministic**: Same input and upstream data produce identical Chronicle events.
-- **Cache Policy**: Only public, immutable, or short-lived public data is cached in KV.
+## API Surface (Current)
+
+- `GET /api/chronicle?id=<id|number>`
+- `GET /api/chronicle?id=<id|number>&stream=1`
+- `GET /api/chronicle?id=<id|number>&lite=1`
+- `POST /api/wiki/tools/get_timeline`
+- `POST /api/wiki/tools/get_collection_context`
+- `GET /api/wiki/:slug` (contract-first placeholder)
+
+## Security Notes
+
+- LLM keys are managed in browser storage via BYOK UI.
+- Worker only handles public data aggregation and caching.
+- No server-side LLM completion with user keys.
+
+## Docs
+
+- [CODEBASE.md](./CODEBASE.md): file-by-file map
+- [ARCHITECTURE.md](./ARCHITECTURE.md): runtime architecture and data flow
+- [AGENTS.md](./AGENTS.md): implementation constraints and product rules

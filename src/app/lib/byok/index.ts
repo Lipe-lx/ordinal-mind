@@ -8,6 +8,8 @@ import { OpenAIAdapter } from "./openai"
 import { GeminiAdapter } from "./gemini"
 import { OpenRouterAdapter } from "./openrouter"
 import type { ResearchKeys, ToolExecutor } from "./toolExecutor"
+import type { ChatMessage } from "./chatTypes"
+import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 
 export type Provider = "anthropic" | "openai" | "gemini" | "openrouter" | "unknown"
 
@@ -31,6 +33,16 @@ export interface LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult>
+  chatStream(params: {
+    chronicle: Chronicle
+    history: ChatMessage[]
+    userMessage: string
+    mode: ChatResponseMode
+    intent: ChatIntent
+    onChunk: (text: string) => void
+    signal?: AbortSignal
+    toolExecutor?: ToolExecutor
+  }): Promise<SynthesisResult>
   getCapabilities(): ProviderCapabilities
   provider: Provider
   model: string

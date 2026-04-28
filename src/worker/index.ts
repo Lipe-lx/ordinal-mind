@@ -19,6 +19,7 @@ import { validateAcrossSources, mergeCharms } from "./validation"
 import { db } from "./db"
 import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment, WebResearchContext } from "../app/lib/types"
 import type { MentionCollectionResult } from "./agents/mentions/types"
+import { handleWikiRoute } from "./routes/wiki"
 
 export interface Env {
   CHRONICLES_KV: KVNamespace
@@ -29,7 +30,7 @@ export interface Env {
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 }
 
@@ -129,7 +130,7 @@ export default {
 
     // API routes
     if (url.pathname.startsWith("/api/")) {
-      return handleApi(url, env)
+      return handleApi(request, url, env)
     }
 
     // Serve static assets (SPA fallback handled by wrangler.jsonc config)
@@ -137,7 +138,11 @@ export default {
   },
 }
 
-async function handleApi(url: URL, env: Env): Promise<Response> {
+async function handleApi(request: Request, url: URL, env: Env): Promise<Response> {
+  if (url.pathname.startsWith("/api/wiki")) {
+    return handleWikiRoute(request, env)
+  }
+
   // GET /api/chronicle?id=<inscription_id_or_number_or_address>&stream=1
   if (url.pathname === "/api/chronicle") {
     const raw = url.searchParams.get("id")

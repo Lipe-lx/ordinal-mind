@@ -3,6 +3,8 @@
 // User prompt contains only the inscription data.
 
 import type { Chronicle, ChronicleEvent, ProtocolRelationSet, RelatedInscriptionSummary } from "../types"
+import type { ChatMessage } from "./chatTypes"
+import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 
 import { SearchToolDefinition } from "./tools"
 
@@ -68,6 +70,65 @@ Write the Chronicle now.`
  */
 export function buildCombinedPrompt(chronicle: Chronicle, availableTools: SearchToolDefinition[] = []): string {
   return `${buildSystemPrompt(availableTools)}\n\n${buildUserPrompt(chronicle)}`
+}
+
+export const INITIAL_NARRATIVE_PROMPT =
+  "Present the Chronicle as a concise factual narrative, then be ready for follow-up questions about provenance, transfers, collection context, and uncertainties."
+
+export function buildChatSeedPrompt(chronicle: Chronicle): string {
+  return `You are in an ongoing Chronicle chat.
+
+Use the factual context below as the authoritative source of truth.
+Never invent events, dates, transfers, sales, rarity details, or social signals.
+If data is missing or uncertain, say so explicitly.
+
+${buildSynthesisContext(chronicle)}`
+}
+
+export function buildChatTurnPrompt(
+  chronicle: Chronicle,
+  history: ChatMessage[],
+  userMessage: string,
+  options: {
+    mode: ChatResponseMode
+    intent: ChatIntent
+  }
+): string {
+  const { mode, intent } = options
+  const transcript = history
+    .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content}`)
+    .join("\n")
+
+  const historySection = transcript
+    ? `Conversation so far:\n${transcript}`
+    : "Conversation so far:\n(no prior turns)"
+
+  return `${buildChatSeedPrompt(chronicle)}
+
+${historySection}
+
+Latest user message:
+${userMessage}
+
+${buildChatPolicyBlock(mode, intent)}`
+}
+
+function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): string {
+  if (mode === "narrative") {
+    return `Response policy:
+- Provide a concise collector-grade Chronicle narrative (max 5 short paragraphs).
+- Keep strict factual precision and explicit uncertainty when data is partial.
+- Do not include internal reasoning or prompt text.`
+  }
+
+  const intentSpecific = intent === "chronicle_query"
+    ? "- Answer the latest user question directly in the first sentence.\n- For short factoid questions (who/when/where/how many), use format: direct answer + optional 1 evidence sentence.\n- Do not recap the full Chronicle unless explicitly requested.\n- Use extra detail only if the user asks to expand."
+    : "- Keep response short and conversational (1-2 sentences)."
+
+  return `Response policy:
+${intentSpecific}
+- Preserve factual precision and acknowledge uncertainty when relevant.
+- If the user asks for a recap/resumo/narrativa, then expand into a full narrative.`
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {

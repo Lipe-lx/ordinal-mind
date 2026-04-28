@@ -5,6 +5,9 @@ import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
 import type { ToolExecutor } from "./toolExecutor"
+import type { ChatMessage } from "./chatTypes"
+import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
+import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 
 const API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -55,10 +58,10 @@ export class OpenRouterAdapter implements LLMAdapter {
 
   async synthesize(chronicle: Chronicle, toolExecutor?: ToolExecutor): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, false, true, undefined, undefined, toolExecutor)
+      return await this.request(chronicle, false, true, undefined, undefined, toolExecutor, undefined, true)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(chronicle, false, false, undefined, undefined, toolExecutor)
+        return await this.request(chronicle, false, false, undefined, undefined, toolExecutor, undefined, true)
       }
       throw err
     }
@@ -71,10 +74,65 @@ export class OpenRouterAdapter implements LLMAdapter {
     toolExecutor?: ToolExecutor
   ): Promise<SynthesisResult> {
     try {
-      return await this.request(chronicle, true, true, onChunk, signal, toolExecutor)
+      return await this.request(chronicle, true, true, onChunk, signal, toolExecutor, undefined, true)
     } catch (err) {
       if (isSystemRoleError(err)) {
-        return await this.request(chronicle, true, false, onChunk, signal, toolExecutor)
+        return await this.request(chronicle, true, false, onChunk, signal, toolExecutor, undefined, true)
+      }
+      throw err
+    }
+  }
+
+  async chatStream({
+    chronicle,
+    history,
+    userMessage,
+    mode,
+    intent,
+    onChunk,
+    signal,
+    toolExecutor,
+  }: {
+    chronicle: Chronicle
+    history: ChatMessage[]
+    userMessage: string
+    mode: ChatResponseMode
+    intent: ChatIntent
+    onChunk: (text: string) => void
+    signal?: AbortSignal
+    toolExecutor?: ToolExecutor
+  }): Promise<SynthesisResult> {
+    const conversationPrompt = buildChatTurnPrompt(
+      chronicle,
+      history,
+      userMessage || INITIAL_NARRATIVE_PROMPT,
+      { mode, intent }
+    )
+    const enableVision = history.length === 0
+
+    try {
+      return await this.request(
+        chronicle,
+        true,
+        true,
+        onChunk,
+        signal,
+        toolExecutor,
+        conversationPrompt,
+        enableVision
+      )
+    } catch (err) {
+      if (isSystemRoleError(err)) {
+        return await this.request(
+          chronicle,
+          true,
+          false,
+          onChunk,
+          signal,
+          toolExecutor,
+          conversationPrompt,
+          enableVision
+        )
       }
       throw err
     }
@@ -86,9 +144,13 @@ export class OpenRouterAdapter implements LLMAdapter {
     useSystemRole: boolean,
     onChunk?: (text: string) => void,
     signal?: AbortSignal,
-    toolExecutor?: ToolExecutor
+    toolExecutor?: ToolExecutor,
+    promptOverride?: string,
+    allowVisionInput = true
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const userPrompt = promptOverride ?? prepared.userPrompt
+    const image = allowVisionInput ? prepared.image : undefined
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       type: "function",
       function: {
@@ -103,17 +165,17 @@ export class OpenRouterAdapter implements LLMAdapter {
           { role: "system", content: prepared.systemPrompt },
           {
             role: "user",
-            content: buildOpenRouterContent(prepared.userPrompt, prepared.image),
+            content: buildOpenRouterContent(userPrompt, image),
           },
         ]
       : [
           {
             role: "user",
-            content: buildOpenRouterContent(prepared.combinedPrompt, prepared.image),
+            content: buildOpenRouterContent(promptOverride ? `${prepared.systemPrompt}\n\n${userPrompt}` : prepared.combinedPrompt, image),
           },
         ]
     
-    const inputMode = prepared.inputMode
+    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {

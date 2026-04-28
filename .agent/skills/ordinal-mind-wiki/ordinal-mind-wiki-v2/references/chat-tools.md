@@ -55,8 +55,6 @@ if (url.pathname.startsWith("/api/wiki")) {
 ## Tools Implementation — `src/worker/wiki/tools.ts`
 
 ```typescript
-import { generateEmbedding } from "./embed";
-
 export async function handleTools(
   name: string, req: Request, env: Env
 ): Promise<Response> {
@@ -82,7 +80,8 @@ export async function handleTools(
 
 ## Tool: `search_wiki`
 
-Semantic search over wiki pages via Vectorize.
+BM25 full-text search over wiki pages via D1 FTS5. Zero external cost — runs
+entirely inside the D1 SQLite engine on the Worker.
 
 **Input:**
 ```typescript
@@ -95,32 +94,34 @@ async function searchWiki(
   input: { query: string; limit?: number; entity_type?: string },
   env: Env
 ) {
-  const embedding = await generateEmbedding(input.query, env);
-  const results = await env.VECTORIZE.query(embedding, {
-    topK: input.limit ?? 5,
-    filter: input.entity_type ? { entity_type: { $eq: input.entity_type } } : undefined,
-    returnMetadata: true
-  });
+  const limit = Math.min(input.limit ?? 5, 10);
+  const typeClause = input.entity_type
+    ? `AND wp.entity_type = '${input.entity_type}'`
+    : "";
 
-  // Hydrate with DB rows for full content
-  const slugs = results.matches.map(m => m.id);
-  if (slugs.length === 0) return { results: [] };
+  // Sanitize: strip FTS5 special chars, add prefix wildcard
+  const q = input.query.replace(/['"*^()]/g, " ").trim() + "*";
 
-  const placeholders = slugs.map(() => "?").join(",");
-  const rows = await env.DB.prepare(
-    `SELECT slug, title, summary, entity_type, unverified_count
-     FROM wiki_pages WHERE slug IN (${placeholders})`
-  ).bind(...slugs).all();
+  const rows = await env.DB.prepare(`
+    SELECT wp.slug, wp.title, wp.summary, wp.entity_type,
+           wp.unverified_count, bm25(wiki_fts) AS score
+    FROM wiki_fts
+    JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+    WHERE wiki_fts MATCH ?
+      ${typeClause}
+    ORDER BY score
+    LIMIT ?
+  `).bind(q, limit).all();
 
-  // Return in Vectorize score order
-  const rowMap = new Map(rows.results.map((r: any) => [r.slug, r]));
-  return {
-    results: slugs
-      .map(slug => ({ score: results.matches.find(m => m.id === slug)?.score, ...rowMap.get(slug) }))
-      .filter(r => r.slug)
-  };
+  return { results: rows.results ?? [] };
 }
 ```
+
+**Notes:**
+- `bm25()` in SQLite returns negative numbers; lower = better match. Do not invert.
+- The `porter ascii` tokenizer in the FTS5 schema handles stemming (e.g. "transfer" matches "transferred").
+- Prefix wildcard (`*`) means partial queries like "frog" will match "frogs".
+- Input sanitization is mandatory — FTS5 MATCH syntax can throw on raw user input.
 
 **BYOK tool definition (send to LLM in client):**
 ```json
