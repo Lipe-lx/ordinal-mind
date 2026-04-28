@@ -91,6 +91,8 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("Assistant: One genesis and no transfer yet.")
     expect(prompt).toContain("Latest user message")
     expect(prompt).toContain("Any uncertainty?")
+    expect(prompt).toContain("Answer in the same language as the latest user message.")
+    expect(prompt).toContain("Do not include internal reasoning")
   })
 
   it("instructs follow-up corrections to use parent context without guessing", () => {

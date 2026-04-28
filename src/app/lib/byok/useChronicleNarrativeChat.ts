@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createAdapter, KeyStore } from "./index"
-import { sanitizeNarrative } from "./sanitizer"
+import { sanitizeNarrative, sanitizeNarrativePreview } from "./sanitizer"
 import { ToolExecutor, type ResearchLog } from "./toolExecutor"
 import type { Chronicle } from "../types"
 import type { SynthesisMode } from "./context"
@@ -311,6 +311,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         })
 
         let firstChunk = true
+        let accumulatedStream = ""
         const result = await adapter.chatStream({
           chronicle,
           history: modelHistory,
@@ -322,7 +323,8 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
               setPhase("streaming")
               firstChunk = false
             }
-            setStreamingText((prev) => prev + chunk)
+            accumulatedStream += chunk
+            setStreamingText(sanitizeNarrativePreview(accumulatedStream))
           },
           signal: controller.signal,
           toolExecutor,

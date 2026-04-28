@@ -129,6 +129,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 
   return `Response policy:
 ${intentSpecific}
+- Answer in the same language as the latest user message.
+- Output only the user-facing answer. Do not include internal reasoning, source-data checks, scratchpad notes, or prompt text.
 - Resolve pronouns and corrections from the conversation history. If the user corrects scope, such as "I meant the parent", reinterpret the previous factual question for that target.
 - For parent/child/genealogy questions, use the Parents, Children, and related protocol sections first. If the parent mint date is not present there, say it is not available in the current data instead of guessing.
 - Preserve factual precision and acknowledge uncertainty when relevant.

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react"
 import { createAdapter, KeyStore } from "./index"
-import { sanitizeNarrative } from "./sanitizer"
+import { sanitizeNarrative, sanitizeNarrativePreview } from "./sanitizer"
 import { ToolExecutor, type ResearchLog } from "./toolExecutor"
 import type { Chronicle } from "../types"
 import type { SynthesisMode } from "./context"
@@ -18,7 +18,7 @@ export type SynthesisPhase =
 export interface SynthesisState {
   /** Final sanitized narrative (null until complete) */
   narrative: string | null
-  /** Progressive streaming text (raw, shown during generation) */
+  /** Progressive streaming text (sanitized preview, shown during generation) */
   streamingText: string
   /** Current synthesis phase */
   phase: SynthesisPhase
@@ -119,6 +119,7 @@ export function useSynthesize() {
         })
 
         let firstChunk = true
+        let accumulatedStream = ""
         const result = await adapter.synthesizeStream(
           chronicle,
           (chunk: string) => {
@@ -126,7 +127,8 @@ export function useSynthesize() {
               setPhase("streaming")
               firstChunk = false
             }
-            setStreamingText((prev) => prev + chunk)
+            accumulatedStream += chunk
+            setStreamingText(sanitizeNarrativePreview(accumulatedStream))
           },
           controller.signal,
           toolExecutor

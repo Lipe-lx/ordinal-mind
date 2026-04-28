@@ -25,10 +25,16 @@ const XML_TAG_PATTERNS = [
 const PROMPT_ECHO_PATTERNS = [
   /^Role:\s/i,
   /^Task:\s/i,
+  /^User Question:\s/i,
+  /^Latest user message:\s/i,
   /^Constraint\s?\d+:/i,
   /^CRITICAL INSTRUCTION:/i,
   /^INSCRIPTION DATA:/i,
   /^EVENT TIMELINE:/i,
+  /^Response policy:/i,
+  /^Conversation so far:/i,
+  /^Source Data Check:/i,
+  /^\*+\s*Source Data Check:/i,
   /^Write the Chronicle now/i,
   /^Output ONLY the final/i,
   /^You are a factual chronicler/i,
@@ -41,6 +47,7 @@ const PROMPT_ECHO_PATTERNS = [
   /^Every fact must be backed/i,
   /^Do NOT include any internal/i,
   /^Return ONLY the \d+ paragraphs/i,
+  /^Context:\s/i,
 ]
 
 /** Lines that are reasoning / self-correction noise */
@@ -65,6 +72,12 @@ const REASONING_NOISE_PATTERNS = [
   /^(I will|I should|I must|I'll)\s/i,
   /^Looking at /i,
   /^\(Checking /i,
+  /^The user is asking\b/i,
+  /^The provided data\b/i,
+  /^Provided data\b/i,
+  /^Does the data\b/i,
+  /^\*+\s*The provided data\b/i,
+  /^\*+\s*The .* protocol is mentioned\b/i,
 ]
 
 /** Verification checklist lines */
@@ -107,6 +120,42 @@ function isNoiseLine(line: string): boolean {
     if (pattern.test(trimmed)) return true
   }
   return false
+}
+
+function stripXmlThinkingTags(raw: string): string {
+  let text = raw
+  for (const pattern of XML_TAG_PATTERNS) {
+    text = text.replace(pattern, "")
+  }
+  return text
+}
+
+function cleanFinalAnswerLabel(text: string): string {
+  return text
+    .replace(/^\s*(?:Final\s+Answer|Answer|Resposta\s+final|Resposta)\s*:\s*/i, "")
+    .trim()
+}
+
+function extractLabeledFinalAnswer(text: string): string | null {
+  const labelPattern = /(?:^|\n)\s*(?:Final\s+Answer|Answer|Resposta\s+final|Resposta)\s*:\s*/i
+  const match = labelPattern.exec(text)
+  if (!match) return null
+
+  const answer = text.slice(match.index + match[0].length).trim()
+  return answer ? cleanFinalAnswerLabel(answer) : null
+}
+
+function extractInlineDataCheckAnswer(text: string): string | null {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean)
+
+  for (const line of lines) {
+    const match = line.match(/\?\s*((?:No|Yes|Não|Nao|Sim)\.?\s+[\s\S]+)$/i)
+    if (match?.[1]) {
+      return cleanFinalAnswerLabel(match[1])
+    }
+  }
+
+  return null
 }
 
 /**
@@ -195,11 +244,15 @@ function deduplicateDrafts(text: string): string {
 export function sanitizeNarrative(raw: string): string {
   if (!raw || typeof raw !== "string") return ""
 
-  let text = raw
+  const labeledAnswer = extractLabeledFinalAnswer(raw)
+  let text = labeledAnswer ?? raw
 
   // Layer 1: Strip XML thinking tags
-  for (const pattern of XML_TAG_PATTERNS) {
-    text = text.replace(pattern, "")
+  text = stripXmlThinkingTags(text)
+
+  const inlineDataCheckAnswer = extractInlineDataCheckAnswer(text)
+  if (inlineDataCheckAnswer) {
+    text = inlineDataCheckAnswer
   }
 
   // Layer 2: Deduplicate drafts (before line-level filtering)
@@ -214,4 +267,18 @@ export function sanitizeNarrative(raw: string): string {
     .trim()
 
   return text
+}
+
+export function sanitizeNarrativePreview(raw: string): string {
+  if (!raw || typeof raw !== "string") return ""
+
+  const cleaned = sanitizeNarrative(raw)
+  if (cleaned) return cleaned
+
+  return stripXmlThinkingTags(raw)
+    .split("\n")
+    .filter((line) => !isNoiseLine(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
