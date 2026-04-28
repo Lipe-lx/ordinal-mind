@@ -26,6 +26,7 @@ import {
   getIntentRouterMode,
   resolvePolicyResponse,
 } from "./chatPolicies"
+import { classifyIntentWithLlm, shouldUseLlmIntentClassifier } from "./llmIntentClassifier"
 
 export type SynthesisPhase =
   | "idle"
@@ -206,11 +207,36 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       const routerMode = getIntentRouterMode()
       const routed = routeChatIntent(trimmedPrompt, history)
       const routingActive = routerMode === "active"
-      const intent = options.intentOverride ?? (routingActive ? routed.intent : "chronicle_query")
-      const mode = options.forceMode ?? (routingActive ? routed.mode : "narrative")
+      const hasExplicitRoutingOverride = Boolean(options.intentOverride || options.forceMode)
+      const llmRouted = routingActive && shouldUseLlmIntentClassifier({
+        localDecision: routed,
+        hasExplicitOverride: hasExplicitRoutingOverride,
+        prompt: trimmedPrompt,
+      })
+        ? await classifyIntentWithLlm({
+            config,
+            prompt: trimmedPrompt,
+            history,
+            localDecision: routed,
+          })
+        : null
+      const intent = options.intentOverride ?? (routingActive ? (llmRouted?.intent ?? routed.intent) : "chronicle_query")
+      const mode = options.forceMode ?? (routingActive ? (llmRouted?.mode ?? routed.mode) : "narrative")
 
       if (routerMode !== "off") {
         console.info("[NarrativeChat][IntentRouter]", buildTelemetryEvent(routed, trimmedPrompt))
+        if (llmRouted) {
+          console.info("[NarrativeChat][IntentClassifier]", {
+            at: new Date().toISOString(),
+            kind: "chat_intent_classifier",
+            intent: llmRouted.intent,
+            confidence: llmRouted.confidence,
+            mode: llmRouted.mode,
+            prompt_len: trimmedPrompt.length,
+            fallback_intent: routed.intent,
+            reason: llmRouted.reason,
+          })
+        }
       }
 
       if (userMessage) {

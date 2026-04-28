@@ -3480,6 +3480,26 @@ select.input-field option {
 .narrative-chat-input textarea.input-field {
   min-height: 74px;
   resize: vertical;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.narrative-chat-input textarea.input-field::-webkit-scrollbar {
+  width: 5px;
+  background: transparent;
+}
+
+.narrative-chat-input textarea.input-field::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.narrative-chat-input textarea.input-field::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.narrative-chat-input textarea.input-field::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .narrative-chat-footer {

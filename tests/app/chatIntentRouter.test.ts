@@ -34,6 +34,18 @@ describe("chat intent router", () => {
     expect(decision.intent).toBe("chronicle_query")
   })
 
+  it("classifies parent follow-ups as chronicle_query", () => {
+    const decision = routeChatIntent("falo da parent", history)
+    expect(decision.intent).toBe("chronicle_query")
+    expect(decision.mode).toBe("qa")
+  })
+
+  it("classifies parent mint-date corrections as chronicle_query", () => {
+    const decision = routeChatIntent("me fale a data que a inscrição parent dessa foi cunhada", history)
+    expect(decision.intent).toBe("chronicle_query")
+    expect(decision.mode).toBe("qa")
+  })
+
   it("uses qa mode for first-turn factual question in a fresh session", () => {
     const decision = routeChatIntent("o leonidas criou quando isso ?", [])
     expect(decision.intent).toBe("chronicle_query")

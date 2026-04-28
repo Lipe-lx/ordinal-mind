@@ -53,6 +53,8 @@ const OFFTOPIC_PATTERNS = [
 const CHRONICLE_HINTS = [
   "inscription", "inscricao", "inscrição", "ordinal", "sat", "satoshi", "transfer", "owner", "provenance", "proveni",
   "genesis", "timeline", "colecao", "coleção", "runestone", "block", "tx", "rarity", "market", "price", "collection",
+  "parent", "parents", "pai", "mae", "mãe", "filho", "filha", "child", "children", "ancestral", "ancestrais",
+  "genealogia", "genealogy", "mint", "minted", "mintado", "mintada", "cunhado", "cunhada", "cunhou", "bloco",
 ]
 
 const NARRATIVE_REQUEST_HINTS = [
@@ -66,6 +68,7 @@ const PROTOTYPES: Record<ChatIntent, string[]> = {
   chronicle_query: [
     "quem é o dono atual", "resuma as transferencias", "qual a proveniencia", "what is the provenance",
     "fale sobre a coleção", "mostre as incertezas", "qual o contexto do bloco",
+    "quando a parent foi cunhada", "falo da parent", "qual a inscrição pai", "parent inscription mint date",
   ],
   clarification_request: ["não entendi", "pode explicar", "detalha melhor", "what do you mean"],
   offtopic_safe: ["como está o tempo hoje", "who won the game", "me conta uma piada", "notícias de hoje"],

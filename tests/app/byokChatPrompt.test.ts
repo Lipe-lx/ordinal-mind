@@ -92,4 +92,20 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("Latest user message")
     expect(prompt).toContain("Any uncertainty?")
   })
+
+  it("instructs follow-up corrections to use parent context without guessing", () => {
+    const history: ChatMessage[] = [
+      { id: "u1", role: "user", content: "Quando ela foi mintada?", createdAt: "2024-01-01T00:00:00.000Z", turnId: "t1" },
+      { id: "a1", role: "assistant", content: "A inscrição raiz foi mintada em 2024.", createdAt: "2024-01-01T00:00:01.000Z", turnId: "t1" },
+    ]
+
+    const prompt = buildChatTurnPrompt(chronicle, history, "falo da parent", {
+      mode: "qa",
+      intent: "chronicle_query",
+    })
+
+    expect(prompt).toContain("reinterpret the previous factual question")
+    expect(prompt).toContain("If the parent mint date is not present")
+    expect(prompt).toContain("falo da parent")
+  })
 })

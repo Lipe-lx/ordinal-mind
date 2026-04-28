@@ -129,6 +129,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 
   return `Response policy:
 ${intentSpecific}
+- Resolve pronouns and corrections from the conversation history. If the user corrects scope, such as "I meant the parent", reinterpret the previous factual question for that target.
+- For parent/child/genealogy questions, use the Parents, Children, and related protocol sections first. If the parent mint date is not present there, say it is not available in the current data instead of guessing.
 - Preserve factual precision and acknowledge uncertainty when relevant.
 - Prefer get_raw_events for specific factual claims and cite source references when available.
 - If any tool returns partial data, explicitly flag incompleteness to the user.

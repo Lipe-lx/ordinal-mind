@@ -26,27 +26,27 @@ export function resolvePolicyResponse(intent: ChatIntent, _input: string): Polic
     case "greeting":
       return {
         handledLocally: true,
-        responseText: "Oi! Estou pronto para ajudar com a Chronicle. Se quiser, posso começar com um resumo curto ou responder algo específico sobre proveniência, transfers e contexto da coleção.",
+        responseText: "Hi. I can help with this Chronicle, whether you want a short overview or a specific answer about provenance, transfers, parent links, or collection context.",
       }
     case "smalltalk_social":
       return {
         handledLocally: true,
-        responseText: "Tudo certo por aqui. Quer que eu foque em algum ponto da inscrição agora, como dono atual, transfers recentes ou incertezas detectadas?",
+        responseText: "All good here. I can stay focused on this inscription and help with its current owner, recent transfers, parent links, or unresolved details.",
       }
     case "acknowledgement":
       return {
         handledLocally: true,
-        responseText: "Perfeito. Me diga a próxima pergunta sobre a inscrição e eu respondo de forma objetiva.",
+        responseText: "Got it. Ask the next question about this inscription and I will answer from the available Chronicle data.",
       }
     case "clarification_request":
       return {
         handledLocally: true,
-        responseText: "Posso explicar sim. Me diga exatamente qual parte você quer: resumo geral, proveniência on-chain, histórico de transfers ou sinais de coleção.",
+        responseText: "I can explain. Tell me which part you mean: overview, on-chain provenance, parent links, transfer history, or collection signals.",
       }
     case "offtopic_safe":
       return {
         handledLocally: true,
-        responseText: "Posso manter foco no Chronicle desta inscrição. Se quiser, te respondo agora sobre proveniência, owner atual, transfers ou contexto da coleção.",
+        responseText: "I should stay focused on this inscription's Chronicle. I can answer about provenance, current owner, transfers, parent links, or collection context.",
       }
     case "chronicle_query":
     default:
