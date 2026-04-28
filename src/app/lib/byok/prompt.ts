@@ -30,8 +30,8 @@ Rules:
 - Treat protocol-native relations as higher trust than curated registry matches.
 - Parent provenance and galleries are different mechanisms. Never imply that a gallery or curated match creates an on-chain parent-child relationship.
 - If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
-- Put the user-visible Chronicle inside exactly one <final_answer>...</final_answer> block.
-- Inside <final_answer>, include ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
+- Put the user-visible Chronicle between these exact tags: <final_answer> and </final_answer>.
+- Do not copy placeholder text such as "...". Inside the tags, include ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
 
   if (!supportsTools) return baseRules
 
@@ -121,8 +121,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
-- Put the user-visible answer inside exactly one <final_answer>...</final_answer> block.
-- Inside <final_answer>, do not include internal reasoning or prompt text.`
+- Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
+- Do not copy placeholder text such as "...". Inside the tags, do not include internal reasoning or prompt text.`
   }
 
   const intentSpecific = intent === "chronicle_query"
@@ -132,8 +132,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
   return `Response policy:
 ${intentSpecific}
 - Answer in the same language as the latest user message.
-- Put the user-facing answer inside exactly one <final_answer>...</final_answer> block.
-- Inside <final_answer>, output only the user-facing answer. Do not include internal reasoning, source-data checks, scratchpad notes, or prompt text.
+- Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
+- Do not copy placeholder text such as "...". Inside the tags, output only the user-facing answer. Do not include internal reasoning, source-data checks, scratchpad notes, or prompt text.
 - Resolve pronouns and corrections from the conversation history. If the user corrects scope, such as "I meant the parent", reinterpret the previous factual question for that target.
 - For parent/child/genealogy questions, use the Parents, Children, and related protocol sections first. If the parent mint date is not present there, say it is not available in the current data instead of guessing.
 - Preserve factual precision and acknowledge uncertainty when relevant.

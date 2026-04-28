@@ -92,7 +92,8 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("Latest user message")
     expect(prompt).toContain("Any uncertainty?")
     expect(prompt).toContain("Answer in the same language as the latest user message.")
-    expect(prompt).toContain("<final_answer>...</final_answer>")
+    expect(prompt).toContain("between these exact tags: <final_answer> and </final_answer>")
+    expect(prompt).toContain("Do not copy placeholder text")
     expect(prompt).toContain("Do not include internal reasoning")
   })
 

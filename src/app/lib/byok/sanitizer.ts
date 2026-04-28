@@ -115,6 +115,20 @@ function extractFinalAnswerBlock(raw: string): string | undefined {
   return answer.trim()
 }
 
+function isSubstantiveAnswer(text: string | undefined | null): text is string {
+  if (!text) return false
+
+  const normalized = text
+    .replace(/<final_answer>|<\/final_answer>/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (!normalized) return false
+  if (/^(?:\.{3}|…|[-–—]+|n\/a|null|none)$/i.test(normalized)) return false
+
+  return /[\p{L}\p{N}]/u.test(normalized)
+}
+
 function isNoiseLine(line: string): boolean {
   const trimmed = line.trim()
   if (trimmed === "") return false // blank lines handled separately
@@ -324,8 +338,9 @@ export function sanitizeNarrative(raw: string): string {
 
   const taggedAnswer = extractFinalAnswerBlock(raw)
   const cleanedTaggedAnswer = taggedAnswer === undefined ? undefined : cleanFinalAnswerLabel(taggedAnswer)
-  const labeledAnswer = taggedAnswer === undefined ? extractLabeledFinalAnswer(raw) : null
-  let text = cleanedTaggedAnswer ?? labeledAnswer ?? raw
+  const usableTaggedAnswer = isSubstantiveAnswer(cleanedTaggedAnswer) ? cleanedTaggedAnswer : undefined
+  const labeledAnswer = usableTaggedAnswer === undefined ? extractLabeledFinalAnswer(raw) : null
+  let text = usableTaggedAnswer ?? labeledAnswer ?? raw
 
   // Layer 1: Strip XML thinking tags
   text = stripXmlThinkingTags(text)
@@ -351,7 +366,7 @@ export function sanitizeNarrative(raw: string): string {
     .replace(/\n{3,}/g, "\n\n") // collapse excessive blank lines
     .trim()
 
-  return text
+  return isSubstantiveAnswer(text) ? text : ""
 }
 
 export function sanitizeNarrativePreview(raw: string): string {
@@ -359,7 +374,7 @@ export function sanitizeNarrativePreview(raw: string): string {
 
   const taggedAnswer = extractFinalAnswerBlock(raw)
   if (taggedAnswer !== undefined) {
-    return sanitizeNarrative(taggedAnswer)
+    return isSubstantiveAnswer(taggedAnswer) ? sanitizeNarrative(taggedAnswer) : ""
   }
 
   const cleaned = sanitizeNarrative(raw)

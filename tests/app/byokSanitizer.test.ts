@@ -22,6 +22,24 @@ A coleção Runestone aparece com supply de 112.4K na Satflow.
     expect(sanitizeNarrativePreview(raw)).toBe("A coleção Runestone aparece")
   })
 
+  it("ignores literal placeholder final answer blocks and recovers from factual analysis", () => {
+    const raw = `User Question: "quatans runestone existem?" (How many runestones exist?)
+
+Target Entity: The Runestone collection.
+Language: Portuguese.
+Collection Name: Runestone
+Supply (Satflow): 112.4K
+
+<final_answer>
+...
+</final_answer>`
+
+    expect(sanitizeNarrative(raw)).toBe(
+      "A coleção Runestone aparece com supply de 112.4K na Satflow."
+    )
+    expect(sanitizeNarrativePreview(raw)).toBe("")
+  })
+
   it("removes Gemma-style source checks and keeps the direct answer", () => {
     const raw = `User Question: "quantas runas existem?" (How many Runes are there?)
 Context: The user is asking about "Runes" in the context of the "Runestone" collection/protocol. * Source Data Check:
