@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap');
+
 /* ============================================================
    Ordinal Mind — Design System
    Premium dark mode with Bitcoin amber accents + glassmorphism
@@ -133,8 +135,8 @@
   --duration-slow: 400ms;
 
   /* Typography */
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: "Space Grotesk", monospace;
 }
 
 /* --- Reset & Base --- */
@@ -1044,7 +1046,7 @@ select.input-field option {
   word-break: break-word;
   font-size: 0.83rem;
   line-height: 1.65;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-sans);
   color: var(--text-primary);
 }
 
@@ -1075,7 +1077,7 @@ select.input-field option {
   line-height: 1;
   overflow: hidden;
   filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.1));
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .chronicle-card-text-preview.is-emoji .chronicle-card-text-meta {
@@ -1136,7 +1138,7 @@ select.input-field option {
   word-break: break-word;
   font-size: 0.83rem;
   line-height: 1.65;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-sans);
   color: var(--text-primary);
   overflow: hidden;
 }
@@ -5031,7 +5033,7 @@ select.input-field option {
   justify-content: center;
   line-height: 1;
   padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .media-text-preview.is-emoji .media-text-meta {
