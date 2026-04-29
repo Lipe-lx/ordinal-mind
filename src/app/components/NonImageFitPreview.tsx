@@ -24,6 +24,7 @@ interface Props {
   maxTextPreviewBytes?: number
   showMeta?: boolean
   title?: string
+  isFullscreen?: boolean
 }
 
 const DEFAULT_MAX_TEXT_PREVIEW_BYTES = 24 * 1024
@@ -45,13 +46,36 @@ export function NonImageFitPreview({
   maxTextPreviewBytes = DEFAULT_MAX_TEXT_PREVIEW_BYTES,
   showMeta = true,
   title,
+  isFullscreen = false,
 }: Props) {
-  const [state, setState] = useState<RenderState>({ status: "loading" })
+  const [state, setState] = useState<RenderState>(() => {
+    const pMode = resolveNonImagePrimaryMode(kind)
+    if (pMode === "text" || pMode === "html") {
+      return { status: "loading" }
+    }
+
+    if (kind === "unknown") {
+      if (previewUrl) {
+        return { status: "preview_image", imageUrl: contentUrl, iframeUrl: previewUrl }
+      }
+      return { status: "preview", url: contentUrl }
+    }
+
+    if (previewUrl) {
+      return { status: "preview", url: previewUrl }
+    }
+
+    return { status: "fallback", reason: "Inline fit preview is unavailable for this media type." }
+  })
   const [scaleState, setScaleState] = useState({ scale: 1, clipped: false })
-  const [surfaceSize, setSurfaceSize] = useState({ width: 1, height: 1 })
+  const [surfaceSize, setSurfaceSize] = useState(() => {
+    const viewportSize = isFullscreen ? 1024 : getEmbedViewportSize(mode)
+    return { width: viewportSize, height: viewportSize }
+  })
   const primaryMode = useMemo(() => resolveNonImagePrimaryMode(kind), [kind])
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
   const textSurfaceRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const htmlLoadTimeoutRef = useRef<number | null>(null)
@@ -94,7 +118,6 @@ export function NonImageFitPreview({
     }, fetchTimeoutMs)
 
     if (primaryMode === "text") {
-      setState({ status: "loading" })
       void (async () => {
         try {
           const res = await fetch(contentUrl, {
@@ -130,7 +153,6 @@ export function NonImageFitPreview({
     }
 
     if (primaryMode === "html") {
-      setState({ status: "loading" })
       void (async () => {
         try {
           const res = await fetch(contentUrl, {
@@ -148,7 +170,7 @@ export function NonImageFitPreview({
             return
           }
 
-          const viewportSize = getEmbedViewportSize(mode)
+          const viewportSize = isFullscreen ? 1024 : getEmbedViewportSize(mode)
           setSurfaceSize({ width: viewportSize, height: viewportSize })
           setState({ status: "html", srcDoc: buildSandboxedSrcDoc(raw, contentType, contentUrl) })
         } catch (error) {
@@ -168,28 +190,24 @@ export function NonImageFitPreview({
     }
 
     window.clearTimeout(timeoutId)
-    if (primaryMode === "preview_image_candidate") {
-      setPreviewFallbackState("Rendering unknown inscription through direct media preview.")
-    } else {
-      setPreviewFallbackState("Inline fit preview is unavailable for this media type.")
-    }
+    // Fallback cases are now handled by initial state since component remounts on kind change
 
     return () => {
       cancelled = true
       controller.abort()
     }
-  }, [contentType, contentUrl, maxTextPreviewBytes, primaryMode, setPreviewFallbackState])
+  }, [contentType, contentUrl, isFullscreen, maxTextPreviewBytes, mode, primaryMode, setPreviewFallbackState])
 
   const recomputeTextScale = useCallback(() => {
     if (state.status !== "text") return
-    if (!containerRef.current || !textSurfaceRef.current) return
+    if (!stageRef.current || !textSurfaceRef.current) return
 
-    const container = containerRef.current
+    const stage = stageRef.current
     const textSurface = textSurfaceRef.current
 
     const fit = computeFitScale({
-      containerWidth: container.clientWidth,
-      containerHeight: container.clientHeight,
+      containerWidth: stage.clientWidth,
+      containerHeight: stage.clientHeight,
       contentWidth: textSurface.scrollWidth,
       contentHeight: textSurface.scrollHeight,
       minScale,
@@ -202,7 +220,7 @@ export function NonImageFitPreview({
 
   const recomputeHtmlScale = useCallback(() => {
     if (state.status !== "html") return
-    if (!containerRef.current || !iframeRef.current) return
+    if (!stageRef.current || !iframeRef.current) return
 
     const doc = iframeRef.current.contentDocument
     if (!doc) return
@@ -227,11 +245,11 @@ export function NonImageFitPreview({
       1
     )
 
-    const containerWidth = Math.max(1, containerRef.current.clientWidth)
-    const containerHeight = Math.max(1, containerRef.current.clientHeight)
+    const stageWidth = Math.max(1, stageRef.current.clientWidth)
+    const stageHeight = Math.max(1, stageRef.current.clientHeight)
 
     // HTML/SVG should fit within the preview box footprint (contain) to ensure visibility.
-    const containScale = Math.min(containerWidth / contentWidth, containerHeight / contentHeight)
+    const containScale = Math.min(stageWidth / contentWidth, stageHeight / contentHeight)
     const safeScale = Number.isFinite(containScale) && containScale > 0 ? Math.min(containScale, 1) : 1
     const clipped = false
 
@@ -241,17 +259,17 @@ export function NonImageFitPreview({
 
   const recomputePreviewScale = useCallback(() => {
     if (state.status !== "preview") return
-    if (!containerRef.current) return
+    if (!stageRef.current) return
 
-    const viewportSize = getEmbedViewportSize(mode)
-    const containerWidth = Math.max(1, containerRef.current.clientWidth)
-    const containerHeight = Math.max(1, containerRef.current.clientHeight)
-    const containScale = Math.min(containerWidth / viewportSize, containerHeight / viewportSize)
+    const viewportSize = isFullscreen ? 1024 : getEmbedViewportSize(mode)
+    const stageWidth = Math.max(1, stageRef.current.clientWidth)
+    const stageHeight = Math.max(1, stageRef.current.clientHeight)
+    const containScale = Math.min(stageWidth / viewportSize, stageHeight / viewportSize)
     const safeScale = Number.isFinite(containScale) && containScale > 0 ? Math.min(containScale, 1) : 1
 
     setScaleState({ scale: safeScale, clipped: false })
     setSurfaceSize({ width: viewportSize, height: viewportSize })
-  }, [mode, state.status])
+  }, [isFullscreen, mode, state.status])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -271,10 +289,7 @@ export function NonImageFitPreview({
     recomputeTextScale()
   }, [recomputeTextScale, state.status])
 
-  useEffect(() => {
-    if (state.status !== "preview") return
-    recomputePreviewScale()
-  }, [recomputePreviewScale, state.status])
+  // Note: surfaceSize syncing is handled by remounting via key in parent
 
   const handleFrameLoad = useCallback(() => {
     if (htmlLoadTimeoutRef.current !== null) {
@@ -342,7 +357,7 @@ export function NonImageFitPreview({
 
     return (
       <div className={rootClassName} ref={containerRef}>
-        <div className="non-image-fit-stage">
+        <div className="non-image-fit-stage" ref={stageRef}>
           <div
             className="non-image-fit-canvas"
             style={{
@@ -385,7 +400,7 @@ export function NonImageFitPreview({
     const offsetY = ((1 - scaleState.scale) * surfaceSize.height) / 2
     return (
       <div className={rootClassName} ref={containerRef}>
-        <div className="non-image-fit-stage">
+        <div className="non-image-fit-stage" ref={stageRef}>
           <div
             className="non-image-fit-canvas"
             style={{
@@ -421,7 +436,7 @@ export function NonImageFitPreview({
   const offsetY = ((1 - scaleState.scale) * surfaceSize.height) / 2
   return (
     <div className={rootClassName} ref={containerRef}>
-      <div className="non-image-fit-stage">
+      <div className="non-image-fit-stage" ref={stageRef}>
         <div
           ref={textSurfaceRef}
           className="non-image-fit-canvas non-image-fit-canvas--text"

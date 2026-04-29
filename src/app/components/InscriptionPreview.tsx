@@ -234,12 +234,14 @@ export function InscriptionPreview({
 
     return (
       <NonImageFitPreview
+        key={`${activeChronicle.meta.inscription_id}:${fullscreen}`}
         kind={media_context.kind}
         contentType={media_context.content_type}
         contentUrl={media_context.content_url}
         previewUrl={media_context.preview_url}
         mode="default"
         fitPolicy="readable"
+        isFullscreen={fullscreen}
         title={`Inscription #${meta.inscription_number} preview`}
         className={fullscreen ? "non-image-fit-preview--fullscreen" : undefined}
       />

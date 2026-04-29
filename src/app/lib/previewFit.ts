@@ -86,7 +86,6 @@ export function buildSandboxedSrcDoc(raw: string, contentType: string, contentUr
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden !important;
   background: transparent;
 }
 * {

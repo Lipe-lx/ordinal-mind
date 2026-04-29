@@ -4398,8 +4398,8 @@ select.input-field option {
 
 .preview-fullscreen-shell {
   position: relative;
-  width: min(96vw, 1600px);
-  height: min(94vh, 1100px);
+  width: min(calc(100vw - 4rem), 1600px);
+  height: min(calc(100vh - 4rem), 1100px);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-glass);
   background: rgba(7, 10, 18, 0.78);
@@ -4428,10 +4428,11 @@ select.input-field option {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 1.5rem;
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) rgba(7, 10, 18, 0.78);
+  position: relative;
 }
 
 .preview-fullscreen-content::-webkit-scrollbar {
@@ -4474,6 +4475,19 @@ select.input-field option {
 
 .non-image-fit-preview--fullscreen {
   border-radius: var(--radius-md);
+  height: 100%;
+  border: none;
+  background: transparent;
+}
+
+.non-image-fit-preview--fullscreen .non-image-fit-stage {
+  padding: 0;
+  overflow: visible;
+}
+
+.non-image-fit-preview--fullscreen .non-image-fit-canvas {
+  /* Ensure 3D effects have space */
+  transform-style: preserve-3d;
 }
 
 /* --- Chronicle Tabs --- */
