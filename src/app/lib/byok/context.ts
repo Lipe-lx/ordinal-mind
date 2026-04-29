@@ -2,6 +2,8 @@ import type { Chronicle, VisionTransport } from "../types"
 import { buildCombinedPrompt, buildSystemPrompt, buildUserPrompt } from "./prompt"
 import { COLLECTION_RESEARCH_TOOLS, type SearchToolDefinition } from "./tools"
 import type { ResearchKeys } from "./toolExecutor"
+import type { ChatToolPolicyDecision, ToolExposurePolicy } from "./toolPolicy"
+import { selectToolsForPolicy } from "./toolPolicy"
 
 const GEMINI_INLINE_LIMIT_BYTES = 20 * 1024 * 1024
 
@@ -29,6 +31,9 @@ export interface PreparedSynthesisInput {
   inputMode: SynthesisMode
   searchToolsEnabled: boolean
   availableTools: SearchToolDefinition[]
+  toolPolicy: ToolExposurePolicy
+  toolPolicyReason: string
+  allowedToolNames: string[]
   fallbackReason?: string
   image?: PreparedImageInput
 }
@@ -36,11 +41,19 @@ export interface PreparedSynthesisInput {
 export async function prepareSynthesisInput(
   chronicle: Chronicle,
   capabilities: ProviderCapabilities,
-  researchKeys?: ResearchKeys
+  researchKeys?: ResearchKeys,
+  toolPolicyDecision?: ChatToolPolicyDecision
 ): Promise<PreparedSynthesisInput> {
-  const availableTools = capabilities.supportsToolCalling 
-    ? getAvailableTools(researchKeys) 
+  const allAvailableTools = capabilities.supportsToolCalling
+    ? getAvailableTools(researchKeys)
     : []
+  const decision = toolPolicyDecision ?? {
+    policy: "broad" as const,
+    allowedToolNames: [],
+    geminiMode: "AUTO" as const,
+    reason: "default_broad",
+  }
+  const availableTools = selectToolsForPolicy(allAvailableTools, decision)
 
   const base = {
     systemPrompt: buildSystemPrompt(availableTools),
@@ -48,6 +61,9 @@ export async function prepareSynthesisInput(
     combinedPrompt: buildCombinedPrompt(chronicle, availableTools),
     searchToolsEnabled: availableTools.length > 0,
     availableTools,
+    toolPolicy: decision.policy,
+    toolPolicyReason: decision.reason,
+    allowedToolNames: decision.allowedToolNames,
   }
 
   const fallbackReason = getVisionFallbackReason(chronicle, capabilities)

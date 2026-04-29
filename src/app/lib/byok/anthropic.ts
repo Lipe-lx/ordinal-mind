@@ -8,6 +8,7 @@ import type { ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
 import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
+import type { ChatToolPolicyDecision } from "./toolPolicy"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
 
@@ -96,6 +97,7 @@ export class AnthropicAdapter implements LLMAdapter {
     userMessage,
     mode,
     intent,
+    toolPolicyDecision,
     onChunk,
     signal,
     toolExecutor,
@@ -105,6 +107,7 @@ export class AnthropicAdapter implements LLMAdapter {
     userMessage: string
     mode: ChatResponseMode
     intent: ChatIntent
+    toolPolicyDecision?: ChatToolPolicyDecision
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor
@@ -125,7 +128,8 @@ export class AnthropicAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision
+        enableVision,
+        toolPolicyDecision
       )
     } catch (err) {
       if (isSystemMessageError(err)) {
@@ -136,7 +140,8 @@ export class AnthropicAdapter implements LLMAdapter {
           signal,
           toolExecutor,
           conversationPrompt,
-          enableVision
+          enableVision,
+          toolPolicyDecision
         )
       }
       throw err
@@ -150,9 +155,10 @@ export class AnthropicAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true
+    allowVisionInput = true,
+    toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride ?? prepared.userPrompt
     const image = allowVisionInput ? prepared.image : undefined
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
@@ -237,9 +243,10 @@ export class AnthropicAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true
+    allowVisionInput = true,
+    toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride
       ? `${prepared.systemPrompt}\n\n${promptOverride}`
       : prepared.combinedPrompt

@@ -10,6 +10,7 @@ import { OpenRouterAdapter } from "./openrouter"
 import type { ResearchKeys, ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
+import type { ChatToolPolicyDecision } from "./toolPolicy"
 
 export type Provider = "anthropic" | "openai" | "gemini" | "openrouter" | "unknown"
 
@@ -39,6 +40,7 @@ export interface LLMAdapter {
     userMessage: string
     mode: ChatResponseMode
     intent: ChatIntent
+    toolPolicyDecision?: ChatToolPolicyDecision
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor

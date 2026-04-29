@@ -8,7 +8,10 @@ export interface SearchResult {
 export interface SearchToolResult {
   tool_name: string
   results: SearchResult[]
+  summary?: string
+  facts?: Record<string, unknown>
   data?: Record<string, unknown>
+  partial?: boolean
   error?: string
 }
 

@@ -111,4 +111,14 @@ Distribution Design: "Designed as an airdrop to 112,383 wallets"`
       "A coleção Runestone aparece com supply de 112.4K na Satflow. O desenho de distribuição menciona airdrop para 112,383 wallets."
     )
   })
+
+  it("removes leaked short-answer policy text from Gemma-style output", () => {
+    const raw = `Response policy:
+- Answer the latest user question directly in the first sentence.
+- For short factoid questions (who/when/where/how many), keep the reply compact: one direct answer sentence, plus one brief evidence sentence only if it helps.
+
+<final_answer>Existem 112,383 Runestones mapeadas na coleção.</final_answer>`
+
+    expect(sanitizeNarrative(raw)).toBe("Existem 112,383 Runestones mapeadas na coleção.")
+  })
 })

@@ -11,7 +11,7 @@ export interface SearchToolDefinition {
 export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   {
     name: "search_wiki",
-    description: "Searches the Ordinal Mind wiki for inscriptions, collections, artists, or sats. Use for contextual background and cross-entity discovery.",
+    description: "Search the Ordinal Mind wiki for inscription, collection, artist, or sat pages. Use this for contextual background, named entities, and relationship discovery. Do not use it as the only source for precise transfer, mint, sale, or supply claims when a factual event tool is available.",
     parameters: {
       type: "object",
       properties: {
@@ -28,7 +28,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "get_raw_events",
-    description: "Fetches immutable Layer 0 events for a specific inscription. Prefer this for precise factual claims.",
+    description: "Fetch immutable Layer 0 events for a specific inscription. Use this first for precise factual claims about mint, transfers, sales, timestamps, and provenance. The response is event-level data and is better for exact answers than wiki summaries.",
     parameters: {
       type: "object",
       properties: {
@@ -45,7 +45,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "get_timeline",
-    description: "Returns the rendered timeline for an inscription from cache, with Layer 0 fallback.",
+    description: "Return the rendered Chronicle timeline for an inscription from cache, with Layer 0 fallback. Use this when you need a concise factual view of the full event history rather than raw event rows.",
     parameters: {
       type: "object",
       properties: {
@@ -56,7 +56,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "get_collection_context",
-    description: "Returns collection wiki context and stats for collection slug or inscription id.",
+    description: "Return public collection context for a collection slug or inscription id. Use this for collection-level facts such as the mapped collection size, wiki summary, and collection metadata. Prefer this over broad web search for short factual questions like collection size.",
     parameters: {
       type: "object",
       properties: {
@@ -68,7 +68,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   {
     name: "web_search",
     requiresKeys: ["braveSearchApiKey", "serpapiApiKey"],
-    description: "Search the web for cultural context, history, lore, creator info, milestones, and community reception of a Bitcoin Ordinals collection. Use this to find articles, blog posts, and community discussions about the collection.",
+    description: "Search the public web for cultural context, history, lore, creator information, milestones, and community reception of a Bitcoin Ordinals collection. Use this for broad narrative context only, not for exact event counts, owner fields, or mint timestamps.",
     parameters: {
       type: "object",
       properties: {
@@ -80,7 +80,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   {
     name: "deep_research",
     requiresKeys: ["exaApiKey"],
-    description: "Semantic search for in-depth articles, essays, and deep dives about an Ordinals collection. Returns full article content.",
+    description: "Run semantic search across long-form articles and deep dives about an Ordinals collection. Use this only for broad narrative or historical context, not for short factual answers that can be resolved from Chronicle data or wiki tools.",
     parameters: {
       type: "object",
       properties: {
@@ -92,7 +92,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   {
     name: "synthesized_search",
     requiresKeys: ["perplexityApiKey"],
-    description: "Get a synthesized answer with citations about a specific question regarding a collection's history or significance.",
+    description: "Get a synthesized cited answer about a collection's history or significance. Use this for contextual follow-up when direct Chronicle data and wiki tools are insufficient, not as the primary source for exact on-chain claims.",
     parameters: {
       type: "object",
       properties: {
@@ -103,7 +103,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "market_context",
-    description: "Get current market data (price, volume, market cap) for a cryptocurrency to contextualize macro conditions.",
+    description: "Get current market data such as price, volume, and market cap for a cryptocurrency. Use this only when macro market conditions are relevant to a broader narrative.",
     parameters: {
       type: "object",
       properties: {
@@ -115,7 +115,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   {
     name: "public_interest",
     requiresKeys: ["serpapiApiKey"],
-    description: "Get Google Trends data showing public search interest over time for a topic.",
+    description: "Get Google Trends style public-interest data for a topic over time. Use this for collector attention context, not for precise inscription or collection facts.",
     parameters: {
       type: "object",
       properties: {

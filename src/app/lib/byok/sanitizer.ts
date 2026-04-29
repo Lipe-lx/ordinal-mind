@@ -33,6 +33,9 @@ const PROMPT_ECHO_PATTERNS = [
   /^INSCRIPTION DATA:/i,
   /^EVENT TIMELINE:/i,
   /^Response policy:/i,
+  /^For short factoid questions/i,
+  /^keep the reply compact:/i,
+  /^direct answer \+ optional/i,
   /^Conversation so far:/i,
   /^Source Data Check:/i,
   /^\*+\s*Source Data Check:/i,
@@ -244,6 +247,24 @@ function extractStructuredSupplyAnswer(text: string): string | null {
   return `The ${collection} collection is listed with a supply of ${supply}${sourceSuffix}.`
 }
 
+function extractJsonEnvelopeAnswer(text: string): string | null {
+  const candidate = text.trim()
+  if (!candidate.startsWith("{")) return null
+
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>
+    const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : ""
+    if (!answer) return null
+
+    const evidence = typeof parsed.evidence === "string" ? parsed.evidence.trim() : ""
+    const uncertainty = typeof parsed.uncertainty === "string" ? parsed.uncertainty.trim() : ""
+
+    return [answer, evidence, uncertainty].filter(Boolean).join(" ").trim()
+  } catch {
+    return null
+  }
+}
+
 function normalizeSupply(value: string): string {
   return value
     .replace(/\s*\(specifically\s+["“”]?supply\s+[^)"“”]+["“”]?\)/i, "")
@@ -363,6 +384,11 @@ export function sanitizeNarrative(raw: string): string {
   const structuredSupplyAnswer = extractStructuredSupplyAnswer(text)
   if (structuredSupplyAnswer) {
     return structuredSupplyAnswer
+  }
+
+  const jsonEnvelopeAnswer = extractJsonEnvelopeAnswer(text)
+  if (jsonEnvelopeAnswer) {
+    return jsonEnvelopeAnswer
   }
 
   const inlineDataCheckAnswer = extractInlineDataCheckAnswer(text)

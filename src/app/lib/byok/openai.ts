@@ -8,6 +8,7 @@ import type { ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
 import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
+import type { ChatToolPolicyDecision } from "./toolPolicy"
 
 const API_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -87,6 +88,7 @@ export class OpenAIAdapter implements LLMAdapter {
     userMessage,
     mode,
     intent,
+    toolPolicyDecision,
     onChunk,
     signal,
     toolExecutor,
@@ -96,6 +98,7 @@ export class OpenAIAdapter implements LLMAdapter {
     userMessage: string
     mode: ChatResponseMode
     intent: ChatIntent
+    toolPolicyDecision?: ChatToolPolicyDecision
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor
@@ -117,7 +120,8 @@ export class OpenAIAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision
+        enableVision,
+        toolPolicyDecision
       )
     } catch (err) {
       if (isSystemRoleError(err)) {
@@ -129,7 +133,8 @@ export class OpenAIAdapter implements LLMAdapter {
           signal,
           toolExecutor,
           conversationPrompt,
-          enableVision
+          enableVision,
+          toolPolicyDecision
         )
       }
       throw err
@@ -144,9 +149,10 @@ export class OpenAIAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true
+    allowVisionInput = true,
+    toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride ?? prepared.userPrompt
     const image = allowVisionInput ? prepared.image : undefined
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({

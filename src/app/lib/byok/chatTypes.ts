@@ -15,7 +15,7 @@ export interface ChatToolLog {
   id: string
   tool: string
   args: Record<string, unknown>
-  status: "running" | "done" | "error"
+  status: "running" | "done" | "partial" | "error"
   result?: string
   error?: string
 }

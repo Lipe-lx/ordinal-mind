@@ -222,6 +222,10 @@ async function getCollectionContext(input: Record<string, unknown>, env: Env): P
       ok: true,
       source: "wiki_db",
       collection_slug: collectionSlug,
+      collection_size: stats?.count ?? 0,
+      collection_size_source: "raw_chronicle_events.genesis",
+      collection_first_seen: stats?.first_seen ?? null,
+      collection_last_seen: stats?.last_seen ?? null,
       page: page ? toWikiPageResponse(page) : null,
       stats: stats ?? { count: 0, first_seen: null, last_seen: null },
     }

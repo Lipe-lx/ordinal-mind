@@ -603,6 +603,8 @@ describe("wiki routes backend", () => {
     const collectionBody = await collectionRes.json() as Record<string, unknown>
     expect(collectionBody.ok).toBe(true)
     expect(collectionBody.source).toBe("wiki_db")
+    expect(collectionBody.collection_size).toBe(1)
+    expect(collectionBody.collection_size_source).toBe("raw_chronicle_events.genesis")
 
     const lintReq = new Request("https://ordinalmind.local/api/wiki/lint")
     const lintRes = await worker.fetch(lintReq, env)

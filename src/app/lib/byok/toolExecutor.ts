@@ -26,7 +26,7 @@ export interface ResearchLog {
   id: string
   tool: string
   args: Record<string, unknown>
-  status: "running" | "done" | "error"
+  status: "running" | "done" | "partial" | "error"
   result?: string
   error?: string
 }
@@ -59,7 +59,7 @@ export class ToolExecutor {
     if (this.callCount >= this.maxCalls) {
       const error = "Maximum tool call limit reached."
       this.onLog?.({ id, tool: toolName, args, status: "error", error })
-      return { tool_name: toolName, results: [], error }
+      return { tool_name: toolName, results: [], summary: error, error, partial: false }
     }
     
     this.callCount++
@@ -70,20 +70,33 @@ export class ToolExecutor {
       try {
         const payload = await executeWikiTool(toolName, args)
         const error = typeof payload.error === "string" ? payload.error : undefined
+        const partial = payload.partial === true
         const summary = error
-          ? `wiki error: ${error}`
+          ? partial
+            ? `wiki partial: ${error}`
+            : `wiki error: ${error}`
           : `wiki ok: ${toolName}`
-        this.onLog?.({ id, tool: toolName, args, status: error ? "error" : "done", result: summary, error })
+        this.onLog?.({
+          id,
+          tool: toolName,
+          args,
+          status: error ? (partial ? "partial" : "error") : "done",
+          result: summary,
+          error,
+        })
         return {
           tool_name: toolName,
           results: [{ content: summary }],
+          summary,
+          facts: extractWikiFacts(toolName, payload),
           data: payload,
+          partial,
           error,
         }
       } catch (e) {
         const error = String(e)
         this.onLog?.({ id, tool: toolName, args, status: "error", error })
-        return { tool_name: toolName, results: [], error }
+        return { tool_name: toolName, results: [], summary: error, error, partial: false }
       }
     }
 
@@ -97,26 +110,31 @@ export class ToolExecutor {
     if (!provider) {
       const error = `Unknown tool: ${toolName}`
       this.onLog?.({ id, tool: toolName, args, status: "error", error })
-      return { tool_name: toolName, results: [], error }
+      return { tool_name: toolName, results: [], summary: error, error, partial: false }
     }
 
     const config = this.getConfigForTool(toolName)
     try {
       const result = await provider.execute(args, config)
+      const summary = result.summary
+        ?? result.results.map(r => r.title || (r.content ? `${r.content.substring(0, 50)}...` : "No content")).join(", ")
       
       if (result.error) {
-        this.onLog?.({ id, tool: toolName, args, status: "error", error: result.error })
+        this.onLog?.({ id, tool: toolName, args, status: result.partial ? "partial" : "error", error: result.error, result: summary })
       } else {
-        const resultSummary = result.results.map(r => r.title || (r.content ? (r.content.substring(0, 50) + "...") : "No content")).join(", ")
-        this.onLog?.({ id, tool: toolName, args, status: "done", result: resultSummary })
+        this.onLog?.({ id, tool: toolName, args, status: result.partial ? "partial" : "done", result: summary })
       }
       
-      return result
+      return {
+        ...result,
+        summary,
+        partial: result.partial ?? false,
+      }
     } catch (e) {
       const error = String(e)
       console.error(`[ToolExecutor] Error executing ${toolName}:`, e)
       this.onLog?.({ id, tool: toolName, args, status: "error", error })
-      return { tool_name: toolName, results: [], error }
+      return { tool_name: toolName, results: [], summary: error, error, partial: false }
     }
   }
 
@@ -136,5 +154,29 @@ export class ToolExecutor {
       default:
         return {}
     }
+  }
+}
+
+function extractWikiFacts(toolName: string, payload: Record<string, unknown>): Record<string, unknown> {
+  switch (toolName) {
+    case "get_collection_context":
+      return {
+        collection_slug: payload.collection_slug,
+        collection_size: payload.collection_size,
+        collection_size_source: payload.collection_size_source,
+        source: payload.source,
+      }
+    case "get_raw_events":
+      return {
+        inscription_id: payload.inscription_id,
+        event_count: payload.event_count,
+      }
+    case "get_timeline":
+      return {
+        inscription_id: payload.inscription_id,
+        source: payload.source,
+      }
+    default:
+      return {}
   }
 }

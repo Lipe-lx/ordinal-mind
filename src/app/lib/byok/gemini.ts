@@ -8,6 +8,7 @@ import type { ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
 import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
+import type { ChatToolPolicyDecision } from "./toolPolicy"
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -67,6 +68,7 @@ export class GeminiAdapter implements LLMAdapter {
     userMessage,
     mode,
     intent,
+    toolPolicyDecision,
     onChunk,
     signal,
     toolExecutor,
@@ -76,6 +78,7 @@ export class GeminiAdapter implements LLMAdapter {
     userMessage: string
     mode: ChatResponseMode
     intent: ChatIntent
+    toolPolicyDecision?: ChatToolPolicyDecision
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor
@@ -97,7 +100,8 @@ export class GeminiAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision
+        enableVision,
+        toolPolicyDecision
       )
     }
 
@@ -110,7 +114,8 @@ export class GeminiAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision
+        enableVision,
+        toolPolicyDecision
       )
     } catch (err) {
       if (isSystemInstructionError(err)) {
@@ -123,7 +128,8 @@ export class GeminiAdapter implements LLMAdapter {
           signal,
           toolExecutor,
           conversationPrompt,
-          enableVision
+          enableVision,
+          toolPolicyDecision
         )
       }
       throw err
@@ -138,9 +144,10 @@ export class GeminiAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true
+    allowVisionInput = true,
+    toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys())
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride
       ? (useSystemInstruction ? promptOverride : `${prepared.systemPrompt}\n\n${promptOverride}`)
       : (useSystemInstruction ? prepared.userPrompt : prepared.combinedPrompt)
@@ -157,16 +164,7 @@ export class GeminiAdapter implements LLMAdapter {
       }))
     }] : undefined
 
-    const contents: Array<{
-      role: string;
-      parts: Array<{
-        text?: string;
-        inline_data?: { mime_type: string; data: string };
-        file_data?: { mime_type: string; file_uri: string };
-        functionCall?: { name: string; args: Record<string, unknown> };
-        functionResponse?: { name: string; response: unknown };
-      }>;
-    }> = [
+    const contents: GeminiContent[] = [
       {
         role: "user",
         parts: buildGeminiParts(
@@ -187,6 +185,7 @@ export class GeminiAdapter implements LLMAdapter {
 
       if (tools && tools.length > 0) {
         body.tools = tools
+        body.tool_config = buildGeminiToolConfig(prepared.availableTools, toolPolicyDecision)
       }
 
       // Add systemInstruction when supported
@@ -218,40 +217,56 @@ export class GeminiAdapter implements LLMAdapter {
       if (stream) {
         const streamResult = await this.consumeGeminiStreamWithTools(res, onChunk, signal)
         if (streamResult.toolCalls.length > 0 && toolExecutor) {
-          contents.push({
-             role: "model",
-             parts: streamResult.toolCalls.map(c => ({ functionCall: { name: c.name, args: c.args } }))
-          })
-          
-          const functionResponses = []
+          contents.push(streamResult.modelContent)
+
+          const functionResponses: GeminiPart[] = []
           for (const call of streamResult.toolCalls) {
+            // Validate tool exists before executing
+            const toolExists = prepared.availableTools.some(t => t.name === call.name)
+            if (!toolExists) {
+              console.warn(`[GeminiAdapter] Ignoring unknown tool call: ${call.name}`)
+              continue
+            }
             const result = await toolExecutor.executeTool(call.name, call.args)
             functionResponses.push({
-               functionResponse: { name: call.name, response: result }
+              functionResponse: {
+                id: call.id,
+                name: call.name,
+                response: result,
+              },
             })
           }
-          contents.push({ role: "user", parts: functionResponses }) // sometimes user, sometimes function
+          contents.push({ role: "user", parts: functionResponses })
           continue
         }
         return { text: streamResult.text, inputMode }
       } else {
         const data = (await res.json()) as GeminiResponse
         const candidate = data.candidates?.[0]
-        const parts = candidate?.content?.parts || []
-        
-        const functionCalls = parts.filter((p) => p.functionCall).map((p) => p.functionCall!)
-        
+        const modelContent = candidate?.content
+        const parts = modelContent?.parts || []
+        const functionCalls = parts
+          .filter((part): part is GeminiPart & { functionCall: GeminiFunctionCall } => Boolean(part.functionCall))
+          .map((part) => part.functionCall)
+
         if (functionCalls.length > 0 && toolExecutor) {
-          contents.push({
-             role: "model",
-             parts: functionCalls.map((c) => ({ functionCall: { name: c.name, args: c.args } }))
-          })
-          
-          const functionResponses = []
+          contents.push(modelContent ?? { role: "model", parts })
+
+          const functionResponses: GeminiPart[] = []
           for (const call of functionCalls) {
+            // Validate tool exists before executing
+            const toolExists = prepared.availableTools.some(t => t.name === call.name)
+            if (!toolExists) {
+              console.warn(`[GeminiAdapter] Ignoring unknown tool call: ${call.name}`)
+              continue
+            }
             const result = await toolExecutor.executeTool(call.name, call.args)
             functionResponses.push({
-               functionResponse: { name: call.name, response: result }
+              functionResponse: {
+                id: call.id,
+                name: call.name,
+                response: result,
+              },
             })
           }
           contents.push({ role: "user", parts: functionResponses })
@@ -269,9 +284,11 @@ export class GeminiAdapter implements LLMAdapter {
     res: Response,
     onChunk?: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<{ text: string, toolCalls: Array<{name: string, args: Record<string, unknown>}> }> {
+  ): Promise<{ text: string, toolCalls: GeminiFunctionCall[], modelContent: GeminiContent }> {
     let accumulatedText = ""
-    const toolCalls: Array<{name: string, args: Record<string, unknown>}> = []
+    const toolCalls: GeminiFunctionCall[] = []
+    const seenCalls = new Set<string>()
+    const modelParts: GeminiPart[] = []
 
     await consumeSSE(
       res,
@@ -286,9 +303,15 @@ export class GeminiAdapter implements LLMAdapter {
             if (part.text) {
               accumulatedText += part.text
               if (onChunk) onChunk(part.text)
+              modelParts.push({ text: part.text, thoughtSignature: part.thoughtSignature })
             }
             if (part.functionCall) {
-              toolCalls.push({ name: part.functionCall.name, args: part.functionCall.args })
+              const callKey = part.functionCall.id ?? `${part.functionCall.name}:${JSON.stringify(part.functionCall.args)}:${toolCalls.length}`
+              if (!seenCalls.has(callKey)) {
+                seenCalls.add(callKey)
+                toolCalls.push(part.functionCall)
+                modelParts.push({ functionCall: part.functionCall, thoughtSignature: part.thoughtSignature })
+              }
             }
           }
         } catch {
@@ -298,7 +321,14 @@ export class GeminiAdapter implements LLMAdapter {
       signal
     )
 
-    return { text: accumulatedText, toolCalls }
+    return {
+      text: accumulatedText,
+      toolCalls,
+      modelContent: {
+        role: "model",
+        parts: modelParts,
+      },
+    }
   }
 }
 
@@ -335,6 +365,36 @@ function extractGeminiText(data: GeminiResponse): string {
   )
 }
 
+function buildGeminiToolConfig(
+  tools: Array<{ name: string }>,
+  toolPolicyDecision?: ChatToolPolicyDecision
+): Record<string, unknown> | undefined {
+  if (!toolPolicyDecision) return undefined
+  if (toolPolicyDecision.geminiMode === "NONE") {
+    return {
+      function_calling_config: {
+        mode: "NONE",
+      },
+    }
+  }
+
+  if (toolPolicyDecision.geminiMode === "ANY") {
+    const allowed = toolPolicyDecision.allowedToolNames.filter((name) => tools.some((tool) => tool.name === name))
+    return {
+      function_calling_config: {
+        mode: "ANY",
+        ...(allowed.length > 0 ? { allowed_function_names: allowed } : {}),
+      },
+    }
+  }
+
+  return {
+    function_calling_config: {
+      mode: "AUTO",
+    },
+  }
+}
+
 function isGemmaModel(model: string): boolean {
   return /^gemma[-_]/i.test(model)
 }
@@ -342,14 +402,36 @@ function isGemmaModel(model: string): boolean {
 
 // --- Gemini-specific types ---
 
+interface GeminiFunctionCall {
+  id?: string
+  name: string
+  args: Record<string, unknown>
+  thoughtSignature?: string
+}
+
+interface GeminiFunctionResponse {
+  id?: string
+  name: string
+  response: unknown
+}
+
+interface GeminiPart {
+  text?: string
+  inline_data?: { mime_type: string; data: string }
+  file_data?: { mime_type: string; file_uri: string }
+  functionCall?: GeminiFunctionCall
+  functionResponse?: GeminiFunctionResponse
+  thoughtSignature?: string
+}
+
+interface GeminiContent {
+  role: string
+  parts: GeminiPart[]
+}
+
 interface GeminiResponse {
   candidates?: {
-    content?: {
-      parts?: { 
-        text?: string;
-        functionCall?: { name: string; args: Record<string, unknown> };
-      }[]
-    }
+    content?: GeminiContent
     finishReason?: string
   }[]
 }

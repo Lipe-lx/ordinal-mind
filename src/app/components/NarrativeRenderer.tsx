@@ -301,7 +301,7 @@ function ResearchLogs({ logs, phase }: { logs: ResearchLog[], phase: string }) {
           <div key={log.id} className={`narrative-log-item ${log.status}`}>
             <div className="narrative-log-row">
               <span className="narrative-log-status">
-                {log.status === "running" ? "⏳" : log.status === "done" ? "✅" : "❌"}
+                {log.status === "running" ? "⏳" : log.status === "done" ? "✅" : log.status === "partial" ? "⚠️" : "❌"}
               </span>
               <span className="narrative-log-tool">{log.tool.replace("_", " ")}</span>
               <span className="narrative-log-args">

@@ -173,7 +173,9 @@ export function NarrativeChatRenderer({
             {researchLogs.length > 0 ? researchLogs.map((log) => (
               <div key={log.id} className={`narrative-log-item ${log.status}`}>
                 <div className="narrative-log-row">
-                  <span className="narrative-log-status">{log.status === "running" ? "⏳" : log.status === "done" ? "✅" : "❌"}</span>
+                  <span className="narrative-log-status">
+                    {log.status === "running" ? "⏳" : log.status === "done" ? "✅" : log.status === "partial" ? "⚠️" : "❌"}
+                  </span>
                   <span className="narrative-log-tool">{log.tool.replace("_", " ")}</span>
                   <span className="narrative-log-args">{String(log.args.query || log.args.question || log.args.keyword || JSON.stringify(log.args))}</span>
                 </div>

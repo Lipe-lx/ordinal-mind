@@ -128,7 +128,7 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
   }
 
   const intentSpecific = intent === "chronicle_query"
-    ? "- Answer the latest user question directly in the first sentence.\n- For short factoid questions (who/when/where/how many), use format: direct answer + optional 1 evidence sentence.\n- Do not recap the full Chronicle unless explicitly requested.\n- Use extra detail only if the user asks to expand."
+    ? "- Answer the latest user question directly in the first sentence.\n- For short factoid questions (who/when/where/how many), keep the reply compact: one direct answer sentence, plus one brief evidence sentence only if it helps.\n- Do not recap the full Chronicle unless explicitly requested.\n- Use extra detail only if the user asks to expand."
     : "- Keep response short and conversational (1-2 sentences)."
 
   return `Response policy:

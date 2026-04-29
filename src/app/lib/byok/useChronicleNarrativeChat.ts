@@ -27,6 +27,9 @@ import {
   resolvePolicyResponse,
 } from "./chatPolicies"
 import { classifyIntentWithLlm, shouldUseLlmIntentClassifier } from "./llmIntentClassifier"
+import { resolveDirectFactAnswer } from "./directFacts"
+import { formatChatAnswerEnvelope, toChatAnswerEnvelope } from "./responseContract"
+import { resolveChatToolPolicy } from "./toolPolicy"
 
 export type SynthesisPhase =
   | "idle"
@@ -222,6 +225,11 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         : null
       const intent = options.intentOverride ?? (routingActive ? (llmRouted?.intent ?? routed.intent) : "chronicle_query")
       const mode = options.forceMode ?? (routingActive ? (llmRouted?.mode ?? routed.mode) : "narrative")
+      const toolPolicyDecision = resolveChatToolPolicy({
+        prompt: trimmedPrompt,
+        mode,
+        intent,
+      })
 
       if (routerMode !== "off") {
         console.info("[NarrativeChat][IntentRouter]", buildTelemetryEvent(routed, trimmedPrompt))
@@ -266,6 +274,39 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         }
       }
 
+      const directFact = intent === "chronicle_query" && mode === "qa"
+        ? await resolveDirectFactAnswer({
+            prompt: trimmedPrompt,
+            chronicle,
+          })
+        : { handled: false as const }
+
+      if (directFact.handled && directFact.envelope) {
+        const localAssistant: ChatMessage = {
+          id: buildId("assistant"),
+          role: "assistant",
+          content: formatChatAnswerEnvelope(directFact.envelope),
+          createdAt: new Date().toISOString(),
+          turnId,
+        }
+        console.info("[NarrativeChat][DirectFact]", {
+          at: new Date().toISOString(),
+          kind: "direct_fact_answer",
+          provider: config.provider,
+          model: config.model,
+          reason: directFact.reason,
+          used_tools: directFact.envelope.used_tools,
+        })
+        setMessages((prev) => truncateMessagesByTurns([...prev, localAssistant]))
+        setPhase("done")
+        setStreamingText("")
+        setResearchLogs([])
+        setToolLogs([])
+        setError(null)
+        setLastInputMode(null)
+        return
+      }
+
       setError(null)
       setPhase("connecting")
       setStreamingText("")
@@ -284,7 +325,11 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
           setPhase("analyzing")
         }
 
+        const usedToolNames = new Set<string>()
         const toolExecutor = new ToolExecutor(config.researchKeys || {}, (log) => {
+          if (log.status !== "running") {
+            usedToolNames.add(log.tool)
+          }
           setResearchLogs((prev) => {
             const index = prev.findIndex((entry) => entry.id === log.id)
             if (index !== -1) {
@@ -310,6 +355,18 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
           }
         })
 
+        console.info("[NarrativeChat][TurnStart]", {
+          at: new Date().toISOString(),
+          kind: "chat_turn_start",
+          provider: config.provider,
+          model: config.model,
+          intent,
+          mode,
+          tool_policy: toolPolicyDecision.policy,
+          tool_policy_reason: toolPolicyDecision.reason,
+          allowed_tools: toolPolicyDecision.allowedToolNames,
+        })
+
         let firstChunk = true
         let accumulatedStream = ""
         const result = await adapter.chatStream({
@@ -318,6 +375,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
           userMessage: hybridPrompt,
           mode,
           intent,
+          toolPolicyDecision,
           onChunk: (chunk) => {
             if (firstChunk) {
               setPhase("streaming")
@@ -336,7 +394,12 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         setLastInputMode(result.inputMode)
 
         const clean = sanitizeNarrative(result.text)
-        if (!clean) {
+        const envelope = toChatAnswerEnvelope({
+          text: clean || result.text,
+          usedTools: Array.from(usedToolNames),
+        })
+        const displayText = formatChatAnswerEnvelope(envelope)
+        if (!displayText) {
           setError("The AI returned an empty response. Try again or switch models.")
           setPhase("error")
           return
@@ -345,13 +408,25 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         const previousAssistantText = [...history].reverse().find((message) => message.role === "assistant")?.content
         const guardedText = routingActive
           ? applyResponseGuardrails({
-              text: clean,
+              text: displayText,
               intent,
               mode,
               previousAssistantText,
               userPrompt: trimmedPrompt,
             })
-          : clean
+          : displayText
+
+        console.info("[NarrativeChat][TurnEnd]", {
+          at: new Date().toISOString(),
+          kind: "chat_turn_end",
+          provider: config.provider,
+          model: config.model,
+          intent,
+          mode,
+          tool_policy: toolPolicyDecision.policy,
+          used_tools: envelope.used_tools,
+          input_mode: result.inputMode,
+        })
 
         const assistantMessage: ChatMessage = {
           id: buildId("assistant"),
