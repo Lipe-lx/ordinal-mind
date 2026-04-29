@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildOrdinalsPreviewUrl,
   detectMediaKind,
+  formatContentTypeLabel,
   getMediaFallbackReason,
   getMediaPreviewMode,
   isTextLikeContentType,
@@ -29,5 +30,12 @@ describe("media helpers", () => {
   it("builds a stable preview url and fallback reason", () => {
     expect(buildOrdinalsPreviewUrl("abc123i0")).toBe("https://ordinals.com/preview/abc123i0")
     expect(getMediaFallbackReason("model")).toContain("ordinals preview")
+  })
+
+  it("formats image content types as collector-friendly file extensions", () => {
+    expect(formatContentTypeLabel("image/png")).toBe("PNG")
+    expect(formatContentTypeLabel("image/jpeg; charset=binary")).toBe("JPG")
+    expect(formatContentTypeLabel("image/svg+xml")).toBe("SVG")
+    expect(formatContentTypeLabel("image/webp")).toBe("WEBP")
   })
 })

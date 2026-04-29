@@ -102,3 +102,84 @@ describe("ordinals metadata parser", () => {
     })
   })
 })
+
+describe("ordinals inscription content type", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("uses the reported inscription content type when available", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      id: "abc123i0",
+      number: 1,
+      content_type: "IMAGE/PNG; charset=binary",
+      height: 800000,
+      fee: 1000,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }))
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const meta = await fetchOrdinals.inscription("abc123i0")
+
+    expect(meta.content_type).toBe("image/png")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("falls back to the content endpoint header when inscription metadata omits content type", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "svg123i0",
+        number: 2,
+        height: 800001,
+        fee: 1000,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(null, {
+        status: 200,
+        headers: { "Content-Type": "image/svg+xml; charset=utf-8" },
+      }))
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const meta = await fetchOrdinals.inscription("svg123i0")
+
+    expect(meta.content_type).toBe("image/svg+xml")
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://ordinals.com/content/svg123i0", {
+      method: "HEAD",
+    })
+  })
+
+  it("uses a ranged content request when HEAD does not expose the content type", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "html123i0",
+        number: 3,
+        content_type: "Not available",
+        height: 800002,
+        fee: 1000,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 405 }))
+      .mockResolvedValueOnce(new Response("<html></html>", {
+        status: 206,
+        headers: { "Content-Type": "text/html;charset=utf-8" },
+      }))
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const meta = await fetchOrdinals.inscription("html123i0")
+
+    expect(meta.content_type).toBe("text/html")
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "https://ordinals.com/content/html123i0", {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    })
+  })
+})

@@ -16,6 +16,7 @@ import {
   buildOrdinalsPreviewUrl,
   detectMediaKind,
   getMediaFallbackReason,
+  normalizeContentType,
 } from "../../app/lib/media"
 import { buildCuratedCollectionProfile } from "../collectionProfiles"
 
@@ -34,6 +35,7 @@ const COINGECKO_NFT_API_BASE_URL = "https://api.coingecko.com/api/v3/nfts"
 const MAX_PARENT_ITEMS = 10
 const MAX_CHILD_ITEMS = 20
 const MAX_GALLERY_ITEMS = 20
+const CONTENT_TYPE_ENRICH_BATCH_SIZE = 4
 
 interface OrdInscriptionDetails {
   id: string
@@ -494,8 +496,12 @@ async function fetchProtocolRelations(
 
   // Handle case where data is a plain array (common in some ord server versions/endpoints)
   if (Array.isArray(data)) {
+    const items = await enrichRelatedContentTypes(
+      data.slice(0, limit).map(item => toRelatedInscriptionSummary(item, relatedToId))
+    )
+
     return {
-      items: data.slice(0, limit).map(item => toRelatedInscriptionSummary(item, relatedToId)),
+      items,
       total_count: data.length,
       more: false,
       source_ref: url,
@@ -507,9 +513,12 @@ async function fetchProtocolRelations(
     kind === "parents"
       ? (data as ParentInscriptionsResponse).parents ?? []
       : (data as ChildInscriptionsResponse).children ?? []
+  const items = await enrichRelatedContentTypes(
+    rawItems.slice(0, limit).map(item => toRelatedInscriptionSummary(item, relatedToId))
+  )
 
   return {
-    items: rawItems.slice(0, limit).map(item => toRelatedInscriptionSummary(item, relatedToId)),
+    items,
     total_count: rawItems.length,
     more: data.more ?? false,
     source_ref: url,
@@ -562,7 +571,9 @@ async function fetchProtocolGallery(
 
   return {
     gallery_id: inscriptionId,
-    items: (details ?? []).slice(0, MAX_GALLERY_ITEMS).map(item => toRelatedInscriptionSummary(item)),
+    items: await enrichRelatedContentTypes(
+      (details ?? []).slice(0, MAX_GALLERY_ITEMS).map(item => toRelatedInscriptionSummary(item))
+    ),
     total_count: (galleryPage.ids ?? []).length,
     more: galleryPage.more ?? false,
     source_ref: url,
@@ -2154,6 +2165,71 @@ function toRelatedInscriptionSummary(
       : undefined,
     related_to_ids: relatedToId ? [relatedToId] : undefined,
   }
+}
+
+async function enrichRelatedContentTypes(
+  items: RelatedInscriptionSummary[]
+): Promise<RelatedInscriptionSummary[]> {
+  const enriched: RelatedInscriptionSummary[] = []
+
+  for (let index = 0; index < items.length; index += CONTENT_TYPE_ENRICH_BATCH_SIZE) {
+    const batch = items.slice(index, index + CONTENT_TYPE_ENRICH_BATCH_SIZE)
+    enriched.push(...await Promise.all(batch.map(enrichRelatedContentType)))
+  }
+
+  return enriched
+}
+
+async function enrichRelatedContentType(
+  item: RelatedInscriptionSummary
+): Promise<RelatedInscriptionSummary> {
+  const normalized = normalizeUsableContentType(item.content_type)
+  if (normalized) {
+    return normalized === item.content_type
+      ? item
+      : { ...item, content_type: normalized }
+  }
+
+  const fetchedContentType = await fetchRelatedContentType(item.inscription_id)
+  return fetchedContentType ? { ...item, content_type: fetchedContentType } : item
+}
+
+async function fetchRelatedContentType(inscriptionId: string): Promise<string | null> {
+  const contentUrl = `${ORDINALS_BASE_URL}/content/${inscriptionId}`
+  const fromHead = await fetchContentTypeHeader(contentUrl, { method: "HEAD" })
+  if (fromHead) return fromHead
+
+  return await fetchContentTypeHeader(contentUrl, {
+    method: "GET",
+    headers: { Range: "bytes=0-0" },
+  })
+}
+
+async function fetchContentTypeHeader(
+  url: string,
+  init: RequestInit
+): Promise<string | null> {
+  try {
+    const response = await fetch(url, init)
+    response.body?.cancel().catch(() => undefined)
+    if (!response.ok) return null
+
+    return normalizeUsableContentType(response.headers.get("content-type"))
+  } catch {
+    return null
+  }
+}
+
+function normalizeUsableContentType(contentType: string | null | undefined): string | null {
+  const normalized = normalizeContentType(contentType ?? undefined)
+
+  if (!normalized) return null
+  if (normalized === "not available") return null
+  if (normalized === "unknown") return null
+  if (normalized === "undefined") return null
+  if (normalized === "null") return null
+
+  return normalized
 }
 
 async function fetchOptionalJson<T>(

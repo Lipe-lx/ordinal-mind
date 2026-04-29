@@ -1,6 +1,7 @@
 import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
+import { formatContentTypeLabel } from "../lib/media"
 import { GenealogyNode } from "./GenealogyNode"
 import { InscriptionMedia } from "./InscriptionMedia"
 
@@ -547,12 +548,10 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                         <span>{new Date(selectedNode.genesis_timestamp as string | number).toLocaleDateString()}</span>
                       </div>
                     )}
-                    {selectedNode.content_type && (
-                      <div className="stat-item">
-                        <label>Type</label>
-                        <span>{selectedNode.content_type.includes("/") ? selectedNode.content_type.split("/")[1].toUpperCase() : selectedNode.content_type}</span>
-                      </div>
-                    )}
+                    <div className="stat-item">
+                      <label>Content Type</label>
+                      <span>{formatContentTypeLabel(selectedNode.content_type)}</span>
+                    </div>
                   </div>
                   <div className="node-detail-actions">
                     <a href={`/chronicle/${selectedNode.inscription_id}`} className="btn btn-primary" style={{ width: "100%" }}>

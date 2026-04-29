@@ -17,7 +17,7 @@ interface OrdinalsInscriptionResponse {
   id: string
   number: number
   sat?: number
-  content_type: string
+  content_type?: string | null
   height: number
   timestamp?: number
   fee: number
@@ -47,6 +47,8 @@ export const fetchOrdinals = {
 
     const data = await res.json() as OrdinalsInscriptionResponse
     
+    const contentType = await resolveInscriptionContentType(data.content_type, data.id)
+
     // Fetch sat rarity if we have a sat number
     let rarity: InscriptionMeta["sat_rarity"] = "common"
     if (data.sat != null) {
@@ -69,7 +71,7 @@ export const fetchOrdinals = {
       inscription_number: data.number,
       sat: data.sat ?? 0,
       sat_rarity: rarity,
-      content_type: data.content_type,
+      content_type: contentType,
       content_url: `https://ordinals.com/content/${data.id}`,
       genesis_block: data.height,
       genesis_timestamp: data.timestamp ? new Date(data.timestamp * 1000).toISOString() : new Date(0).toISOString(),
@@ -145,6 +147,55 @@ export const fetchOrdinals = {
       return null
     }
   }
+}
+
+async function resolveInscriptionContentType(
+  reportedContentType: string | null | undefined,
+  inscriptionId: string
+): Promise<string> {
+  const normalized = normalizeContentType(reportedContentType)
+  if (normalized) return normalized
+
+  return await fetchContentTypeFromContentEndpoint(inscriptionId) ?? ""
+}
+
+async function fetchContentTypeFromContentEndpoint(inscriptionId: string): Promise<string | null> {
+  const url = `https://ordinals.com/content/${inscriptionId}`
+
+  const fromHead = await fetchContentTypeHeader(url, { method: "HEAD" })
+  if (fromHead) return fromHead
+
+  return await fetchContentTypeHeader(url, {
+    method: "GET",
+    headers: { Range: "bytes=0-0" },
+  })
+}
+
+async function fetchContentTypeHeader(
+  url: string,
+  init: RequestInit
+): Promise<string | null> {
+  try {
+    const res = await fetch(url, init)
+    res.body?.cancel().catch(() => undefined)
+    if (!res.ok) return null
+
+    return normalizeContentType(res.headers.get("content-type"))
+  } catch {
+    return null
+  }
+}
+
+function normalizeContentType(value: string | null | undefined): string {
+  const normalized = value?.split(";")[0]?.trim().toLowerCase() ?? ""
+
+  if (!normalized) return ""
+  if (normalized === "not available") return ""
+  if (normalized === "unknown") return ""
+  if (normalized === "undefined") return ""
+  if (normalized === "null") return ""
+
+  return normalized
 }
 
 function decodeTransportPayload(raw: Uint8Array): unknown | undefined {

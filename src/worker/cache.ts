@@ -21,7 +21,8 @@ export async function cacheGet(kv: KVNamespace, id: string): Promise<Chronicle |
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as Chronicle
-    return migrateChronicle(parsed)
+    const chronicle = migrateChronicle(parsed)
+    return hasUsableContentType(chronicle.meta.content_type) ? chronicle : null
   } catch {
     return null
   }
@@ -47,6 +48,16 @@ function migrateChronicle(
     events,
     collector_signals: collectorSignals,
   }
+}
+
+function hasUsableContentType(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? ""
+
+  return normalized.length > 0
+    && normalized !== "not available"
+    && normalized !== "unknown"
+    && normalized !== "undefined"
+    && normalized !== "null"
 }
 
 function migrateEvent(event: ChronicleEvent): ChronicleEvent {

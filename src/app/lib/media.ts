@@ -24,6 +24,23 @@ const TEXT_LIKE_APPLICATION_TYPES = new Set([
   "application/yaml",
 ])
 
+const IMAGE_EXTENSION_LABELS: Record<string, string> = {
+  "image/apng": "APNG",
+  "image/avif": "AVIF",
+  "image/bmp": "BMP",
+  "image/gif": "GIF",
+  "image/heic": "HEIC",
+  "image/heif": "HEIF",
+  "image/jpeg": "JPG",
+  "image/jpg": "JPG",
+  "image/png": "PNG",
+  "image/svg+xml": "SVG",
+  "image/tiff": "TIF",
+  "image/vnd.microsoft.icon": "ICO",
+  "image/webp": "WEBP",
+  "image/x-icon": "ICO",
+}
+
 export function buildOrdinalsPreviewUrl(inscriptionId: string): string {
   return `https://ordinals.com/preview/${inscriptionId}`
 }
@@ -56,6 +73,29 @@ export function detectMediaKind(contentType: string): MediaKind {
   if (isTextLikeContentType(normalized)) return "text"
 
   return "unknown"
+}
+
+export function formatContentTypeLabel(contentType: string | undefined): string {
+  const normalized = normalizeContentType(contentType)
+  if (!normalized) return "Not available"
+
+  const imageExtension = IMAGE_EXTENSION_LABELS[normalized]
+  if (imageExtension) return imageExtension
+
+  const [type, subtype] = normalized.split("/")
+  if (!subtype) return normalized.toUpperCase()
+
+  if (type === "image") {
+    return subtype
+      .replace(/^x-/, "")
+      .split("+")[0]
+      .toUpperCase()
+  }
+
+  return subtype
+    .replace(/^x-/, "")
+    .split("+")[0]
+    .toUpperCase()
 }
 
 export function getMediaPreviewMode(

@@ -1,4 +1,5 @@
 import type { InscriptionMeta, ChronicleEvent } from "../../lib/types"
+import { formatContentTypeLabel } from "../../lib/media"
 import { SatBadge } from "../SatBadge"
 
 interface Props {
@@ -39,7 +40,8 @@ export function InscriptionMetaWidget({ meta, events }: Props) {
       />
       <MetricCell
         label="Content Type"
-        value={meta.content_type}
+        value={formatContentTypeLabel(meta.content_type)}
+        sub={meta.content_type}
         href={`https://ordinals.com/content/${meta.inscription_id}`}
       />
       <MetricCell
