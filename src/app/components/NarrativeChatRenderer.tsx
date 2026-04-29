@@ -75,7 +75,7 @@ export function NarrativeChatRenderer({
     const node = transcriptRef.current
     if (!node) return
     node.scrollTop = node.scrollHeight
-  }, [messages, streamingText])
+  }, [messages, streamingText, streamingThought, isLoading])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -161,6 +161,18 @@ export function NarrativeChatRenderer({
               </div>
               <div className="thinking-text">
                 {streamingThought}
+              </div>
+            </div>
+          </article>
+        )}
+
+        {isLoading && !streamingThought && !streamingText && (
+          <article className="chat-line assistant is-loading-skeleton">
+            <div className="chat-line-content">
+              <div className="skeleton-loader">
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
               </div>
             </div>
           </article>
@@ -291,7 +303,7 @@ export function NarrativeChatRenderer({
                 {isLoading ? (
                   <button
                     type="button"
-                    className="btn btn-sm narrative-icon-btn narrative-stop-btn"
+                    className="btn btn-sm narrative-icon-btn narrative-stop-btn is-processing"
                     onClick={onCancel}
                     aria-label="Stop generation"
                     title="Stop"
