@@ -59,7 +59,10 @@ const REASONING_NOISE_PATTERNS = [
   /^Revised Draft:/i,
   /^Final Review/i,
   /^Final verification/i,
+  /^Directness:/i,
+  /^`?\.\s*\*\s*Directness:/i,
   /^Refining Paragraph/i,
+  /^\*?Refining the answer:\*?/i,
   /^One more check/i,
   /^One small detail/i,
   /^Let's (make|tighten|check)/i,
@@ -119,6 +122,10 @@ function hasFinalAnswerStart(raw: string): boolean {
   return /<final_answer>/i.test(raw)
 }
 
+function stripFinalAnswerBlock(raw: string): string {
+  return raw.replace(/<final_answer>[\s\S]*?(?:<\/final_answer>|$)/i, "").trim()
+}
+
 function isSubstantiveAnswer(text: string | undefined | null): text is string {
   if (!text) return false
 
@@ -129,6 +136,7 @@ function isSubstantiveAnswer(text: string | undefined | null): text is string {
 
   if (!normalized) return false
   if (/^(?:\.{3}|…|[-–—]+|n\/a|null|none)$/i.test(normalized)) return false
+  if (/^(?:and|or|but|so|e|ou|mas|ent[aã]o|y|o)$/i.test(normalized.replace(/[.!?]+$/g, ""))) return false
 
   return /[\p{L}\p{N}]/u.test(normalized)
 }
@@ -344,7 +352,10 @@ export function sanitizeNarrative(raw: string): string {
   const cleanedTaggedAnswer = taggedAnswer === undefined ? undefined : cleanFinalAnswerLabel(taggedAnswer)
   const usableTaggedAnswer = isSubstantiveAnswer(cleanedTaggedAnswer) ? cleanedTaggedAnswer : undefined
   const labeledAnswer = usableTaggedAnswer === undefined ? extractLabeledFinalAnswer(raw) : null
-  let text = usableTaggedAnswer ?? labeledAnswer ?? raw
+  const fallbackRaw = taggedAnswer !== undefined && usableTaggedAnswer === undefined
+    ? stripFinalAnswerBlock(raw)
+    : raw
+  let text = usableTaggedAnswer ?? labeledAnswer ?? fallbackRaw
 
   // Layer 1: Strip XML thinking tags
   text = stripXmlThinkingTags(text)
@@ -367,6 +378,7 @@ export function sanitizeNarrative(raw: string): string {
 
   // Layer 4: Final cleanup
   text = text
+    .replace(/<\/?final_answer>/gi, "")
     .replace(/\n{3,}/g, "\n\n") // collapse excessive blank lines
     .trim()
 

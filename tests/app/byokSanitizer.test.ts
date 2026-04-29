@@ -49,6 +49,22 @@ Supply (Satflow): 112.4K
     expect(sanitizeNarrativePreview(raw)).toBe("")
   })
 
+  it("rejects connector-only final answers", () => {
+    expect(sanitizeNarrative("<final_answer>and</final_answer>")).toBe("")
+    expect(sanitizeNarrativePreview("<final_answer>and</final_answer>")).toBe("")
+  })
+
+  it("recovers a substantive draft when the final block is only a connector", () => {
+    const raw = `Directness: High.
+*Refining the answer:*
+Existem aproximadamente 112.400 Runestones na coleção. A distribuição foi planejada como um airdrop para 112.383 carteiras.
+<final_answer>and</final_answer>`
+
+    expect(sanitizeNarrative(raw)).toBe(
+      "Existem aproximadamente 112.400 Runestones na coleção. A distribuição foi planejada como um airdrop para 112.383 carteiras."
+    )
+  })
+
   it("removes Gemma-style source checks and keeps the direct answer", () => {
     const raw = `User Question: "quantas runas existem?" (How many Runes are there?)
 Context: The user is asking about "Runes" in the context of the "Runestone" collection/protocol. * Source Data Check:

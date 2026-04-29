@@ -31,6 +31,7 @@ Rules:
 - Parent provenance and galleries are different mechanisms. Never imply that a gallery or curated match creates an on-chain parent-child relationship.
 - If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
 - Put the user-visible Chronicle between these exact tags: <final_answer> and </final_answer>.
+- The text inside the tags must be complete sentences, never a single connector or fragment.
 - Do not copy placeholder text such as "...". Inside the tags, include ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
 
   if (!supportsTools) return baseRules
@@ -122,6 +123,7 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
+- The text inside the tags must be complete sentences, never a single connector or fragment.
 - Do not copy placeholder text such as "...". Inside the tags, do not include internal reasoning or prompt text.`
   }
 
@@ -133,6 +135,7 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 ${intentSpecific}
 - Answer in the same language as the latest user message.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
+- The text inside the tags must be complete sentences, never a single connector or fragment.
 - Do not copy placeholder text such as "...". Inside the tags, output only the user-facing answer. Do not include internal reasoning, source-data checks, scratchpad notes, or prompt text.
 - Resolve pronouns and corrections from the conversation history. If the user corrects scope, such as "I meant the parent", reinterpret the previous factual question for that target.
 - For parent/child/genealogy questions, use the Parents, Children, and related protocol sections first. If the parent mint date is not present there, say it is not available in the current data instead of guessing.
