@@ -177,7 +177,7 @@ export function CollectionContextWidget({ collectionContext, expanded: externalE
         </div>
         <div className="widget-provenance-header-right">
           <span className="widget-provenance-evidence-count">
-            {evidenceCount} evidence layer{evidenceCount === 1 ? "" : "s"}
+            {evidenceCount}
           </span>
           {hasDetails && (
             <span 
@@ -266,6 +266,16 @@ export function CollectionContextWidget({ collectionContext, expanded: externalE
                     activeSlug={activeSlug}
                   />
                 )}
+                {collectionContext.socials.official_x_profiles.map((profileLink) => (
+                  <EvidenceRow
+                    key={profileLink.url}
+                    label="Official X account"
+                    value={formatXHandle(profileLink.url)}
+                    tone="overlay"
+                    href={profileLink.url}
+                    activeSlug={activeSlug}
+                  />
+                ))}
                 {marketFacets.map((facet) => (
                   <EvidenceRow key={`${facet.label}-${facet.value}`} {...facet} activeSlug={activeSlug} />
                 ))}
@@ -277,7 +287,8 @@ export function CollectionContextWidget({ collectionContext, expanded: externalE
                         display: "flex", 
                         flexDirection: "column",
                         gap: "4px",
-                        padding: "6px 12px"
+                        padding: "6px 12px",
+                        gridColumn: "span 2"
                       }}>
                         <span className="widget-meta-label">Market</span>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
@@ -335,16 +346,7 @@ export function CollectionContextWidget({ collectionContext, expanded: externalE
                     />
                   )
                 })}
-                {collectionContext.socials.official_x_profiles.map((profileLink) => (
-                  <EvidenceRow
-                    key={profileLink.url}
-                    label="Official X account"
-                    value={formatXHandle(profileLink.url)}
-                    tone="overlay"
-                    href={profileLink.url}
-                    activeSlug={activeSlug}
-                  />
-                ))}
+
               </div>
             </section>
           )}
