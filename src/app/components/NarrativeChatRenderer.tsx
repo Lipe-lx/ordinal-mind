@@ -12,6 +12,7 @@ interface Props {
   activeThreadId: string | null
   threadHistory: ChatThreadSummary[]
   streamingText: string
+  streamingThought: string
   phase: SynthesisPhase
   elapsed: number
   providerName?: string
@@ -39,6 +40,7 @@ export function NarrativeChatRenderer({
   activeThreadId,
   threadHistory,
   streamingText,
+  streamingThought,
   phase,
   elapsed,
   providerName,
@@ -148,6 +150,22 @@ export function NarrativeChatRenderer({
           </article>
         ))}
 
+        {streamingThought && (
+          <article className="chat-line assistant is-thinking">
+            <div className="chat-line-content">
+              <div className="thinking-indicator">
+                <span className="thinking-dot"></span>
+                <span className="thinking-dot"></span>
+                <span className="thinking-dot"></span>
+                <span className="thinking-label">Thinking...</span>
+              </div>
+              <div className="thinking-text">
+                {streamingThought}
+              </div>
+            </div>
+          </article>
+        )}
+ 
         {streamingText && (
           <article className="chat-line assistant is-streaming">
             <div className="chat-line-content">

@@ -4,6 +4,7 @@ export interface ChatMessage {
   id: string
   role: ChatRole
   content: string
+  thought?: string
   createdAt: string
   turnId: string
 }

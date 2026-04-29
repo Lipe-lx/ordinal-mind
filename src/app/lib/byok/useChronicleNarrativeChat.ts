@@ -67,6 +67,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [threadHistory, setThreadHistory] = useState<ChatThreadSummary[]>([])
   const [streamingText, setStreamingText] = useState("")
+  const [streamingThought, setStreamingThought] = useState("")
   const [phase, setPhase] = useState<SynthesisPhase>("idle")
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -153,6 +154,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     clearTimer()
     setPhase("idle")
     setStreamingText("")
+    setStreamingThought("")
     setResearchLogs([])
     setToolLogs([])
   }, [clearTimer])
@@ -310,6 +312,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       setError(null)
       setPhase("connecting")
       setStreamingText("")
+      setStreamingThought("")
       setResearchLogs([])
       setToolLogs([])
       setLastInputMode(null)
@@ -382,7 +385,21 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
               firstChunk = false
             }
             accumulatedStream += chunk
-            setStreamingText(sanitizeNarrativePreview(accumulatedStream))
+            
+            // Real-time tag detection for streaming UI
+            const thought = accumulatedStream.match(/<thought>([\s\S]*?)(?:<\/thought>|$)/i)?.[1] || ""
+            const answer = accumulatedStream.match(/<final_answer>([\s\S]*?)(?:<\/final_answer>|$)/i)?.[1]
+            
+            if (answer !== undefined) {
+              setStreamingText(sanitizeNarrativePreview(answer))
+              setStreamingThought("") // Hide thought once answer starts
+            } else if (thought) {
+              setStreamingThought(thought)
+              setStreamingText("")
+            } else {
+              // Fallback for models not following tags during stream
+              setStreamingText(sanitizeNarrativePreview(accumulatedStream))
+            }
           },
           signal: controller.signal,
           toolExecutor,
@@ -432,12 +449,14 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
           id: buildId("assistant"),
           role: "assistant",
           content: guardedText,
+          thought: accumulatedStream.match(/<thought>([\s\S]*?)<\/thought>/i)?.[1],
           createdAt: new Date().toISOString(),
           turnId,
         }
 
         setMessages((prev) => truncateMessagesByTurns([...prev, assistantMessage]))
         setStreamingText("")
+        setStreamingThought("")
         setPhase("done")
       } catch (e) {
         if (controller.signal.aborted) return
@@ -539,6 +558,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     activeThreadId,
     threadHistory,
     streamingText,
+    streamingThought,
     phase,
     loading: phase !== "idle" && phase !== "done" && phase !== "error",
     error,

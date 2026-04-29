@@ -127,3 +127,71 @@ export function sanitizeGeminiTurnOrder(contents: GeminiContent[]): GeminiConten
 
   return result
 }
+
+/**
+ * Extracts content between specific XML-like tags.
+ */
+export function extractContentBetweenTags(text: string, tag: string): string | null {
+  const startTag = `<${tag}>`
+  const endTag = `</${tag}>`
+  const startIdx = text.indexOf(startTag)
+  if (startIdx === -1) return null
+
+  const endIdx = text.indexOf(endTag, startIdx + startTag.length)
+  if (endIdx === -1) {
+    // If tag is not closed yet (streaming), return everything after start tag
+    return text.slice(startIdx + startTag.length)
+  }
+
+  return text.slice(startIdx + startTag.length, endIdx)
+}
+
+/**
+ * Heuristic cleanup for non-compliant model outputs.
+ * Detects and strips common internal reasoning patterns, prompt echoes,
+ * and scratchpad artifacts (e.g., "User question:", "Target:", etc.).
+ */
+export function heuristicCleanup(text: string): string {
+  // If the text contains <final_answer>, use the specific extraction
+  const finalAnswer = extractContentBetweenTags(text, "final_answer")
+  if (finalAnswer !== null) return finalAnswer.trim()
+
+  let cleaned = text
+
+  // 1. Strip common "Thinking" prefixes and structured analysis artifacts
+  const patternsToStrip = [
+    /^User question:.*$/im,
+    /^Target:.*$/im,
+    /^Language:.*$/im,
+    /^Collection Name:.*$/im,
+    /^Supply:.*$/im,
+    /^Specific Inscription:.*$/im,
+    /^Analysis:.*$/im,
+    /^Chronicle for.*$/im,
+    /^\* Target:.*$/im,
+    /^\* User question:.*$/im,
+  ]
+
+  for (const pattern of patternsToStrip) {
+    cleaned = cleaned.replace(pattern, "")
+  }
+
+  // 2. Remove common preamble "Yes, I can do that", "Here is the chronicle", etc.
+  cleaned = cleaned.replace(/^(Certainly|Of course|Here is|Sure|I can help with that)[^.!?]*[.!?]\s*/i, "")
+
+  // 3. If there are still tags like <thought> or <final_answer> left, strip them
+  cleaned = cleaned.replace(/<thought>[\s\S]*?<\/thought>/gi, "")
+  cleaned = cleaned.replace(/<thought>[\s\S]*$/gi, "")
+  cleaned = cleaned.replace(/<final_answer>/gi, "")
+  cleaned = cleaned.replace(/<\/final_answer>/gi, "")
+
+  return cleaned.trim()
+}
+
+/**
+ * Cleans response text by removing internal tags and common artifacts.
+ */
+export function cleanResponseText(text: string): string {
+  // Try heuristic cleanup first to catch leaks
+  return heuristicCleanup(text)
+}

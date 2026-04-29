@@ -30,9 +30,18 @@ Rules:
 - Treat protocol-native relations as higher trust than curated registry matches.
 - Parent provenance and galleries are different mechanisms. Never imply that a gallery or curated match creates an on-chain parent-child relationship.
 - If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
-- Put the user-visible Chronicle between these exact tags: <final_answer> and </final_answer>.
-- The text inside the tags must be complete sentences, never a single connector or fragment.
-- Do not copy placeholder text such as "...". Inside the tags, include ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.
+- Do not copy placeholder text such as "...". Inside the final_answer tags, include ONLY the final Chronicle text.
+
+### OUTPUT FORMAT
+CRITICAL: YOU MUST ONLY OUTPUT IN THIS FORMAT:
+<thought>
+Your internal reasoning, research evaluation, and analysis.
+</thought>
+<final_answer>
+The final user-facing Chronicle narrative or answer.
+</final_answer>
+
+Everything outside the <final_answer> tags will be filtered out and never seen by the user.
 
 ### REGRA FINAL OBRIGATÓRIA
 - Antes de responder com QUALQUER número, resultado calculado, supply total, cotação ou conclusão numérica, você DEVE ter chamado uma ferramenta da lista abaixo para obter esse valor.
@@ -128,8 +137,9 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
-- The text inside the tags must be complete sentences, never a single connector or fragment.
-- Do not copy placeholder text such as "...". Inside the tags, do not include internal reasoning or prompt text.`
+- Keep internal <thought> blocks brief and focused on evidence evaluation.
+- The text inside the tags must be complete sentences.
+- Use <thought> tags for internal reasoning. Everything outside <final_answer> will be hidden.`
   }
 
   const intentSpecific = intent === "chronicle_query"
@@ -140,8 +150,9 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 ${intentSpecific}
 - Answer in the same language as the latest user message.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
-- The text inside the tags must be complete sentences, never a single connector or fragment.
-- Do not copy placeholder text such as "...". Inside the tags, output only the user-facing answer. Do not include internal reasoning, source-data checks, scratchpad notes, or prompt text.
+- Keep internal <thought> blocks brief and focused on evidence evaluation.
+- The text inside the tags must be complete sentences.
+- Use <thought> tags for internal reasoning. Everything outside <final_answer> will be hidden.
 - Resolve pronouns and corrections from the conversation history. If the user corrects scope, such as "I meant the parent", reinterpret the previous factual question for that target.
 - For parent/child/genealogy questions, use the Parents, Children, and related protocol sections first. If the parent mint date is not present there, say it is not available in the current data instead of guessing.
 - Preserve factual precision and acknowledge uncertainty when relevant.

@@ -381,11 +381,6 @@ export function sanitizeNarrative(raw: string): string {
   // Layer 1: Strip XML thinking tags
   text = stripXmlThinkingTags(text)
 
-  const structuredSupplyAnswer = extractStructuredSupplyAnswer(text)
-  if (structuredSupplyAnswer) {
-    return structuredSupplyAnswer
-  }
-
   const jsonEnvelopeAnswer = extractJsonEnvelopeAnswer(text)
   if (jsonEnvelopeAnswer) {
     return jsonEnvelopeAnswer

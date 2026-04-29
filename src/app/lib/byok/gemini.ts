@@ -14,14 +14,15 @@ import {
   sanitizeGeminiTurnOrder, 
   type GeminiContent, 
   type GeminiPart,
-  type GeminiFunctionCall
+  type GeminiFunctionCall,
+  cleanResponseText
 } from "./ntcUtils"
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 export class GeminiAdapter implements LLMAdapter {
   readonly provider: Provider = "gemini"
-  constructor(public model: string, private key: string) {}
+  constructor(private key: string, public model: string) {}
 
   getCapabilities(): ProviderCapabilities {
     return {
@@ -189,7 +190,7 @@ export class GeminiAdapter implements LLMAdapter {
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
         contents: sanitizeGeminiTurnOrder(contents),
-        generationConfig: { maxOutputTokens: 600 },
+        generationConfig: { maxOutputTokens: 14336 },
       }
 
       if (tools && tools.length > 0) {
@@ -253,6 +254,22 @@ export class GeminiAdapter implements LLMAdapter {
         }
       }
 
+      // Check for leakage in text-only response (non-tool call)
+      if (!hasToolCalls && i < 2) {
+        const cleaned = cleanResponseText(lastModelText)
+        const leaked = lastModelText.toLowerCase().includes("user question:") || lastModelText.toLowerCase().includes("target:")
+        const isEmptyAfterCleanup = !cleaned.trim()
+        
+        if ((leaked || isEmptyAfterCleanup) && !lastModelText.includes("<final_answer>")) {
+           contents.push({ role: "model", parts: [{ text: lastModelText }] })
+           contents.push({
+             role: "user",
+             parts: [{ text: "- Put the user-visible Chronicle between these exact tags: <final_answer> and </final_answer>.\n- Keep internal <thought> blocks brief and focused on evidence evaluation.\n- The text inside the final_answer tags must be complete sentences.\n- Use <thought> tags for internal reasoning. Everything outside <final_answer> will be hidden." }]
+           })
+           continue
+        }
+      }
+
       if (hasToolCalls && toolExecutor) {
         contents.push(modelTurn!)
 
@@ -304,7 +321,7 @@ export class GeminiAdapter implements LLMAdapter {
         })
         const finalBody = {
           contents: sanitizeGeminiTurnOrder(contents),
-          generationConfig: { maxOutputTokens: 600 },
+          generationConfig: { maxOutputTokens: 2048 },
           ...(useSystemInstruction ? { system_instruction: { parts: [{ text: prepared.systemPrompt }] } } : {})
         }
         const finalRes = await fetch(url, {
@@ -322,7 +339,7 @@ export class GeminiAdapter implements LLMAdapter {
       return { text: lastModelText, inputMode }
     }
 
-    return { text: lastModelText || "Unable to complete research.", inputMode }
+    return { text: cleanResponseText(lastModelText) || "Unable to complete research.", inputMode }
   }
 
   private async consumeGeminiStreamWithTools(
@@ -399,11 +416,12 @@ function toGeminiImagePart(image: PreparedImageInput) {
 }
 
 function extractGeminiText(data: GeminiResponse): string {
-  return (
+  const raw = (
     data.candidates?.[0]?.content?.parts
       ?.map((part) => part.text ?? "")
       .join("") ?? ""
   )
+  return cleanResponseText(raw)
 }
 
 function buildGeminiToolConfig(

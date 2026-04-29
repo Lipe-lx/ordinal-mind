@@ -3259,6 +3259,56 @@ select.input-field option {
   scrollbar-width: thin;
 }
 
+.chat-line.assistant.is-thinking {
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.7;
+}
+
+.thinking-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.thinking-dot {
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: thinking-bounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-dot:nth-child(1) { animation-delay: -0.32s; }
+.thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1.0); }
+}
+
+.thinking-text {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  max-height: 150px;
+  overflow-y: auto;
+  opacity: 0.8;
+}
+
 .narrative-cursor {
   display: inline-block;
   width: 2px;
