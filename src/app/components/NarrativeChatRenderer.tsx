@@ -26,6 +26,7 @@ interface Props {
   hasKey: boolean
   collectionSlug?: string
   onSend: (prompt: string) => Promise<void> | void
+  onEdit: (messageId: string, content: string) => Promise<void> | void
   onNewThread: () => void
   onResumeThread: (threadId: string) => void
   onRenameThread: (threadId: string, title: string) => boolean
@@ -54,6 +55,7 @@ export function NarrativeChatRenderer({
   hasKey,
   collectionSlug,
   onSend,
+  onEdit,
   onNewThread,
   onResumeThread,
   onRenameThread,
@@ -66,6 +68,8 @@ export function NarrativeChatRenderer({
   const [showLogs, setShowLogs] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [localInputError, setLocalInputError] = useState<string | null>(null)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingContent, setEditingContent] = useState("")
   const transcriptRef = useRef<HTMLDivElement | null>(null)
 
   const isLoading = phase !== "idle" && phase !== "done" && phase !== "error"
@@ -76,6 +80,17 @@ export function NarrativeChatRenderer({
     if (!node) return
     node.scrollTop = node.scrollHeight
   }, [messages, streamingText, streamingThought, isLoading])
+
+  useEffect(() => {
+    if (!editingMessageId) return
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`chat-msg-${editingMessageId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" })
+      }
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [editingMessageId])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -131,7 +146,11 @@ export function NarrativeChatRenderer({
         )}
 
         {transcript.map((message) => (
-          <article key={message.id} className={`chat-line ${message.role === "assistant" ? "assistant" : "user"}`}>
+          <article 
+            key={message.id} 
+            id={`chat-msg-${message.id}`}
+            className={`chat-line ${message.role === "assistant" ? "assistant" : "user"}`}
+          >
             <div className="chat-line-content">
               {message.role === "assistant" ? (
                 <ReactMarkdown
@@ -144,9 +163,59 @@ export function NarrativeChatRenderer({
                   {message.content}
                 </ReactMarkdown>
               ) : (
-                <p>{message.content}</p>
+                <>
+                  {editingMessageId === message.id ? (
+                    <div className="chat-edit-well">
+                      <textarea
+                        className="input-field edit-textarea"
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        rows={3}
+                        autoFocus
+                      />
+                      <div className="chat-edit-actions">
+                        <button 
+                          className="btn btn-sm btn-ghost" 
+                          onClick={() => setEditingMessageId(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          className="btn btn-sm btn-primary" 
+                          onClick={async () => {
+                            const next = editingContent.trim()
+                            if (!next) return
+                            setEditingMessageId(null)
+                            await onEdit(message.id, next)
+                          }}
+                        >
+                          Save & Submit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p>{message.content}</p>
+                  )}
+                </>
               )}
             </div>
+            {message.role === "user" && editingMessageId !== message.id && (
+              <div className="chat-line-actions">
+                <button 
+                  className="chat-edit-trigger"
+                  onClick={() => {
+                    setEditingMessageId(message.id)
+                    setEditingContent(message.content)
+                  }}
+                  title="Edit message"
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                  </svg>
+                  <span>Edit</span>
+                </button>
+              </div>
+            )}
           </article>
         ))}
 

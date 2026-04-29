@@ -160,7 +160,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
   }, [clearTimer])
 
   const sendMessage = useCallback(
-    async (prompt: string, options: SendOptions = {}) => {
+    async (prompt: string, options: SendOptions = {}, historyOverride?: ChatMessage[]) => {
       const trimmedPrompt = prompt.trim()
       if (!trimmedPrompt) {
         setInputError("Enter a prompt before sending.")
@@ -204,7 +204,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
             turnId,
           }
 
-      const history = truncateMessagesByTurns(messagesRef.current)
+      const history = historyOverride ?? truncateMessagesByTurns(messagesRef.current)
       const crossThreadMemory = activeThreadId
         ? buildCrossThreadMemory(chronicle.meta.inscription_id, activeThreadId)
         : []
@@ -250,7 +250,11 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       }
 
       if (userMessage) {
-        setMessages((prev) => truncateMessagesByTurns([...prev, userMessage]))
+        if (historyOverride) {
+          setMessages([...historyOverride, userMessage])
+        } else {
+          setMessages((prev) => truncateMessagesByTurns([...prev, userMessage]))
+        }
       }
 
       setInputError(null)
@@ -535,6 +539,23 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     return true
   }, [chronicle])
 
+  const editMessage = useCallback(
+    async (messageId: string, nextContent: string) => {
+      const index = messagesRef.current.findIndex((m) => m.id === messageId)
+      if (index === -1) return
+
+      // Cancel any current generation
+      cancel()
+
+      // Truncate messages after the one being edited
+      const truncated = messagesRef.current.slice(0, index)
+      
+      // Send the new content with truncated history
+      await sendMessage(nextContent, {}, truncated)
+    },
+    [cancel, sendMessage]
+  )
+
   useEffect(() => {
     if (!chronicle || !activeThreadId) return
     if (!KeyStore.has()) return
@@ -577,6 +598,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     resumeThread,
     renameThread,
     deleteThread,
+    editMessage,
     retryLast,
     cancel,
   }

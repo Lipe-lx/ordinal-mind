@@ -25,6 +25,7 @@ interface Props {
   wikiStatusError: string | null
   researchLogs: ResearchLog[]
   onSendMessage: (prompt: string) => Promise<void> | void
+  onEditMessage: (messageId: string, content: string) => Promise<void> | void
   onNewThread: () => void
   onResumeThread: (threadId: string) => void
   onRenameThread: (threadId: string, title: string) => boolean
@@ -50,6 +51,7 @@ export function ChronicleCard({
   wikiStatusError,
   researchLogs,
   onSendMessage,
+  onEditMessage,
   onNewThread,
   onResumeThread,
   onRenameThread,
@@ -133,6 +135,7 @@ export function ChronicleCard({
             researchLogs={researchLogs}
             hasKey={hasKey}
             onSend={onSendMessage}
+            onEdit={onEditMessage}
             onNewThread={onNewThread}
             onResumeThread={onResumeThread}
             onRenameThread={onRenameThread}

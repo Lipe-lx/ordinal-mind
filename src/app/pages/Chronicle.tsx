@@ -135,6 +135,7 @@ export function Chronicle() {
     resumeThread,
     renameThread,
     deleteThread,
+    editMessage,
     retryLast,
     cancel,
   } = useChronicleNarrativeChat(chronicle)
@@ -259,6 +260,7 @@ export function Chronicle() {
           onResumeThread={resumeThread}
           onRenameThread={renameThread}
           onDeleteThread={deleteThread}
+          onEditMessage={editMessage}
           onRetryMessage={retryLast}
           onOpenBYOK={openBYOK}
           onCancel={cancel}

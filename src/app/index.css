@@ -3630,6 +3630,69 @@ select.input-field option {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.chat-line-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  min-height: 20px;
+}
+
+.chat-edit-trigger {
+  opacity: 0;
+  transition: all var(--duration-fast) var(--ease-smooth);
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chat-edit-trigger span {
+  opacity: 0.7;
+}
+
+.chat-line.user:hover .chat-edit-trigger {
+  opacity: 1;
+}
+
+.chat-edit-trigger:hover {
+  color: var(--accent-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chat-edit-trigger:hover span {
+  opacity: 1;
+}
+
+.chat-edit-well {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.edit-textarea {
+  min-height: 80px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.chat-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
 .narrative-chat-empty {
   border: 1px dashed var(--border-glass);
   border-radius: var(--radius-md);
