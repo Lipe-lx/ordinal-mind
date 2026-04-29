@@ -177,6 +177,7 @@ export class GeminiAdapter implements LLMAdapter {
     const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
     let hasExecutedToolCalls = false
     let lastModelText = ""
+    const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
       // Build request body
@@ -223,23 +224,40 @@ export class GeminiAdapter implements LLMAdapter {
           contents.push(streamResult.modelContent)
           hasExecutedToolCalls = true
 
-          const functionResponses: GeminiPart[] = []
-          for (const call of streamResult.toolCalls) {
-            // Validate tool exists before executing
-            const toolExists = prepared.availableTools.some(t => t.name === call.name)
-            if (!toolExists) {
-              console.warn(`[GeminiAdapter] Ignoring unknown tool call: ${call.name}`)
-              continue
-            }
-            const result = await toolExecutor.executeTool(call.name, call.args)
-            functionResponses.push({
-              functionResponse: {
-                id: call.id,
-                name: call.name,
-                response: result,
-              },
+          const functionResponses = await Promise.all(
+            streamResult.toolCalls.map(async (call) => {
+              const callKey = `${call.name}:${JSON.stringify(call.args)}`
+              if (executedCalls.has(callKey)) {
+                return {
+                  functionResponse: {
+                    id: call.id,
+                    name: call.name,
+                    response: { error: "Redundant call detected. This tool was already called with these exact parameters. Use existing data." },
+                  },
+                }
+              }
+              executedCalls.add(callKey)
+
+              const toolExists = prepared.availableTools.some(t => t.name === call.name)
+              if (!toolExists) {
+                return {
+                  functionResponse: {
+                    id: call.id,
+                    name: call.name,
+                    response: { error: `Unknown tool: ${call.name}` },
+                  },
+                }
+              }
+              const result = await toolExecutor.executeTool(call.name, call.args)
+              return {
+                functionResponse: {
+                  id: call.id,
+                  name: call.name,
+                  response: result,
+                },
+              }
             })
-          }
+          )
           contents.push({ role: "user", parts: functionResponses })
           continue
         }
@@ -258,23 +276,40 @@ export class GeminiAdapter implements LLMAdapter {
           contents.push(modelContent ?? { role: "model", parts })
           hasExecutedToolCalls = true
 
-          const functionResponses: GeminiPart[] = []
-          for (const call of functionCalls) {
-            // Validate tool exists before executing
-            const toolExists = prepared.availableTools.some(t => t.name === call.name)
-            if (!toolExists) {
-              console.warn(`[GeminiAdapter] Ignoring unknown tool call: ${call.name}`)
-              continue
-            }
-            const result = await toolExecutor.executeTool(call.name, call.args)
-            functionResponses.push({
-              functionResponse: {
-                id: call.id,
-                name: call.name,
-                response: result,
-              },
+          const functionResponses = await Promise.all(
+            functionCalls.map(async (call) => {
+              const callKey = `${call.name}:${JSON.stringify(call.args)}`
+              if (executedCalls.has(callKey)) {
+                return {
+                  functionResponse: {
+                    id: call.id,
+                    name: call.name,
+                    response: { error: "Redundant call detected. This tool was already called with these exact parameters. Use existing data." },
+                  },
+                }
+              }
+              executedCalls.add(callKey)
+
+              const toolExists = prepared.availableTools.some(t => t.name === call.name)
+              if (!toolExists) {
+                return {
+                  functionResponse: {
+                    id: call.id,
+                    name: call.name,
+                    response: { error: `Unknown tool: ${call.name}` },
+                  },
+                }
+              }
+              const result = await toolExecutor.executeTool(call.name, call.args)
+              return {
+                functionResponse: {
+                  id: call.id,
+                  name: call.name,
+                  response: result,
+                },
+              }
             })
-          }
+          )
           contents.push({ role: "user", parts: functionResponses })
           continue
         }

@@ -172,6 +172,7 @@ export class OpenAIAdapter implements LLMAdapter {
       : [{ role: "user", content: buildOpenAIContent(promptOverride ? `${prepared.systemPrompt}\n\n${userPrompt}` : prepared.combinedPrompt, image) }]
 
     const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
@@ -205,15 +206,28 @@ export class OpenAIAdapter implements LLMAdapter {
             function: { name: c.name, arguments: JSON.stringify(c.args) }
           }))})
           
-          for (const call of streamResult.toolCalls) {
-            const result = await toolExecutor.executeTool(call.name, call.args)
-            messages.push({
-              role: "tool",
-              tool_call_id: call.id,
-              name: call.name,
-              content: JSON.stringify(result)
+          const toolResults = await Promise.all(
+            streamResult.toolCalls.map(async (call) => {
+              const callKey = `${call.name}:${JSON.stringify(call.args)}`
+              if (executedCalls.has(callKey)) {
+                return {
+                  role: "tool" as const,
+                  tool_call_id: call.id,
+                  name: call.name,
+                  content: JSON.stringify({ error: "Redundant call detected. Use existing data." })
+                }
+              }
+              executedCalls.add(callKey)
+              const result = await toolExecutor.executeTool(call.name, call.args)
+              return {
+                role: "tool" as const,
+                tool_call_id: call.id,
+                name: call.name,
+                content: JSON.stringify(result)
+              }
             })
-          }
+          )
+          messages.push(...toolResults)
           continue
         }
         return { text: streamResult.text, inputMode }
@@ -222,23 +236,66 @@ export class OpenAIAdapter implements LLMAdapter {
         const message = data.choices?.[0]?.message
         if (message?.tool_calls && toolExecutor) {
           messages.push({ role: "assistant", content: message.content, tool_calls: message.tool_calls } as OpenAIMessage)
-          for (const call of message.tool_calls) {
-             const args = JSON.parse(call.function.arguments)
-             const result = await toolExecutor.executeTool(call.function.name, args)
-             messages.push({
-                role: "tool",
+          const toolResults = await Promise.all(
+            message.tool_calls.map(async (call) => {
+              const args = JSON.parse(call.function.arguments)
+              const callKey = `${call.function.name}:${JSON.stringify(args)}`
+              if (executedCalls.has(callKey)) {
+                return {
+                  role: "tool" as const,
+                  tool_call_id: call.id,
+                  name: call.function.name,
+                  content: JSON.stringify({ error: "Redundant call detected. Use existing data." })
+                }
+              }
+              executedCalls.add(callKey)
+              const result = await toolExecutor.executeTool(call.function.name, args)
+              return {
+                role: "tool" as const,
                 tool_call_id: call.id,
                 name: call.function.name,
                 content: JSON.stringify(result)
-             })
-          }
+              }
+            })
+          )
+          messages.push(...toolResults)
           continue
         }
         return { text: message?.content ?? "", inputMode }
       }
     }
 
-    return { text: "Tool calling limit reached.", inputMode }
+    // Tool calling limit reached - synthesize response from collected data
+    if (messages.length > (useSystemRole ? 2 : 1)) {
+      messages.push({
+        role: "user",
+        content: "Based on the research conducted, provide your best direct answer to the user's original question. If data is incomplete, acknowledge it but still provide the most helpful response you can with available information."
+      })
+
+      try {
+        const body: Record<string, unknown> = {
+          model: this.model,
+          max_tokens: 600,
+          messages,
+        }
+
+        const finalRes = await fetch(API_URL, {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify(body),
+          signal,
+        })
+
+        if (finalRes.ok) {
+          const finalData = (await finalRes.json()) as OpenAIResponse
+          return { text: finalData.choices?.[0]?.message?.content ?? "", inputMode }
+        }
+      } catch (e) {
+        console.warn("[OpenAIAdapter] Final synthesis request failed", e)
+      }
+    }
+
+    return { text: "Unable to complete research due to tool limit.", inputMode }
   }
 
   private async consumeOpenAIStreamWithTools(

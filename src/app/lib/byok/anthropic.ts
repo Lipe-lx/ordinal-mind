@@ -169,6 +169,7 @@ export class AnthropicAdapter implements LLMAdapter {
 
     const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, image) }]
     const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
@@ -198,15 +199,25 @@ export class AnthropicAdapter implements LLMAdapter {
         const streamResult = await this.consumeAnthropicStreamWithTools(res, onChunk, signal)
         if (streamResult.toolCalls.length > 0 && toolExecutor) {
           messages.push({ role: "assistant", content: streamResult.assistantContent as AnthropicContent[] })
-          const toolResultsContent = []
-          for (const call of streamResult.toolCalls) {
-            const result = await toolExecutor.executeTool(call.name, call.args)
-            toolResultsContent.push({
-              type: "tool_result",
-              tool_use_id: call.id || "",
-              content: JSON.stringify(result)
+          const toolResultsContent = await Promise.all(
+            streamResult.toolCalls.map(async (call) => {
+              const callKey = `${call.name}:${JSON.stringify(call.args)}`
+              if (executedCalls.has(callKey)) {
+                return {
+                  type: "tool_result" as const,
+                  tool_use_id: call.id || "",
+                  content: JSON.stringify({ error: "Redundant call detected. Use existing data." })
+                }
+              }
+              executedCalls.add(callKey)
+              const result = await toolExecutor.executeTool(call.name, call.args)
+              return {
+                type: "tool_result" as const,
+                tool_use_id: call.id || "",
+                content: JSON.stringify(result)
+              }
             })
-          }
+          )
           messages.push({ role: "user", content: toolResultsContent })
           continue
         }
@@ -215,17 +226,27 @@ export class AnthropicAdapter implements LLMAdapter {
         const data = (await res.json()) as AnthropicResponse
         if (data.stop_reason === "tool_use" && toolExecutor) {
           messages.push({ role: "assistant", content: data.content as AnthropicContent[] })
-          const toolResultsContent = []
-          for (const block of data.content) {
-            if (block.type === "tool_use") {
-              const result = await toolExecutor.executeTool(block.name!, block.input || {})
-              toolResultsContent.push({
-                type: "tool_result",
-                tool_use_id: block.id || "",
-                content: JSON.stringify(result)
+          const toolResultsContent = await Promise.all(
+            data.content
+              .filter((block) => block.type === "tool_use")
+              .map(async (block) => {
+                const callKey = `${block.name}:${JSON.stringify(block.input || {})}`
+                if (executedCalls.has(callKey)) {
+                  return {
+                    type: "tool_result" as const,
+                    tool_use_id: block.id || "",
+                    content: JSON.stringify({ error: "Redundant call detected. Use existing data." })
+                  }
+                }
+                executedCalls.add(callKey)
+                const result = await toolExecutor.executeTool(block.name!, block.input || {})
+                return {
+                  type: "tool_result" as const,
+                  tool_use_id: block.id || "",
+                  content: JSON.stringify(result)
+                }
               })
-            }
-          }
+          )
           messages.push({ role: "user", content: toolResultsContent })
           continue
         }
@@ -233,7 +254,38 @@ export class AnthropicAdapter implements LLMAdapter {
       }
     }
     
-    return { text: "Tool calling limit reached.", inputMode }
+    // Tool calling limit reached - synthesize response from collected data
+    if (messages.length > 1) {
+      messages.push({
+        role: "user",
+        content: "Based on the research conducted, provide your best direct answer to the user's original question. If data is incomplete, acknowledge it but still provide the most helpful response you can with available information."
+      })
+
+      try {
+        const body: Record<string, unknown> = {
+          model: this.model,
+          max_tokens: 600,
+          system: prepared.systemPrompt,
+          messages,
+        }
+
+        const finalRes = await fetch(API_URL, {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify(body),
+          signal,
+        })
+
+        if (finalRes.ok) {
+          const finalData = (await finalRes.json()) as AnthropicResponse
+          return { text: finalData.content?.filter((c) => c.type === "text").map((c) => c.text).join("") ?? "", inputMode }
+        }
+      } catch (e) {
+        console.warn("[AnthropicAdapter] Final synthesis request failed", e)
+      }
+    }
+
+    return { text: "Unable to complete research due to tool limit.", inputMode }
   }
 
   private async requestCombined(
@@ -259,6 +311,7 @@ export class AnthropicAdapter implements LLMAdapter {
 
     const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, image) }]
     const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
@@ -287,15 +340,25 @@ export class AnthropicAdapter implements LLMAdapter {
         const streamResult = await this.consumeAnthropicStreamWithTools(res, onChunk, signal)
         if (streamResult.toolCalls.length > 0 && toolExecutor) {
           messages.push({ role: "assistant", content: streamResult.assistantContent as AnthropicContent[] })
-          const toolResultsContent = []
-          for (const call of streamResult.toolCalls) {
-            const result = await toolExecutor.executeTool(call.name, call.args)
-            toolResultsContent.push({
-              type: "tool_result",
-              tool_use_id: call.id || "",
-              content: JSON.stringify(result)
+          const toolResultsContent = await Promise.all(
+            streamResult.toolCalls.map(async (call) => {
+              const callKey = `${call.name}:${JSON.stringify(call.args)}`
+              if (executedCalls.has(callKey)) {
+                return {
+                  type: "tool_result" as const,
+                  tool_use_id: call.id || "",
+                  content: JSON.stringify({ error: "Redundant call detected. Use existing data." })
+                }
+              }
+              executedCalls.add(callKey)
+              const result = await toolExecutor.executeTool(call.name, call.args)
+              return {
+                type: "tool_result" as const,
+                tool_use_id: call.id || "",
+                content: JSON.stringify(result)
+              }
             })
-          }
+          )
           messages.push({ role: "user", content: toolResultsContent })
           continue
         }
@@ -304,17 +367,27 @@ export class AnthropicAdapter implements LLMAdapter {
         const data = (await res.json()) as AnthropicResponse
         if (data.stop_reason === "tool_use" && toolExecutor) {
           messages.push({ role: "assistant", content: data.content as AnthropicContent[] })
-          const toolResultsContent = []
-          for (const block of data.content) {
-            if (block.type === "tool_use") {
-              const result = await toolExecutor.executeTool(block.name!, block.input || {})
-              toolResultsContent.push({
-                type: "tool_result",
-                tool_use_id: block.id || "",
-                content: JSON.stringify(result)
+          const toolResultsContent = await Promise.all(
+            data.content
+              .filter((block) => block.type === "tool_use")
+              .map(async (block) => {
+                const callKey = `${block.name}:${JSON.stringify(block.input || {})}`
+                if (executedCalls.has(callKey)) {
+                  return {
+                    type: "tool_result" as const,
+                    tool_use_id: block.id || "",
+                    content: JSON.stringify({ error: "Redundant call detected. Use existing data." })
+                  }
+                }
+                executedCalls.add(callKey)
+                const result = await toolExecutor.executeTool(block.name!, block.input || {})
+                return {
+                  type: "tool_result" as const,
+                  tool_use_id: block.id || "",
+                  content: JSON.stringify(result)
+                }
               })
-            }
-          }
+          )
           messages.push({ role: "user", content: toolResultsContent })
           continue
         }
@@ -322,7 +395,37 @@ export class AnthropicAdapter implements LLMAdapter {
       }
     }
     
-    return { text: "Tool calling limit reached.", inputMode }
+    // Tool calling limit reached - synthesize response from collected data
+    if (messages.length > 1) {
+      messages.push({
+        role: "user",
+        content: "Based on the research conducted, provide your best direct answer to the user's original question. If data is incomplete, acknowledge it but still provide the most helpful response you can with available information."
+      })
+
+      try {
+        const body: Record<string, unknown> = {
+          model: this.model,
+          max_tokens: 600,
+          messages,
+        }
+
+        const finalRes = await fetch(API_URL, {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify(body),
+          signal,
+        })
+
+        if (finalRes.ok) {
+          const finalData = (await finalRes.json()) as AnthropicResponse
+          return { text: finalData.content?.filter((c) => c.type === "text").map((c) => c.text).join("") ?? "", inputMode }
+        }
+      } catch (e) {
+        console.warn("[AnthropicAdapter] Final synthesis request failed", e)
+      }
+    }
+
+    return { text: "Unable to complete research due to tool limit.", inputMode }
   }
 
   private async consumeAnthropicStreamWithTools(

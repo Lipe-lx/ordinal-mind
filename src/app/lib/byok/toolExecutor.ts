@@ -40,7 +40,7 @@ export interface ResearchKeys {
 
 export class ToolExecutor {
   private callCount = 0
-  private maxCalls = 6
+  private maxCalls = 12
   private keys: ResearchKeys
   private onLog?: (log: ResearchLog) => void
 
