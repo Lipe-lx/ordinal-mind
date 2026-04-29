@@ -4607,7 +4607,7 @@ select.input-field option {
   min-height: 0;
   width: 100%;
   gap: 1px;
-  background: var(--border-glass);
+  background: transparent;
   overflow: hidden;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
