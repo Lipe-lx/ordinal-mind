@@ -141,8 +141,9 @@ ${intentSpecific}
 - For parent/child/genealogy questions, use the Parents, Children, and related protocol sections first. If the parent mint date is not present there, say it is not available in the current data instead of guessing.
 - Preserve factual precision and acknowledge uncertainty when relevant.
 - Prefer get_raw_events for specific factual claims and cite source references when available.
-- If any tool returns partial data, explicitly flag incompleteness to the user.
-- If the user asks for a recap/resumo/narrativa, then expand into a full narrative.`
+- If any tool returns partial data or empty results, explicitly flag incompleteness to the user.
+- If the user asks for a recap/resumo/narrativa, then expand into a full narrative.
+- If get_collection_context returns collection_size of 0 or null, do NOT retry the same call with different parameters. Instead, use web_search or deep_research to find contextual information.`
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {
