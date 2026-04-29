@@ -175,6 +175,8 @@ export class GeminiAdapter implements LLMAdapter {
     ]
 
     const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    let hasExecutedToolCalls = false
+    let lastModelText = ""
 
     for (let i = 0; i < 7; i++) {
       // Build request body
@@ -216,8 +218,10 @@ export class GeminiAdapter implements LLMAdapter {
 
       if (stream) {
         const streamResult = await this.consumeGeminiStreamWithTools(res, onChunk, signal)
+        lastModelText = streamResult.text
         if (streamResult.toolCalls.length > 0 && toolExecutor) {
           contents.push(streamResult.modelContent)
+          hasExecutedToolCalls = true
 
           const functionResponses: GeminiPart[] = []
           for (const call of streamResult.toolCalls) {
@@ -249,8 +253,10 @@ export class GeminiAdapter implements LLMAdapter {
           .filter((part): part is GeminiPart & { functionCall: GeminiFunctionCall } => Boolean(part.functionCall))
           .map((part) => part.functionCall)
 
+        lastModelText = extractGeminiText(data)
         if (functionCalls.length > 0 && toolExecutor) {
           contents.push(modelContent ?? { role: "model", parts })
+          hasExecutedToolCalls = true
 
           const functionResponses: GeminiPart[] = []
           for (const call of functionCalls) {
@@ -277,7 +283,44 @@ export class GeminiAdapter implements LLMAdapter {
       }
     }
 
-    return { text: "Tool calling limit reached.", inputMode }
+    // Tool calling limit reached - synthesize response from collected data
+    if (hasExecutedToolCalls && contents.length > 1) {
+      contents.push({
+        role: "user",
+        parts: [{
+          text: "Based on the research conducted, provide your best direct answer to the user's original question. If data is incomplete, acknowledge it but still provide the most helpful response you can with available information."
+        }]
+      })
+
+      try {
+        const body: Record<string, unknown> = {
+          contents,
+          generationConfig: { maxOutputTokens: 600 },
+        }
+
+        if (useSystemInstruction) {
+          body.system_instruction = {
+            parts: [{ text: prepared.systemPrompt }],
+          }
+        }
+
+        const finalRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal,
+        })
+
+        if (finalRes.ok) {
+          const finalData = (await finalRes.json()) as GeminiResponse
+          return { text: extractGeminiText(finalData), inputMode }
+        }
+      } catch (e) {
+        console.warn("[GeminiAdapter] Final synthesis request failed, returning partial results", e)
+      }
+    }
+
+    return { text: lastModelText || "Unable to complete research.", inputMode }
   }
 
   private async consumeGeminiStreamWithTools(
