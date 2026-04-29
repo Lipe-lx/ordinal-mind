@@ -532,7 +532,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               <button className="node-detail-close" onClick={() => setSelectedNode(null)}>✕</button>
               <div className="node-detail-content">
                 <div className="node-detail-image">
-                  <InscriptionMedia inscription={selectedNode} />
+                  <InscriptionMedia inscription={selectedNode} showMeta={false} />
                 </div>
                 <div className="node-detail-info">
                   <div className="node-detail-header">

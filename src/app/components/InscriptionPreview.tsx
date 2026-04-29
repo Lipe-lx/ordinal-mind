@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from "react"
-import { getMediaPreviewMode, isEmojiOnly } from "../lib/media"
+import { useEffect, useRef, useState, useCallback } from "react"
+import { createPortal } from "react-dom"
+import { getMediaPreviewMode } from "../lib/media"
 import { SatRarityBadge, CharmBadge } from "./SatBadge"
 import type { ChronicleResponse } from "../lib/types"
+import { NonImageFitPreview } from "./NonImageFitPreview"
 
 interface Props {
   initialChronicle: ChronicleResponse
@@ -10,8 +12,6 @@ interface Props {
   error: string | null
   onSwitchTo: (id: string) => Promise<void>
 }
-
-const MAX_TEXT_PREVIEW_BYTES = 24 * 1024
 
 export function InscriptionPreview({ 
   initialChronicle, 
@@ -27,11 +27,12 @@ export function InscriptionPreview({
     : "allow-scripts"
   const [renderFallback, setRenderFallback] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement | HTMLImageElement>(null)
   const lastMousePos = useRef({ x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 })
-  const isInteractive = (previewMode === "image" || previewMode === "text") && !renderFallback
+  const isInteractive = media_context.kind === "image" && !renderFallback
 
   const isMain = activeChronicle.meta.inscription_id === initialChronicle.meta.inscription_id
 
@@ -112,6 +113,30 @@ export function InscriptionPreview({
     return () => container.removeEventListener("wheel", onWheel)
   }, [isInteractive, isDragging, updateTransform])
 
+  useEffect(() => {
+    if (!isFullscreen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsFullscreen(false)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [isFullscreen])
+
+  useEffect(() => {
+    if (!isFullscreen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isFullscreen])
+
   // Global mouse tracking when dragging
   useEffect(() => {
     if (!isDragging || !isInteractive) return
@@ -135,306 +160,255 @@ export function InscriptionPreview({
     }
   }, [isDragging, isInteractive, zoom, resetTransform, updateTransform])
 
-  return (
-    <div
-      className={[
-        "chronicle-card-content-preview",
-        isInteractive ? "is-interactive" : "",
-        previewMode === "text" && !renderFallback ? "is-text" : "",
-        isSwitching ? "is-loading" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
-      onMouseDown={isInteractive ? () => setIsDragging(true) : undefined}
-      onMouseUp={
-        isInteractive
-          ? () => {
-              setIsDragging(false)
-              resetTransform()
-            }
-          : undefined
-      }
-      onMouseLeave={
-        isInteractive && !isDragging
-          ? () => {
-              resetTransform()
-            }
-          : undefined
-      }
-    >
-      {/* Hierarchy Navigation Overlay */}
-      <div className="inscription-nav-overlay">
-        <div className="inscription-nav-group">
-          {activeChronicle.collection_context.protocol.parents?.items.map((parent) => (
-            <button
-              key={parent.inscription_id}
-              className="nav-btn nav-btn--parent"
-              onClick={(e) => {
-                e.stopPropagation()
-                void switchTo(parent.inscription_id)
-              }}
-              disabled={isSwitching}
-              title={`Parent: #${parent.inscription_number ?? parent.inscription_id}`}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m18 15-6-6-6 6"/>
-              </svg>
-              <span className="nav-btn-label">
-                Parent {parent.inscription_number ? `#${parent.inscription_number}` : "Inscription"}
-              </span>
-            </button>
-          ))}
-          {!isMain && (
-             <button
-              className="nav-btn nav-btn--reset"
-              onClick={(e) => {
-                e.stopPropagation()
-                void switchTo(initialChronicle.meta.inscription_id)
-              }}
-              disabled={isSwitching}
-              title="Return to main inscription"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                <path d="M3 3v5h5"/>
-              </svg>
-              <span className="nav-btn-label">Back to Main</span>
-            </button>
-          )}
-        </div>
-
-        <div className="inscription-nav-group">
-          {activeChronicle.collection_context.protocol.children?.items.slice(0, 3).map((child) => (
-            <button
-              key={child.inscription_id}
-              className="nav-btn nav-btn--child"
-              onClick={(e) => {
-                e.stopPropagation()
-                void switchTo(child.inscription_id)
-              }}
-              disabled={isSwitching}
-              title={`Child: #${child.inscription_number ?? child.inscription_id}`}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m6 9 6 6 6-6"/>
-              </svg>
-              <span className="nav-btn-label">
-                Child {child.inscription_number ? `#${child.inscription_number}` : "Inscription"}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {isSwitching ? (
+  const renderPreviewMedia = (fullscreen = false) => {
+    if (isSwitching) {
+      return (
         <div className="chronicle-card-preview-placeholder fade-in">
           Loading hierarchy data…
         </div>
-      ) : error ? (
+      )
+    }
+
+    if (error && !fullscreen) {
+      return (
         <div className="chronicle-card-preview-placeholder has-error">
           <p>{error}</p>
           <button className="btn btn-secondary btn-sm" onClick={() => void switchTo(activeChronicle.meta.inscription_id)}>Retry</button>
         </div>
-      ) : renderFallback || previewMode === "ordinals_preview" ? (
+      )
+    }
+
+    if (renderFallback) {
+      return (
         <iframe
-          key={activeChronicle.meta.inscription_id}
+          key={`${activeChronicle.meta.inscription_id}:${fullscreen ? "fullscreen" : "inline"}:fallback`}
           title={`Inscription #${meta.inscription_number} preview`}
           src={media_context.preview_url}
           loading="lazy"
+          scrolling="no"
           sandbox={previewSandbox}
           referrerPolicy="no-referrer"
+          className={fullscreen ? "preview-fullscreen-frame" : "inscription-preview-fallback-frame"}
         />
-      ) : previewMode === "audio" ? (
+      )
+    }
+
+    if (previewMode === "audio") {
+      return (
         <audio
-          key={activeChronicle.meta.inscription_id}
+          key={`${activeChronicle.meta.inscription_id}:${fullscreen ? "fullscreen" : "inline"}:audio`}
           controls
           preload="metadata"
           src={media_context.content_url}
           onError={() => setRenderFallback(true)}
         />
-      ) : previewMode === "video" ? (
+      )
+    }
+
+    if (previewMode === "video") {
+      return (
         <video
-          key={activeChronicle.meta.inscription_id}
+          key={`${activeChronicle.meta.inscription_id}:${fullscreen ? "fullscreen" : "inline"}:video`}
           controls
           playsInline
           preload="metadata"
           src={media_context.content_url}
           onError={() => setRenderFallback(true)}
         />
-      ) : previewMode === "text" ? (
-        <TextPreview
-          key={activeChronicle.meta.inscription_id}
-          contentType={media_context.content_type}
-          contentUrl={media_context.content_url}
-          onFallback={setRenderFallback}
-          innerRef={contentRef}
-        />
-      ) : (
+      )
+    }
+
+    if (previewMode === "image") {
+      return (
         <img
-          key={activeChronicle.meta.inscription_id}
-          ref={contentRef as React.RefObject<HTMLImageElement>}
+          key={`${activeChronicle.meta.inscription_id}:${fullscreen ? "fullscreen" : "inline"}:image`}
+          ref={!fullscreen ? (contentRef as React.RefObject<HTMLImageElement>) : undefined}
           src={media_context.content_url}
           alt={`Inscription #${meta.inscription_number}`}
           loading="lazy"
           onError={() => setRenderFallback(true)}
+          className={fullscreen ? "preview-fullscreen-image" : undefined}
         />
-      )}
-
-      {/* Sat rarity & charm badges — overlaid on preview */}
-      {!isSwitching && (meta.sat_rarity !== "common" || (meta.charms && meta.charms.length > 0)) && (
-        <div className="sat-rarity-overlay">
-          <SatRarityBadge rarity={meta.sat_rarity} />
-          {meta.charms?.map(charm => (
-            <CharmBadge key={charm} charm={charm} />
-          ))}
-        </div>
-      )}
-
-      {/* Label when viewing a related inscription */}
-      {!isMain && !isSwitching && (
-        <div className="nav-preview-label">
-          #{meta.inscription_number}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TextPreview({
-  contentType,
-  contentUrl,
-  onFallback,
-  innerRef,
-}: {
-  contentType: string
-  contentUrl: string
-  onFallback: (value: boolean) => void
-  innerRef?: React.Ref<HTMLDivElement | HTMLImageElement>
-}) {
-  const [state, setState] = useState<{
-    status: "loading" | "ready"
-    text: string
-    truncated: boolean
-  }>({
-    status: "loading",
-    text: "",
-    truncated: false,
-  })
-
-  const isEmoji = useMemo(() => isEmojiOnly(state.text), [state.text])
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    void (async () => {
-      try {
-        const res = await fetch(contentUrl, {
-          signal: controller.signal,
-          cache: "force-cache",
-        })
-
-        if (!res.ok) {
-          onFallback(true)
-          return
-        }
-
-        const preview = await readTextPreview(res, MAX_TEXT_PREVIEW_BYTES)
-        if (!preview.text.trim()) {
-          onFallback(true)
-          return
-        }
-
-        setState({
-          status: "ready",
-          text: preview.text,
-          truncated: preview.truncated,
-        })
-      } catch (error) {
-        if ((error as DOMException).name !== "AbortError") {
-          onFallback(true)
-        }
-      }
-    })()
-
-    return () => {
-      controller.abort()
+      )
     }
-  }, [contentUrl, onFallback])
 
-  if (state.status === "loading") {
     return (
-      <div className="chronicle-card-preview-placeholder">
-        Loading inscription text preview…
-      </div>
+      <NonImageFitPreview
+        kind={media_context.kind}
+        contentType={media_context.content_type}
+        contentUrl={media_context.content_url}
+        previewUrl={media_context.preview_url}
+        mode="default"
+        fitPolicy="readable"
+        title={`Inscription #${meta.inscription_number} preview`}
+        className={fullscreen ? "non-image-fit-preview--fullscreen" : undefined}
+      />
     )
   }
 
   return (
-    <div 
-      ref={innerRef}
-      className={`chronicle-card-text-preview ${isEmoji ? "is-emoji" : ""}`}
-    >
-      <pre>{state.text}</pre>
-      <div className="chronicle-card-text-meta">
-        <span>{contentType}</span>
-        {state.truncated ? <span>Preview truncated for performance</span> : null}
+    <>
+      <div
+        className={[
+          "chronicle-card-content-preview",
+          isInteractive ? "is-interactive" : "",
+          previewMode === "text" && !renderFallback ? "is-text" : "",
+          isSwitching ? "is-loading" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        ref={containerRef}
+        onMouseMove={handleMouseMove}
+        onMouseDown={isInteractive ? () => setIsDragging(true) : undefined}
+        onMouseUp={
+          isInteractive
+            ? () => {
+                setIsDragging(false)
+                resetTransform()
+              }
+            : undefined
+        }
+        onMouseLeave={
+          isInteractive && !isDragging
+            ? () => {
+                resetTransform()
+              }
+            : undefined
+        }
+      >
+        {/* Hierarchy Navigation Overlay */}
+        <div className="inscription-nav-overlay">
+          <div className="inscription-nav-group">
+            {activeChronicle.collection_context.protocol.parents?.items.map((parent) => (
+              <button
+                key={parent.inscription_id}
+                className="nav-btn nav-btn--parent"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void switchTo(parent.inscription_id)
+                }}
+                disabled={isSwitching}
+                title={`Parent: #${parent.inscription_number ?? parent.inscription_id}`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m18 15-6-6-6 6"/>
+                </svg>
+                <span className="nav-btn-label">
+                  Parent {parent.inscription_number ? `#${parent.inscription_number}` : "Inscription"}
+                </span>
+              </button>
+            ))}
+            {!isMain && (
+              <button
+                className="nav-btn nav-btn--reset"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void switchTo(initialChronicle.meta.inscription_id)
+                }}
+                disabled={isSwitching}
+                title="Return to main inscription"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+                <span className="nav-btn-label">Back to Main</span>
+              </button>
+            )}
+          </div>
+
+          <div className="inscription-nav-group">
+            <button
+              className="nav-btn nav-btn--fullscreen"
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsFullscreen(true)
+              }}
+              disabled={isSwitching}
+              title="Open fullscreen preview"
+              aria-label="Open fullscreen preview"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9" />
+                <polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+              <span className="nav-btn-label">Fullscreen</span>
+            </button>
+          </div>
+
+          <div className="inscription-nav-group">
+            {activeChronicle.collection_context.protocol.children?.items.slice(0, 3).map((child) => (
+              <button
+                key={child.inscription_id}
+                className="nav-btn nav-btn--child"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void switchTo(child.inscription_id)
+                }}
+                disabled={isSwitching}
+                title={`Child: #${child.inscription_number ?? child.inscription_id}`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+                <span className="nav-btn-label">
+                  Child {child.inscription_number ? `#${child.inscription_number}` : "Inscription"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {renderPreviewMedia(false)}
+
+        {/* Sat rarity & charm badges — overlaid on preview */}
+        {!isSwitching && (meta.sat_rarity !== "common" || (meta.charms && meta.charms.length > 0)) && (
+          <div className="sat-rarity-overlay">
+            <SatRarityBadge rarity={meta.sat_rarity} />
+            {meta.charms?.map(charm => (
+              <CharmBadge key={charm} charm={charm} />
+            ))}
+          </div>
+        )}
+
+        {/* Label when viewing a related inscription */}
+        {!isMain && !isSwitching && (
+          <div className="nav-preview-label">
+            #{meta.inscription_number}
+          </div>
+        )}
       </div>
-    </div>
+
+      {isFullscreen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="preview-fullscreen-overlay" onClick={() => setIsFullscreen(false)}>
+              <div className="preview-fullscreen-shell" onClick={(event) => event.stopPropagation()}>
+                <div className="preview-fullscreen-toolbar">
+                  <button
+                    className="nav-btn nav-btn--fullscreen-close"
+                    onClick={() => setIsFullscreen(false)}
+                    title="Close fullscreen"
+                    aria-label="Close fullscreen"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="14 10 21 3 21 9" />
+                      <polyline points="10 14 3 21 3 15" />
+                      <line x1="21" y1="3" x2="14" y2="10" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </svg>
+                    <span className="nav-btn-label">Close</span>
+                  </button>
+                </div>
+                <div className="preview-fullscreen-content">
+                  {renderPreviewMedia(true)}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
   )
-}
-
-async function readTextPreview(
-  res: Response,
-  maxBytes: number
-): Promise<{ text: string; truncated: boolean }> {
-  if (!res.body) {
-    const text = await res.text()
-    return {
-      text: text.slice(0, maxBytes),
-      truncated: text.length > maxBytes,
-    }
-  }
-
-  const reader = res.body.getReader()
-  const chunks: Uint8Array[] = []
-  let totalBytes = 0
-  let truncated = false
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (!value) continue
-
-    const remaining = maxBytes - totalBytes
-    if (remaining <= 0) {
-      truncated = true
-      await reader.cancel()
-      break
-    }
-
-    if (value.byteLength > remaining) {
-      chunks.push(value.subarray(0, remaining))
-      totalBytes += remaining
-      truncated = true
-      await reader.cancel()
-      break
-    }
-
-    chunks.push(value)
-    totalBytes += value.byteLength
-  }
-
-  const merged = new Uint8Array(totalBytes)
-  let offset = 0
-  for (const chunk of chunks) {
-    merged.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-
-  return {
-    text: new TextDecoder().decode(merged),
-    truncated,
-  }
 }

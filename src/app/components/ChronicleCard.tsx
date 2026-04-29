@@ -15,6 +15,7 @@ interface Props {
   activeThreadId: string | null
   threadHistory: ChatThreadSummary[]
   streamingText: string
+  streamingThought: string
   phase: SynthesisPhase
   elapsed: number
   synthError: string | null
@@ -39,6 +40,7 @@ export function ChronicleCard({
   activeThreadId,
   threadHistory,
   streamingText,
+  streamingThought,
   phase,
   elapsed,
   synthError,
@@ -118,6 +120,7 @@ export function ChronicleCard({
             activeThreadId={activeThreadId}
             threadHistory={threadHistory}
             streamingText={streamingText}
+            streamingThought={streamingThought}
             phase={phase}
             elapsed={elapsed}
             providerName={config?.provider}

@@ -1,35 +1,55 @@
-import { useState, useEffect, memo } from "react"
-import { detectMediaKind, getMediaPreviewMode, buildOrdinalsPreviewUrl, isEmojiOnly } from "../lib/media"
+import { useState, memo } from "react"
+import { detectMediaKind, getMediaPreviewMode, buildOrdinalsPreviewUrl } from "../lib/media"
 import type { RelatedInscriptionSummary } from "../lib/types"
+import { NonImageFitPreview } from "./NonImageFitPreview"
+import { isNonImageFitKind } from "../lib/previewFit"
 
 interface Props {
   inscription: RelatedInscriptionSummary
   className?: string
   loading?: "lazy" | "eager"
+  compact?: boolean
+  showMeta?: boolean
 }
-
-const MAX_TEXT_PREVIEW_BYTES = 12 * 1024 // Slightly smaller for nodes
 
 /**
  * InscriptionMedia component optimized with memoization.
  */
-export const InscriptionMedia = memo(({ inscription, className, loading = "lazy" }: Props) => {
+export const InscriptionMedia = memo(({ inscription, className, loading = "lazy", compact = false, showMeta = true }: Props) => {
   const [renderFallback, setRenderFallback] = useState(false)
-  const contentType = inscription.content_type || "image/png"
+  const contentType = inscription.content_type || "application/octet-stream"
   const kind = detectMediaKind(contentType)
   const previewMode = getMediaPreviewMode({ kind })
   
   const contentUrl = inscription.content_url || `https://ordinals.com/content/${inscription.inscription_id}`
   const previewUrl = buildOrdinalsPreviewUrl(inscription.inscription_id)
 
-  if (renderFallback || previewMode === "ordinals_preview") {
+  if (renderFallback && !isNonImageFitKind(kind)) {
     return (
       <iframe
-        className={className}
+        className={[className ?? "", "inscription-preview-fallback-frame"].filter(Boolean).join(" ")}
         title={`Inscription #${inscription.inscription_number ?? "pending"}`}
         src={previewUrl}
         loading={loading}
+        scrolling="no"
         sandbox="allow-scripts allow-same-origin"
+      />
+    )
+  }
+
+  if (isNonImageFitKind(kind)) {
+    return (
+      <NonImageFitPreview
+        kind={kind}
+        contentType={contentType}
+        contentUrl={contentUrl}
+        previewUrl={previewUrl}
+        className={className}
+        mode={compact ? "compact" : "default"}
+        fitPolicy="readable"
+        maxTextPreviewBytes={12 * 1024}
+        showMeta={showMeta}
+        title={`Inscription #${inscription.inscription_number ?? "pending"}`}
       />
     )
   }
@@ -57,17 +77,6 @@ export const InscriptionMedia = memo(({ inscription, className, loading = "lazy"
     )
   }
 
-  if (previewMode === "text") {
-    return (
-      <TextPreview 
-        contentType={contentType} 
-        contentUrl={contentUrl} 
-        onFallback={() => setRenderFallback(true)} 
-        className={className}
-      />
-    )
-  }
-
   // Default: Image
   return (
     <img
@@ -81,42 +90,3 @@ export const InscriptionMedia = memo(({ inscription, className, loading = "lazy"
 })
 
 InscriptionMedia.displayName = "InscriptionMedia"
-
-function TextPreview({ 
-  contentType, 
-  contentUrl, 
-  onFallback,
-  className
-}: { 
-  contentType: string, 
-  contentUrl: string, 
-  onFallback: () => void,
-  className?: string
-}) {
-  const [text, setText] = useState<string | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(contentUrl, { signal: controller.signal })
-      .then(async res => {
-        if (!res.ok) throw new Error("Fetch failed")
-        const body = await res.text()
-        setText(body.slice(0, MAX_TEXT_PREVIEW_BYTES))
-      })
-      .catch(() => onFallback())
-    
-    return () => controller.abort()
-  }, [contentUrl, onFallback])
-
-  if (text === null) return <div className="media-placeholder">Loading text...</div>
-
-  const isEmoji = isEmojiOnly(text || "")
-
-  return (
-    <div className={`media-text-preview ${isEmoji ? "is-emoji" : ""} ${className}`}>
-      <pre>{text}</pre>
-      <div className="media-text-meta">{contentType}</div>
-    </div>
-  )
-}
-

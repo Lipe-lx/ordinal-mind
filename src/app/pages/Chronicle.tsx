@@ -121,6 +121,7 @@ export function Chronicle() {
     activeThreadId,
     threadHistory,
     streamingText,
+    streamingThought,
     phase,
     elapsed,
     researchLogs,
@@ -244,6 +245,7 @@ export function Chronicle() {
           activeThreadId={activeThreadId}
           threadHistory={threadHistory}
           streamingText={streamingText}
+          streamingThought={streamingThought}
           phase={phase}
           elapsed={elapsed}
           researchLogs={researchLogs}

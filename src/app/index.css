@@ -951,6 +951,9 @@ select.input-field option {
 
 .chronicle-card-content-preview {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
   aspect-ratio: 1;
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
@@ -959,9 +962,12 @@ select.input-field option {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: visible;
+  overflow: hidden;
+  isolation: isolate;
   user-select: none;
   -webkit-user-drag: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) var(--bg-secondary);
 }
 
 .chronicle-card-content-preview.is-interactive {
@@ -999,6 +1005,14 @@ select.input-field option {
 .chronicle-card-content-preview audio {
   width: calc(100% - 2rem);
   max-width: 28rem;
+}
+
+.chronicle-card-content-preview .non-image-fit-preview {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .chronicle-card-content-preview.is-text {
@@ -1074,19 +1088,177 @@ select.input-field option {
   text-align: center;
 }
 
-/* Custom scrollbar for preview */
-.chronicle-card-content-preview::-webkit-scrollbar {
-  height: 4px;
+.non-image-fit-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  display: flex;
+  flex-direction: column;
 }
-.chronicle-card-content-preview::-webkit-scrollbar-track {
+
+.non-image-fit-stage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.non-image-fit-canvas {
+  transform-origin: top left;
+  will-change: transform;
+  max-width: none;
+  max-height: none;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.non-image-fit-canvas--text {
   background: transparent;
 }
+
+.non-image-fit-canvas--text pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.83rem;
+  line-height: 1.65;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.non-image-fit-iframe {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.non-image-fit-iframe--preview {
+  display: block;
+  width: calc(100% + 14px);
+  height: calc(100% + 14px);
+  margin-right: -14px;
+  margin-bottom: -14px;
+}
+
+.inscription-preview-fallback-frame {
+  display: block;
+  width: calc(100% + 14px);
+  height: calc(100% + 14px);
+  margin-right: -14px;
+  margin-bottom: -14px;
+}
+
+.non-image-fit-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.non-image-fit-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-top: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  flex-wrap: wrap;
+}
+
+.non-image-fit-meta a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.non-image-fit-meta a:hover {
+  text-decoration: underline;
+}
+
+.non-image-fit-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  text-align: center;
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+}
+
+.non-image-fit-fallback-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.non-image-fit-fallback-copy {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  max-width: 34ch;
+}
+
+.non-image-fit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.non-image-fit-preview.is-clipped::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 -40px 40px -34px rgba(0, 0, 0, 0.48);
+}
+
+.non-image-fit-preview.is-compact .non-image-fit-meta {
+  display: none;
+}
+
+.non-image-fit-preview.is-compact .non-image-fit-stage {
+  padding: 0;
+}
+
+/* Custom scrollbar for preview */
+.chronicle-card-content-preview::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+  background: var(--bg-secondary);
+}
+.chronicle-card-content-preview::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
 .chronicle-card-content-preview::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
 }
 .chronicle-card-content-preview::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-primary);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* Shine/Glare effect */
@@ -4211,6 +4383,99 @@ select.input-field option {
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.1) !important;
 }
 
+.preview-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(5, 9, 18, 0.58);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.preview-fullscreen-shell {
+  position: relative;
+  width: min(96vw, 1600px);
+  height: min(94vh, 1100px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-glass);
+  background: rgba(7, 10, 18, 0.78);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-fullscreen-toolbar {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 8;
+  pointer-events: auto;
+}
+
+.preview-fullscreen-toolbar .nav-btn {
+  opacity: 0.92;
+  transform: none;
+}
+
+.preview-fullscreen-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) rgba(7, 10, 18, 0.78);
+}
+
+.preview-fullscreen-content::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+  background: rgba(7, 10, 18, 0.78);
+}
+
+.preview-fullscreen-content::-webkit-scrollbar-track {
+  background: rgba(7, 10, 18, 0.78);
+}
+
+.preview-fullscreen-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.preview-fullscreen-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.preview-fullscreen-content img,
+.preview-fullscreen-content iframe,
+.preview-fullscreen-content video,
+.preview-fullscreen-content .non-image-fit-preview {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.preview-fullscreen-content img,
+.preview-fullscreen-content video {
+  object-fit: contain;
+}
+
+.preview-fullscreen-content audio {
+  width: min(100%, 900px);
+}
+
+.non-image-fit-preview--fullscreen {
+  border-radius: var(--radius-md);
+}
+
 /* --- Chronicle Tabs --- */
 .chronicle-tabs {
   display: flex;
@@ -4249,11 +4514,18 @@ select.input-field option {
 }
 
 .chronicle-tab:hover {
-  color: rgba(248, 250, 252, 0.96);
+  color: rgba(248, 250, 252, 1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chronicle-tab:active {
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .chronicle-tab.active {
   color: var(--accent-primary);
+  background: rgba(247, 147, 26, 0.03);
 }
 
 .chronicle-tab.active::after {
@@ -4676,12 +4948,27 @@ select.input-field option {
 .node-image video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border: none;
 }
 
 .node-image audio {
   width: 90%;
+}
+
+.node-image .non-image-fit-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  border: 0;
+}
+
+.node-image .non-image-fit-preview .non-image-fit-stage {
+  padding: 0;
+}
+
+.node-detail-image .non-image-fit-preview .non-image-fit-stage {
+  padding: 0;
 }
 
 .media-text-preview {
@@ -4855,6 +5142,11 @@ select.input-field option {
 .node-detail-image .media-text-preview {
   font-size: 0.85rem;
   padding: 1.5rem;
+}
+
+.node-detail-image .non-image-fit-preview {
+  width: 100%;
+  height: 100%;
 }
 
 .node-detail-info h3 {
