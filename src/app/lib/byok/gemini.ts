@@ -1,6 +1,6 @@
 import type { LLMAdapter, Provider } from "./index"
 import type { Chronicle } from "../types"
-import type { PreparedImageInput, ProviderCapabilities } from "./context"
+import type { PreparedImageInput, ProviderCapabilities, SynthesisMode } from "./context"
 import type { SynthesisResult } from "./index"
 import { prepareSynthesisInput } from "./context"
 import { consumeSSE } from "./streamParser"
@@ -9,12 +9,19 @@ import type { ChatMessage } from "./chatTypes"
 import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 import type { ChatToolPolicyDecision } from "./toolPolicy"
+import { 
+  sanitizeGeminiSchema, 
+  sanitizeGeminiTurnOrder, 
+  type GeminiContent, 
+  type GeminiPart,
+  type GeminiFunctionCall
+} from "./ntcUtils"
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 export class GeminiAdapter implements LLMAdapter {
   readonly provider: Provider = "gemini"
-  constructor(private key: string, public model: string) {}
+  constructor(public model: string, private key: string) {}
 
   getCapabilities(): ProviderCapabilities {
     return {
@@ -160,7 +167,7 @@ export class GeminiAdapter implements LLMAdapter {
       function_declarations: prepared.availableTools.map(t => ({
         name: t.name,
         description: t.description,
-        parameters: t.parameters
+        parameters: sanitizeGeminiSchema(t.parameters)
       }))
     }] : undefined
 
@@ -174,24 +181,26 @@ export class GeminiAdapter implements LLMAdapter {
       },
     ]
 
-    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
-    let hasExecutedToolCalls = false
+    const isGemma4 = this.model.toLowerCase().includes("gemma-4")
+    const inputMode: SynthesisMode = allowVisionInput ? prepared.inputMode : "text-only"
     let lastModelText = ""
     const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
-      // Build request body
       const body: Record<string, unknown> = {
-        contents,
+        contents: sanitizeGeminiTurnOrder(contents),
         generationConfig: { maxOutputTokens: 600 },
       }
 
       if (tools && tools.length > 0) {
         body.tools = tools
-        body.tool_config = buildGeminiToolConfig(prepared.availableTools, toolPolicyDecision)
+        const config = buildGeminiToolConfig(prepared.availableTools, toolPolicyDecision) as GeminiToolConfig
+        if (isGemma4 && config?.function_calling_config?.mode === "ANY") {
+          config.function_calling_config.mode = "AUTO"
+        }
+        body.tool_config = config
       }
 
-      // Add systemInstruction when supported
       if (useSystemInstruction) {
         body.system_instruction = {
           parts: [{ text: prepared.systemPrompt }],
@@ -208,151 +217,109 @@ export class GeminiAdapter implements LLMAdapter {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         const errorMsg = JSON.stringify(err)
-        // Detect systemInstruction errors for fallback
         if (useSystemInstruction && errorMsg.toLowerCase().includes("system_instruction")) {
-          throw new SystemInstructionError(
-            `Gemini error ${res.status}: ${errorMsg}`
-          )
+          throw new SystemInstructionError(`Gemini error ${res.status}: ${errorMsg}`)
         }
         throw new Error(`Gemini error ${res.status}: ${errorMsg}`)
       }
 
+      let modelTurn: GeminiContent | undefined
+      let currentToolCalls: GeminiFunctionCall[]
+
       if (stream) {
         const streamResult = await this.consumeGeminiStreamWithTools(res, onChunk, signal)
         lastModelText = streamResult.text
-        if (streamResult.toolCalls.length > 0 && toolExecutor) {
-          contents.push(streamResult.modelContent)
-          hasExecutedToolCalls = true
-
-          const functionResponses = await Promise.all(
-            streamResult.toolCalls.map(async (call) => {
-              const callKey = `${call.name}:${JSON.stringify(call.args)}`
-              if (executedCalls.has(callKey)) {
-                return {
-                  functionResponse: {
-                    id: call.id,
-                    name: call.name,
-                    response: { error: "Redundant call detected. This tool was already called with these exact parameters. Use existing data." },
-                  },
-                }
-              }
-              executedCalls.add(callKey)
-
-              const toolExists = prepared.availableTools.some(t => t.name === call.name)
-              if (!toolExists) {
-                return {
-                  functionResponse: {
-                    id: call.id,
-                    name: call.name,
-                    response: { error: `Unknown tool: ${call.name}` },
-                  },
-                }
-              }
-              const result = await toolExecutor.executeTool(call.name, call.args)
-              return {
-                functionResponse: {
-                  id: call.id,
-                  name: call.name,
-                  response: result,
-                },
-              }
-            })
-          )
-          contents.push({ role: "user", parts: functionResponses })
-          continue
-        }
-        return { text: streamResult.text, inputMode }
+        modelTurn = streamResult.modelContent
+        currentToolCalls = streamResult.toolCalls
       } else {
         const data = (await res.json()) as GeminiResponse
         const candidate = data.candidates?.[0]
-        const modelContent = candidate?.content
-        const parts = modelContent?.parts || []
-        const functionCalls = parts
+        modelTurn = candidate?.content ?? { role: "model", parts: [] }
+        const parts = modelTurn.parts || []
+        currentToolCalls = parts
           .filter((part): part is GeminiPart & { functionCall: GeminiFunctionCall } => Boolean(part.functionCall))
-          .map((part) => part.functionCall)
-
+          .map((part) => part.functionCall!)
         lastModelText = extractGeminiText(data)
-        if (functionCalls.length > 0 && toolExecutor) {
-          contents.push(modelContent ?? { role: "model", parts })
-          hasExecutedToolCalls = true
+      }
 
-          const functionResponses = await Promise.all(
-            functionCalls.map(async (call) => {
-              const callKey = `${call.name}:${JSON.stringify(call.args)}`
-              if (executedCalls.has(callKey)) {
-                return {
-                  functionResponse: {
-                    id: call.id,
-                    name: call.name,
-                    response: { error: "Redundant call detected. This tool was already called with these exact parameters. Use existing data." },
-                  },
-                }
-              }
-              executedCalls.add(callKey)
+      const hasToolCalls = currentToolCalls.length > 0
+      if (!hasToolCalls && (!lastModelText || !lastModelText.trim())) {
+        if (i < 2) {
+          contents.push({
+            role: "user",
+            parts: [{ text: "Your previous response was empty. Please answer the user's question or use a tool if needed." }]
+          })
+          continue
+        }
+      }
 
-              const toolExists = prepared.availableTools.some(t => t.name === call.name)
-              if (!toolExists) {
-                return {
-                  functionResponse: {
-                    id: call.id,
-                    name: call.name,
-                    response: { error: `Unknown tool: ${call.name}` },
-                  },
-                }
-              }
-              const result = await toolExecutor.executeTool(call.name, call.args)
+      if (hasToolCalls && toolExecutor) {
+        contents.push(modelTurn!)
+
+        const functionResponses = await Promise.all(
+          currentToolCalls.map(async (call) => {
+            const callKey = `${call.name}:${JSON.stringify(call.args)}`
+            if (executedCalls.has(callKey)) {
               return {
                 functionResponse: {
                   id: call.id,
                   name: call.name,
-                  response: result,
+                  response: { error: "Redundant call detected. Use existing data." },
                 },
               }
-            })
-          )
-          contents.push({ role: "user", parts: functionResponses })
-          continue
-        }
+            }
+            executedCalls.add(callKey)
 
-        return { text: extractGeminiText(data), inputMode }
-      }
-    }
+            const toolExists = prepared.availableTools.some(t => t.name === call.name)
+            if (!toolExists) {
+              return {
+                functionResponse: {
+                  id: call.id,
+                  name: call.name,
+                  response: { error: `Unknown tool: ${call.name}` },
+                },
+              }
+            }
+            const result = await toolExecutor.executeTool(call.name, call.args)
+            return {
+              functionResponse: {
+                id: call.id,
+                name: call.name,
+                response: result,
+              },
+            }
+          })
+        )
+        contents.push({ role: "user", parts: functionResponses })
 
-    // Tool calling limit reached - synthesize response from collected data
-    if (hasExecutedToolCalls && contents.length > 1) {
-      contents.push({
-        role: "user",
-        parts: [{
-          text: "Based on the research conducted, provide your best direct answer to the user's original question. If data is incomplete, acknowledge it but still provide the most helpful response you can with available information."
-        }]
-      })
+        // If we still have room, continue searching
+        if (i < 6) continue
 
-      try {
-        const body: Record<string, unknown> = {
-          contents,
+        // Limit reached: synthesize fallback
+        contents.push({
+          role: "user",
+          parts: [{
+            text: "Based on the research conducted, provide your best direct answer to the user's original question."
+          }]
+        })
+        const finalBody = {
+          contents: sanitizeGeminiTurnOrder(contents),
           generationConfig: { maxOutputTokens: 600 },
+          ...(useSystemInstruction ? { system_instruction: { parts: [{ text: prepared.systemPrompt }] } } : {})
         }
-
-        if (useSystemInstruction) {
-          body.system_instruction = {
-            parts: [{ text: prepared.systemPrompt }],
-          }
-        }
-
         const finalRes = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify(finalBody),
           signal,
         })
-
         if (finalRes.ok) {
           const finalData = (await finalRes.json()) as GeminiResponse
           return { text: extractGeminiText(finalData), inputMode }
         }
-      } catch (e) {
-        console.warn("[GeminiAdapter] Final synthesis request failed, returning partial results", e)
       }
+
+      return { text: lastModelText, inputMode }
     }
 
     return { text: lastModelText || "Unable to complete research.", inputMode }
@@ -373,7 +340,6 @@ export class GeminiAdapter implements LLMAdapter {
       (data) => {
         try {
           const parsed = JSON.parse(data) as GeminiResponse
-          
           const candidate = parsed.candidates?.[0]
           if (!candidate?.content?.parts) return
 
@@ -392,9 +358,7 @@ export class GeminiAdapter implements LLMAdapter {
               }
             }
           }
-        } catch {
-          // Skip unparseable chunks
-        }
+        } catch { /* skip */ }
       },
       signal
     )
@@ -426,7 +390,6 @@ function toGeminiImagePart(image: PreparedImageInput) {
       },
     }
   }
-
   return {
     file_data: {
       mime_type: "text/plain",
@@ -446,16 +409,11 @@ function extractGeminiText(data: GeminiResponse): string {
 function buildGeminiToolConfig(
   tools: Array<{ name: string }>,
   toolPolicyDecision?: ChatToolPolicyDecision
-): Record<string, unknown> | undefined {
+): GeminiToolConfig | undefined {
   if (!toolPolicyDecision) return undefined
   if (toolPolicyDecision.geminiMode === "NONE") {
-    return {
-      function_calling_config: {
-        mode: "NONE",
-      },
-    }
+    return { function_calling_config: { mode: "NONE" } }
   }
-
   if (toolPolicyDecision.geminiMode === "ANY") {
     const allowed = toolPolicyDecision.allowedToolNames.filter((name) => tools.some((tool) => tool.name === name))
     return {
@@ -465,46 +423,18 @@ function buildGeminiToolConfig(
       },
     }
   }
-
-  return {
-    function_calling_config: {
-      mode: "AUTO",
-    },
-  }
+  return { function_calling_config: { mode: "AUTO" } }
 }
 
 function isGemmaModel(model: string): boolean {
   return /^gemma[-_]/i.test(model)
 }
 
-
-// --- Gemini-specific types ---
-
-interface GeminiFunctionCall {
-  id?: string
-  name: string
-  args: Record<string, unknown>
-  thoughtSignature?: string
-}
-
-interface GeminiFunctionResponse {
-  id?: string
-  name: string
-  response: unknown
-}
-
-interface GeminiPart {
-  text?: string
-  inline_data?: { mime_type: string; data: string }
-  file_data?: { mime_type: string; file_uri: string }
-  functionCall?: GeminiFunctionCall
-  functionResponse?: GeminiFunctionResponse
-  thoughtSignature?: string
-}
-
-interface GeminiContent {
-  role: string
-  parts: GeminiPart[]
+interface GeminiToolConfig {
+  function_calling_config?: {
+    mode: "AUTO" | "ANY" | "NONE"
+    allowed_function_names?: string[]
+  }
 }
 
 interface GeminiResponse {
@@ -525,9 +455,5 @@ function isSystemInstructionError(err: unknown): boolean {
   if (err instanceof SystemInstructionError) return true
   if (!(err instanceof Error)) return false
   const msg = err.message.toLowerCase()
-  return (
-    msg.includes("system_instruction") ||
-    msg.includes("systeminstructio") ||
-    (msg.includes("system") && msg.includes("not supported"))
-  )
+  return msg.includes("system_instruction") || (msg.includes("system") && msg.includes("not supported"))
 }

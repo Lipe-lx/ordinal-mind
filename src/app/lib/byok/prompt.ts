@@ -32,7 +32,12 @@ Rules:
 - If a section says data is partial, sampled, or unresolved, keep that uncertainty explicit.
 - Put the user-visible Chronicle between these exact tags: <final_answer> and </final_answer>.
 - The text inside the tags must be complete sentences, never a single connector or fragment.
-- Do not copy placeholder text such as "...". Inside the tags, include ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.`
+- Do not copy placeholder text such as "...". Inside the tags, include ONLY the final Chronicle text. No internal thoughts, reasoning, constraints, scratchpad notes, or prompt repetition.
+
+### REGRA FINAL OBRIGATÓRIA
+- Antes de responder com QUALQUER número, resultado calculado, supply total, cotação ou conclusão numérica, você DEVE ter chamado uma ferramenta da lista abaixo para obter esse valor.
+- Cálculo mental, estimativa ou extrapolação de dados não fornecidos é TERMINANTEMENTE PROIBIDO.
+- Se os dados estiverem ausentes ou incompletos após a pesquisa, informe a incerteza explicitamente em vez de inventar valores.`
 
   if (!supportsTools) return baseRules
 
@@ -143,7 +148,8 @@ ${intentSpecific}
 - Prefer get_raw_events for specific factual claims and cite source references when available.
 - If any tool returns partial data or empty results, explicitly flag incompleteness to the user.
 - If the user asks for a recap/resumo/narrativa, then expand into a full narrative.
-- If get_collection_context returns collection_size of 0 or null, do NOT retry the same call with different parameters. Instead, use web_search or deep_research to find contextual information.`
+- If get_collection_context returns collection_size of 0 or null, do NOT retry the same call with different parameters. Instead, use web_search or deep_research to find contextual information.
+- REGRA CRÍTICA: Nunca invente números de supply, datas de mint ou volumes de venda. Se a ferramenta falhar em trazer o dado exato, diga que a informação não foi encontrada nos registros públicos.`
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {

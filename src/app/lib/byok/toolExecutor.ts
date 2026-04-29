@@ -63,12 +63,13 @@ export class ToolExecutor {
     }
     
     this.callCount++
-    console.log(`[ToolExecutor] Executing ${toolName} (Call ${this.callCount}/${this.maxCalls})`, args)
-    this.onLog?.({ id, tool: toolName, args, status: "running" })
+    const sanitizedArgs = sanitizeArguments(args)
+    console.log(`[ToolExecutor] Executing ${toolName} (Call ${this.callCount}/${this.maxCalls})`, sanitizedArgs)
+    this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: "running" })
 
     if (WIKI_TOOL_NAMES.has(toolName)) {
       try {
-        const payload = await executeWikiTool(toolName, args)
+        const payload = await executeWikiTool(toolName, sanitizedArgs)
         const error = typeof payload.error === "string" ? payload.error : undefined
         const partial = payload.partial === true
         const summary = error
@@ -115,14 +116,14 @@ export class ToolExecutor {
 
     const config = this.getConfigForTool(toolName)
     try {
-      const result = await provider.execute(args, config)
+      const result = await provider.execute(sanitizedArgs, config)
       const summary = result.summary
         ?? result.results.map(r => r.title || (r.content ? `${r.content.substring(0, 50)}...` : "No content")).join(", ")
       
       if (result.error) {
-        this.onLog?.({ id, tool: toolName, args, status: result.partial ? "partial" : "error", error: result.error, result: summary })
+        this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: result.partial ? "partial" : "error", error: result.error, result: summary })
       } else {
-        this.onLog?.({ id, tool: toolName, args, status: result.partial ? "partial" : "done", result: summary })
+        this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: result.partial ? "partial" : "done", result: summary })
       }
       
       return {
@@ -179,4 +180,28 @@ function extractWikiFacts(toolName: string, payload: Record<string, unknown>): R
     default:
       return {}
   }
+}
+
+function sanitizeArguments(args: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = { ...args }
+
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (typeof value === "string") {
+      let cleaned = value.trim()
+      
+      // Fields that definitely should NOT have newlines or extra spaces
+      const isIdentifier = /^(inscription_?id|address|slug|collection_?slug|taproot_?address|txid|id)$/i.test(key)
+      
+      if (isIdentifier) {
+        cleaned = cleaned.replace(/\s+/g, "").toLowerCase()
+      } else {
+        // General text fields: trim newlines into spaces
+        cleaned = cleaned.replace(/\n+/g, " ").replace(/\s{2,}/g, " ")
+      }
+      
+      sanitized[key] = cleaned
+    }
+  }
+
+  return sanitized
 }
