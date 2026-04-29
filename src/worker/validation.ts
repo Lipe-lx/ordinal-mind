@@ -97,7 +97,7 @@ export function validateAcrossSources(
   }
 
   // Check 5: Inscription number
-  if (ordinalsMeta.inscription_number > 0 && unisatInfo.inscriptionNumber > 0) {
+  if (Number.isFinite(ordinalsMeta.inscription_number) && Number.isFinite(unisatInfo.inscriptionNumber)) {
     const agree = ordinalsMeta.inscription_number === unisatInfo.inscriptionNumber
     checks.push({
       field: "inscription_number",

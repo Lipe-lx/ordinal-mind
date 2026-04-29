@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router"
 
 const TAPROOT_RE = /^bc1p[a-z0-9]{38,62}$/i
 const HEX_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
-const NUMBER_RE = /^\d+$/
+const NUMBER_RE = /^-?\d+$/
 
 function isValidInput(v: string): boolean {
   return TAPROOT_RE.test(v) || HEX_ID_RE.test(v) || NUMBER_RE.test(v)
@@ -26,7 +26,7 @@ export function Home() {
     }
 
     if (!isValidInput(trimmed)) {
-      setError("Invalid input. Use an inscription number (e.g. 69420), hex ID, or bc1p... address.")
+      setError("Invalid input. Use an inscription number (e.g. 69420 or -435195), hex ID, or bc1p... address.")
       return
     }
 

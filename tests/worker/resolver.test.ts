@@ -62,6 +62,21 @@ describe("resolveInput", () => {
       )
     })
 
+    it("should resolve a negative inscription number to hex ID via ordinals.com scraping", async () => {
+      const mockId = "def456abc123def456abc123def456abc123def456abc123def456abc123def4i0"
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `<html><title>Inscription -435195</title><body><a href="/inscription/${mockId}">link</a></body></html>`,
+      })
+
+      const result = await resolveInput("-435195")
+      expect(result.type).toBe("inscription")
+      expect(result.value).toBe(mockId)
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://ordinals.com/inscription/-435195"
+      )
+    })
+
     it("should throw for number that doesn't resolve", async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 404 })
 

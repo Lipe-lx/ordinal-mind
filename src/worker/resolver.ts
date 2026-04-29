@@ -8,7 +8,7 @@ export interface ResolvedInput {
 
 const TAPROOT_RE = /^bc1p[a-z0-9]{38,62}$/i
 const HEX_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
-const NUMBER_RE = /^\d+$/
+const NUMBER_RE = /^-?\d+$/
 
 export async function resolveInput(raw: string): Promise<ResolvedInput> {
   const v = raw.trim()
@@ -22,7 +22,7 @@ export async function resolveInput(raw: string): Promise<ResolvedInput> {
   }
 
   if (NUMBER_RE.test(v)) {
-    const id = await resolveNumberToId(parseInt(v, 10))
+    const id = await resolveNumberToId(Number.parseInt(v, 10))
     return { type: "inscription", value: id }
   }
 
