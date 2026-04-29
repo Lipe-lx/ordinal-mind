@@ -3562,8 +3562,9 @@ select.input-field option {
   overflow-y: auto;
   overflow-x: hidden;
   display: grid;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--chat-side-padding) 0 calc(var(--chat-side-padding) - var(--space-xs));
+  align-content: start;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--chat-side-padding) 0 calc(var(--chat-side-padding) - var(--space-xs));
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }

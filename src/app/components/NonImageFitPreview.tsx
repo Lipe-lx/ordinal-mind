@@ -289,6 +289,11 @@ export function NonImageFitPreview({
     recomputeTextScale()
   }, [recomputeTextScale, state.status])
 
+  useEffect(() => {
+    if (state.status !== "preview") return
+    recomputePreviewScale()
+  }, [recomputePreviewScale, state.status])
+
   // Note: surfaceSize syncing is handled by remounting via key in parent
 
   const handleFrameLoad = useCallback(() => {
@@ -373,6 +378,7 @@ export function NonImageFitPreview({
               scrolling="no"
               sandbox="allow-scripts allow-same-origin"
               loading="lazy"
+              onLoad={recomputePreviewScale}
               referrerPolicy="no-referrer"
             />
           </div>

@@ -69,7 +69,7 @@ describe("preview fit helpers", () => {
     expect(resolveNonImagePrimaryMode("video")).toBe("preview")
     expect(resolveNonImagePrimaryMode("text")).toBe("text")
     expect(resolveNonImagePrimaryMode("html")).toBe("html")
-    expect(resolveNonImagePrimaryMode("svg")).toBe("html")
+    expect(resolveNonImagePrimaryMode("svg")).toBe("preview")
     expect(resolveNonImagePrimaryMode("model")).toBe("preview")
     expect(resolveNonImagePrimaryMode("document")).toBe("preview")
     expect(resolveNonImagePrimaryMode("unknown")).toBe("preview_image_candidate")

@@ -52,8 +52,9 @@ export function resolveNonImagePrimaryMode(kind: MediaKind): NonImagePrimaryMode
     case "text":
       return "text"
     case "html":
-    case "svg":
       return "html"
+    case "svg":
+      return "preview"
     case "unknown":
       return "preview_image_candidate"
     default:
