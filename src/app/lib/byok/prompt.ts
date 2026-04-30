@@ -176,6 +176,10 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
 
   const collectionName = collection_context.presentation.full_label || collection_context.presentation.primary_label
   const collectionSlug = collection_context.market.match?.collection_slug ?? collection_context.registry.match?.slug
+  const resolvedMarketCollectionName =
+    collection_context.profile?.name
+    ?? collection_context.presentation.primary_label
+    ?? collection_context.market.match?.collection_name
 
   const sections = [
     buildSection("Collection Focus", [
@@ -252,7 +256,10 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
       "Market overlay",
       collection_context.market.match
         ? [
-            `Collection: ${collection_context.market.match.collection_name}`,
+            `Collection: ${resolvedMarketCollectionName ?? collection_context.market.match.collection_name}`,
+            resolvedMarketCollectionName && resolvedMarketCollectionName !== collection_context.market.match.collection_name
+              ? `Overlay label: ${collection_context.market.match.collection_name}`
+              : null,
             `Slug: ${collection_context.market.match.collection_slug}`,
             `Verified: ${collection_context.market.match.verified ? "yes" : "no"}`,
             `Item name: ${collection_context.market.match.item_name ?? "unknown"}`,
@@ -260,7 +267,7 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
             collection_context.socials.official_x_profiles.length > 0
               ? `Official X accounts: ${collection_context.socials.official_x_profiles.map((profile) => profile.url).join(", ")}`
               : "Official X accounts: none found",
-          ]
+          ].filter((line): line is string => Boolean(line))
         : ["No market overlay match found."],
     ),
     buildSection("Uncertainties", buildUncertainties(chronicle)),
@@ -281,7 +288,8 @@ function buildCollectorFocus(chronicle: Chronicle): string[] {
   const { collection_context, events, meta } = chronicle
   const collectionName =
     collection_context.profile?.name ??
-    collection_context.registry.match?.matched_collection ??
+    collection_context.presentation.primary_label ??
+    collection_context.presentation.full_label ??
     collection_context.market.match?.collection_name
 
   const transferCount = events.filter((event) => event.event_type === "transfer" || event.event_type === "sale").length

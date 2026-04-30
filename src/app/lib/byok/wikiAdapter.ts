@@ -135,8 +135,9 @@ function buildWikiDraftPrompt(
       inscription_number: chronicle.meta.inscription_number,
       sat: chronicle.meta.sat,
       sat_rarity: chronicle.meta.sat_rarity,
-      collection: chronicle.collection_context.market.match?.collection_name
-        ?? chronicle.collection_context.registry.match?.matched_collection
+      collection: chronicle.collection_context.profile?.name
+        ?? chronicle.collection_context.presentation.primary_label
+        ?? chronicle.collection_context.market.match?.collection_name
         ?? null,
     },
     events: chronicle.events.map((event) => ({

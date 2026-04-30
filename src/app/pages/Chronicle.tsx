@@ -1,3 +1,4 @@
+import { motion } from "motion/react"
 import { useEffect, useReducer, useCallback, useState } from "react"
 import { useLoaderData, useLocation, useNavigate, useOutletContext } from "react-router"
 import { TemporalTree } from "../components/TemporalTree"
@@ -199,12 +200,26 @@ export function Chronicle() {
         {progress ? (
           <ScanProgress progress={progress} inscriptionId={id} />
         ) : (
-          <div className="scan-progress glass-card" style={{ textAlign: "center", padding: "2rem" }}>
-            <span style={{ fontSize: "1.5rem" }}>⏳</span>
-            <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem" }}>
-              Connecting…
+          <div className="scan-progress glass-card" style={{ textAlign: "center", padding: "3rem var(--space-xl)", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-md)" }}>
+            <motion.div 
+              animate={{ 
+                rotate: 360,
+                scale: [1, 1.1, 1],
+              }}
+              transition={{ 
+                rotate: { repeat: Infinity, duration: 2, ease: "linear" },
+                scale: { repeat: Infinity, duration: 2, ease: "easeInOut" }
+              }}
+              style={{ fontSize: "2rem", marginBottom: "0.5rem" }}
+            >
+              ⏳
+            </motion.div>
+            <h3 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>Initializing Engine</h3>
+            <p style={{ color: "var(--text-tertiary)", fontSize: "0.875rem", maxWidth: "240px", margin: 0 }}>
+              Establishing connection to the Bitcoin temporal index...
             </p>
           </div>
+
         )}
       </div>
     )

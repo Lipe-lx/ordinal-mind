@@ -144,6 +144,13 @@ interface CollectionDiagnosticsOptions {
   requestId?: string
 }
 
+type ResolvedCollectionNameSource = "registry" | "ord_net" | "satflow" | "fallback_title"
+
+interface ResolvedCollectionName {
+  name?: string
+  source?: ResolvedCollectionNameSource
+}
+
 export async function fetchCollectionContext(
   inscriptionId: string,
   meta: InscriptionMeta,
@@ -356,12 +363,27 @@ export async function fetchCollectionContext(
     fetchedAt,
     sourceCatalog
   )
-  const profile = buildCollectionProfile(registry.match, marketOverlay, satflowStats, ordNetDirectoryMatch, fetchedAt)
+  const resolvedCollectionName = resolveCommercialCollectionName({
+    registryMatch: registry.match,
+    ordNetMatch: ordNetOverlay,
+    satflowMatch: satflowOverlay,
+    fallbackTitle: selfDetails?.properties?.attributes?.title,
+  })
+  const profile = buildCollectionProfile(
+    registry.match,
+    marketOverlay,
+    satflowStats,
+    ordNetDirectoryMatch,
+    fetchedAt,
+    resolvedCollectionName.name
+  )
   appendUniqueSourceCatalogItems(sourceCatalog, profile?.sources ?? [])
   const partialSources = sourceCatalog.filter((source) => source.partial)
   debugCollection(diagnostics, inscriptionId, "collection_context_assembled", {
     has_registry_match: Boolean(registry.match),
     has_profile: Boolean(profile),
+    resolved_collection_name: resolvedCollectionName.name ?? null,
+    resolved_collection_name_source: resolvedCollectionName.source ?? null,
     source_count: sourceCatalog.length,
     partial_source_count: partialSources.length,
     partial_sources: partialSources.map((source) => source.source_type),
@@ -391,18 +413,15 @@ export async function fetchCollectionContext(
       children,
       protocolGallery,
       registry.match,
-      marketOverlay,
       satflowOverlay,
       ordNetOverlay,
       satflowStats,
-      ordNetDirectoryMatch
+      ordNetDirectoryMatch,
+      resolvedCollectionName.name
     ),
   }
 
-  const collectionName =
-    registry.match?.match_type === "parent" && parents && parents.items.length > 0
-      ? registry.match.matched_collection
-      : undefined
+  const collectionName = meta.collection ? resolvedCollectionName.name : undefined
 
   return {
     mediaContext,
@@ -410,11 +429,7 @@ export async function fetchCollectionContext(
     sourceCatalog,
     collectionName,
     mentionSearchHints: {
-      collectionName: resolvedCollectionNameForMentions(
-        registry.match?.matched_collection,
-        marketOverlay?.collection_name,
-        selfDetails?.properties?.attributes?.title
-      ),
+      collectionName: resolvedCollectionName.name,
       itemName: marketOverlay?.item_name ?? selfDetails?.properties?.attributes?.title,
       officialXUrls: officialXProfiles.map((profile) => profile.url),
     },
@@ -644,17 +659,17 @@ async function fetchRegistryOverlay(
   }
 }
 
-function buildPresentation(
+export function buildPresentation(
   selfDetails: OrdInscriptionDetails | null,
   parents: ProtocolRelationSet | null,
   children: ProtocolRelationSet | null,
   gallery: ProtocolGalleryContext | null,
   registryMatch: CuratedRegistryMatch | null,
-  marketMatch: MarketOverlayMatch | null,
   satflowMatch: MarketOverlayMatch | null,
   ordNetMatch: MarketOverlayMatch | null,
   satflowStats: CollectionMarketStats | null,
-  ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null
+  ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null,
+  resolvedCollectionName: string | undefined
 ): CollectionContext["presentation"] {
   const facets: CollectionPresentationFacet[] = []
 
@@ -778,15 +793,6 @@ function buildPresentation(
     }
   }
 
-  // Prefer a human-readable collection name. ord.net sometimes returns
-  // a parent inscription ref like "#124517225" instead of the real name.
-  // Satflow typically has the proper collection name (e.g., "Pupsogette").
-  const resolvedCollectionName =
-    registryMatch?.matched_collection ??
-    pickReadableCollectionName(ordNetMatch?.collection_name, satflowMatch?.collection_name) ??
-    marketMatch?.collection_name ??
-    selfDetails?.properties?.attributes?.title
-
   const itemLabel =
     ordNetMatch?.item_name ??
     satflowMatch?.item_name ??
@@ -809,28 +815,73 @@ function buildPresentation(
   }
 }
 
-function resolvedCollectionNameForMentions(
-  registryName: string | undefined,
-  marketName: string | undefined,
-  fallbackTitle: string | undefined
-): string | undefined {
-  return registryName ?? marketName ?? fallbackTitle
+export function resolveCommercialCollectionName(args: {
+  registryMatch: CuratedRegistryMatch | null
+  ordNetMatch: MarketOverlayMatch | null
+  satflowMatch: MarketOverlayMatch | null
+  fallbackTitle?: string
+}): ResolvedCollectionName {
+  if (args.registryMatch?.matched_collection) {
+    return {
+      name: args.registryMatch.matched_collection,
+      source: "registry",
+    }
+  }
+
+  const ordNetName = normalizeCollectionName(args.ordNetMatch?.collection_name)
+  if (ordNetName && !isPlaceholderCollectionName(ordNetName)) {
+    return {
+      name: ordNetName,
+      source: "ord_net",
+    }
+  }
+
+  const satflowName = normalizeCollectionName(args.satflowMatch?.collection_name)
+  if (satflowName && !isPlaceholderCollectionName(satflowName)) {
+    return {
+      name: satflowName,
+      source: "satflow",
+    }
+  }
+
+  if (ordNetName) {
+    return {
+      name: ordNetName,
+      source: "ord_net",
+    }
+  }
+
+  if (satflowName) {
+    return {
+      name: satflowName,
+      source: "satflow",
+    }
+  }
+
+  const fallbackTitle = normalizeCollectionName(args.fallbackTitle)
+  if (fallbackTitle) {
+    return {
+      name: fallbackTitle,
+      source: "fallback_title",
+    }
+  }
+
+  return {}
 }
 
-/**
- * Returns the most human-readable collection name between two overlay sources.
- * ord.net sometimes returns a parent inscription ref like "#124517225" or
- * "p-124517225" as the collection name; satflow usually has the real name.
- */
-function pickReadableCollectionName(
-  ordNetName: string | undefined,
-  satflowName: string | undefined
-): string | undefined {
-  const isParentRef = (name: string) => /^[#p]-?\d+$/.test(name.trim())
+function normalizeCollectionName(name: string | undefined): string | undefined {
+  const normalized = name?.trim()
+  return normalized ? normalized : undefined
+}
 
-  if (ordNetName && !isParentRef(ordNetName)) return ordNetName
-  if (satflowName && !isParentRef(satflowName)) return satflowName
-  return ordNetName ?? satflowName
+function isPlaceholderCollectionName(name: string): boolean {
+  const normalized = name.trim().toLowerCase()
+
+  return (
+    /^#?\d+$/.test(normalized) ||
+    /^p-\d+$/.test(normalized) ||
+    /^(parent|inscription)\s+#?\d+$/.test(normalized)
+  )
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -858,10 +909,11 @@ export function buildCollectionProfile(
   marketMatch: MarketOverlayMatch | null,
   marketStats: CollectionMarketStats | null,
   ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null,
-  fetchedAt: string
+  fetchedAt: string,
+  resolvedName?: string
 ): CollectionProfile | null {
   const slug = marketMatch?.collection_slug ?? registryMatch?.slug
-  const name = registryMatch?.matched_collection ?? marketMatch?.collection_name
+  const name = resolvedName ?? registryMatch?.matched_collection ?? marketMatch?.collection_name
 
   if (!slug || !name) return null
 

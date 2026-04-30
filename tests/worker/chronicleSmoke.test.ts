@@ -36,7 +36,17 @@ function createEnv(options?: { unisatApiKey?: string }): Env {
   }
 }
 
-function satflowOrdinalHtml(options: { withCount: boolean; rank: number; includeTraits?: boolean }): string {
+function satflowOrdinalHtml(options: {
+  withCount: boolean
+  rank: number
+  includeTraits?: boolean
+  collectionSlug?: string
+  collectionName?: string
+  itemName?: string
+}): string {
+  const collectionSlug = options.collectionSlug ?? "bitcoin-puppets"
+  const collectionName = options.collectionName ?? "Bitcoin Puppets"
+  const itemName = options.itemName ?? "Bitcoin Puppet #2971"
   const backgroundTrait = options.withCount
     ? `{"key":"Background","value":"Dark Grey","count":800}`
     : `{"key":"Background","value":"Dark Grey"}`
@@ -47,8 +57,8 @@ function satflowOrdinalHtml(options: { withCount: boolean; rank: number; include
           ${backgroundTrait}
         ]`
   return `
-    <meta property="og:title" content="Bitcoin Puppet #2971 - Bitcoin Puppets" />
-    <a href="/ordinals/bitcoin-puppets">Bitcoin Puppets</a>
+    <meta property="og:title" content="${itemName} - ${collectionName}" />
+    <a href="/ordinals/${collectionSlug}">${collectionName}</a>
     <script>
       window.__DATA__ = {
         "rarityRank": ${options.rank},
@@ -66,10 +76,18 @@ function setupUpstreamMocks(options: {
   satflowRank: number
   satflowIncludeTraits?: boolean
   ordNetTraitFallback?: boolean
+  collectionSlug?: string
+  ordNetCollectionName?: string
+  satflowCollectionName?: string
+  itemName?: string
 }) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
+      const collectionSlug = options.collectionSlug ?? "bitcoin-puppets"
+      const ordNetCollectionName = options.ordNetCollectionName ?? "Bitcoin Puppets"
+      const satflowCollectionName = options.satflowCollectionName ?? "Bitcoin Puppets"
+      const itemName = options.itemName ?? "Bitcoin Puppet #2971"
       const url = typeof input === "string"
         ? input
         : input instanceof URL
@@ -108,7 +126,7 @@ function setupUpstreamMocks(options: {
           number: 2971,
           properties: {
             attributes: {
-              title: "Bitcoin Puppet #2971",
+              title: itemName,
             },
           },
         })
@@ -125,17 +143,17 @@ function setupUpstreamMocks(options: {
       if (url === `https://ord.net/inscription/${INSCRIPTION_ID}`) {
         return textResponse(options.ordNetTraitFallback
           ? `
-            collection:"bitcoin-puppets"
-            collectionHref:"/collection/bitcoin-puppets"
-            collection:{name:"Bitcoin Puppets",verified:true,items:5159}
-            item:{name:"Bitcoin Puppet #2971"}
-            verifiedGalleryTraitGroups:[{gallery:{id:"gallery-1",slug:"bitcoin-puppets",href:"/collection/bitcoin-puppets",name:"Bitcoin Puppets"},traits:[{type:"Background",value:"Dark Grey",count:800,percentage:15.5},{type:"Eyes",value:"Wide Open",count:338,percentage:6.5}]}]
+            collection:"${collectionSlug}"
+            collectionHref:"/collection/${collectionSlug}"
+            collection:{name:"${ordNetCollectionName}",verified:true,items:5159}
+            item:{name:"${itemName}"}
+            verifiedGalleryTraitGroups:[{gallery:{id:"gallery-1",slug:"${collectionSlug}",href:"/collection/${collectionSlug}",name:"${ordNetCollectionName}"},traits:[{type:"Background",value:"Dark Grey",count:800,percentage:15.5},{type:"Eyes",value:"Wide Open",count:338,percentage:6.5}]}]
           `
           : `
-            collection:"bitcoin-puppets"
-            collectionHref:"/collection/bitcoin-puppets"
-            collection:{name:"Bitcoin Puppets",verified:true}
-            item:{name:"Bitcoin Puppet #2971"}
+            collection:"${collectionSlug}"
+            collectionHref:"/collection/${collectionSlug}"
+            collection:{name:"${ordNetCollectionName}",verified:true}
+            item:{name:"${itemName}"}
           `)
       }
 
@@ -145,11 +163,14 @@ function setupUpstreamMocks(options: {
             withCount: options.satflowWithCount,
             rank: options.satflowRank,
             includeTraits: options.satflowIncludeTraits,
+            collectionSlug,
+            collectionName: satflowCollectionName,
+            itemName,
           })
         )
       }
 
-      if (url === "https://www.satflow.com/ordinals/bitcoin-puppets") {
+      if (url === `https://www.satflow.com/ordinals/${collectionSlug}`) {
         return textResponse(`
           <span>7D Change</span><strong>-18.1%</strong>
           <span>7D Volume</span><strong>0.42</strong>
@@ -387,5 +408,39 @@ describe("chronicle pipeline smoke", () => {
     expect(info).toMatchObject({ sat: 1403294488638613, content_length: 12345 })
     expect(info.attributes).toBeUndefined()
     expect(enrichment.rarity).toBeNull()
+  })
+
+  it("promotes the commercial collection name when ord.net only exposes a placeholder", async () => {
+    setupUpstreamMocks({
+      metadataStatus: 404,
+      metadataPayload: null,
+      satflowWithCount: true,
+      satflowRank: 321,
+      satflowIncludeTraits: true,
+      collectionSlug: "bitcoin-puppets",
+      ordNetCollectionName: "Parent #65592902",
+      satflowCollectionName: "Bitcoin Puppets",
+      itemName: "#65755909",
+    })
+
+    const { status, body } = await callChronicle(true)
+    expect(status).toBe(200)
+
+    const collectionContext = body.collection_context as Record<string, unknown>
+    const presentation = collectionContext.presentation as Record<string, unknown>
+    const profile = collectionContext.profile as Record<string, unknown>
+    const market = collectionContext.market as Record<string, unknown>
+    const debugInfo = body.debug_info as Record<string, unknown>
+    const ordNetMatch = market.ord_net_match as Record<string, unknown>
+    const satflowMatch = market.satflow_match as Record<string, unknown>
+    const mentionProviders = debugInfo.mention_providers as Record<string, unknown>
+    const googleTrends = mentionProviders.google_trends as Record<string, unknown>
+
+    expect(presentation.primary_label).toBe("Bitcoin Puppets")
+    expect(presentation.full_label).toBe("Bitcoin Puppets • #65755909")
+    expect(profile.name).toBe("Bitcoin Puppets")
+    expect(ordNetMatch.collection_name).toBe("Parent #65592902")
+    expect(satflowMatch.collection_name).toBe("Bitcoin Puppets")
+    expect(googleTrends.collection_name).toBe("Bitcoin Puppets")
   })
 })

@@ -309,10 +309,11 @@ async function handleStandardChronicle(
         },
       }
 
-  const collectionNameForResearch = 
-    collectionData.collectionContext.market.match?.collection_name
-    ?? collectionData.mentionSearchHints.collectionName
+  const collectionNameForResearch =
+    collectionData.collectionContext.profile?.name
     ?? collectionData.collectionContext.presentation.primary_label
+    ?? collectionData.mentionSearchHints.collectionName
+    ?? collectionData.collectionContext.market.match?.collection_name
 
   const [mentionSignals, webResearchResult] = lite
     ? [
@@ -689,10 +690,11 @@ async function handleStreamingChronicle(
       let mentionSourceCatalog: SourceCatalogItem[] = []
       let mentionDebugInfo: { mention_providers: Record<string, unknown> } | undefined
       
-      const collectionNameForResearch = 
-        collectionContext.collectionContext.market.match?.collection_name
-        ?? collectionContext.mentionSearchHints.collectionName
+      const collectionNameForResearch =
+        collectionContext.collectionContext.profile?.name
         ?? collectionContext.collectionContext.presentation.primary_label
+        ?? collectionContext.mentionSearchHints.collectionName
+        ?? collectionContext.collectionContext.market.match?.collection_name
 
       let webResearch: WebResearchContext | null = null
 

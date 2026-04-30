@@ -3,6 +3,7 @@ import type { InscriptionMeta } from "../../src/app/lib/types"
 import {
   buildCollectionProfile,
   buildMediaContext,
+  buildPresentation,
   findLegacyCollectionMembership,
   parseCoinGeckoNftOfficialXProfiles,
   parseOrdMarketOverlay,
@@ -11,6 +12,7 @@ import {
   parseSatflowInscriptionOverlay,
   parseSatflowCollectionStats,
   parseRegistryEntries,
+  resolveCommercialCollectionName,
   selectRegistryMatch,
   selectRegistryMatchFromMarketOverlay,
 } from "../../src/worker/agents/collections"
@@ -455,6 +457,149 @@ describe("Satflow inscription overlay parsing", () => {
   })
 })
 
+describe("commercial collection name resolution", () => {
+  it("prefers Satflow when ord.net returns a relational placeholder", () => {
+    expect(resolveCommercialCollectionName({
+      registryMatch: null,
+      ordNetMatch: {
+        collection_slug: "the-block",
+        collection_name: "Parent #65592902",
+        collection_href: "/collection/the-block",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      satflowMatch: {
+        collection_slug: "the-block",
+        collection_name: "The Block",
+        collection_href: "/ordinals/the-block",
+        verified: false,
+        source_ref: "https://www.satflow.com/ordinal/example",
+      },
+    })).toEqual({
+      name: "The Block",
+      source: "satflow",
+    })
+  })
+
+  it("prefers Satflow when ord.net only returns a numeric parent ref", () => {
+    expect(resolveCommercialCollectionName({
+      registryMatch: null,
+      ordNetMatch: {
+        collection_slug: "pupsogette",
+        collection_name: "#124517225",
+        collection_href: "/collection/pupsogette",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      satflowMatch: {
+        collection_slug: "pupsogette",
+        collection_name: "Pupsogette",
+        collection_href: "/ordinals/pupsogette",
+        verified: false,
+        source_ref: "https://www.satflow.com/ordinal/example",
+      },
+    })).toEqual({
+      name: "Pupsogette",
+      source: "satflow",
+    })
+  })
+
+  it("keeps ord.net when both names are commercial but differ", () => {
+    expect(resolveCommercialCollectionName({
+      registryMatch: null,
+      ordNetMatch: {
+        collection_slug: "runestone",
+        collection_name: "Runestone",
+        collection_href: "/collection/runestone",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      satflowMatch: {
+        collection_slug: "runestone",
+        collection_name: "Runestone Official",
+        collection_href: "/ordinals/runestone",
+        verified: false,
+        source_ref: "https://www.satflow.com/ordinal/example",
+      },
+    })).toEqual({
+      name: "Runestone",
+      source: "ord_net",
+    })
+  })
+
+  it("keeps ord.net when both sources agree on the commercial name", () => {
+    expect(resolveCommercialCollectionName({
+      registryMatch: null,
+      ordNetMatch: {
+        collection_slug: "nodemonkes",
+        collection_name: "NodeMonkes",
+        collection_href: "/collection/nodemonkes",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      satflowMatch: {
+        collection_slug: "nodemonkes",
+        collection_name: "NodeMonkes",
+        collection_href: "/ordinals/nodemonkes",
+        verified: false,
+        source_ref: "https://www.satflow.com/ordinal/example",
+      },
+    })).toEqual({
+      name: "NodeMonkes",
+      source: "ord_net",
+    })
+  })
+
+  it("keeps the current fallback when only placeholders exist", () => {
+    expect(resolveCommercialCollectionName({
+      registryMatch: null,
+      ordNetMatch: {
+        collection_slug: "mystery",
+        collection_name: "Parent #65592902",
+        collection_href: "/collection/mystery",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      satflowMatch: null,
+      fallbackTitle: "Inscription #7",
+    })).toEqual({
+      name: "Parent #65592902",
+      source: "ord_net",
+    })
+  })
+
+  it("keeps curated registry names as the strongest identity source", () => {
+    expect(resolveCommercialCollectionName({
+      registryMatch: {
+        matched_collection: "Quantum Cats",
+        match_type: "parent",
+        slug: "quantum_cats",
+        registry_ids: ["parent1i0"],
+        quality_state: "verified",
+        issues: [],
+        source_ref: "https://example.com/registry",
+      },
+      ordNetMatch: {
+        collection_slug: "quantum_cats",
+        collection_name: "Parent #999",
+        collection_href: "/collection/quantum_cats",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      satflowMatch: {
+        collection_slug: "quantum_cats",
+        collection_name: "Quantum Cats",
+        collection_href: "/ordinals/quantum-cats",
+        verified: false,
+        source_ref: "https://www.satflow.com/ordinal/example",
+      },
+    })).toEqual({
+      name: "Quantum Cats",
+      source: "registry",
+    })
+  })
+})
+
 describe("collection profile marketplace signals", () => {
   it("adds Satflow as collector-facing market evidence when stats are available", () => {
     const profile = buildCollectionProfile(
@@ -483,6 +628,67 @@ describe("collection profile marketplace signals", () => {
     }))
     expect(profile?.collector_signals.find((signal) => signal.label === "Satflow collection market")?.value)
       .toContain("supply 10K")
+  })
+
+  it("uses the resolved commercial name for the collection profile", () => {
+    const profile = buildCollectionProfile(
+      null,
+      {
+        collection_slug: "the-block",
+        collection_name: "Parent #65592902",
+        collection_href: "/collection/the-block",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      null,
+      null,
+      "2026-04-25T00:00:00.000Z",
+      "The Block"
+    )
+
+    expect(profile?.name).toBe("The Block")
+  })
+})
+
+describe("collection presentation", () => {
+  it("uses the resolved commercial name for primary and full labels", () => {
+    const presentation = buildPresentation(
+      {
+        id: "childi0",
+        number: 7,
+        properties: {
+          attributes: {
+            title: "Inscription #7",
+          },
+        },
+      },
+      null,
+      null,
+      null,
+      null,
+      {
+        collection_slug: "the-block",
+        collection_name: "The Block",
+        collection_href: "/ordinals/the-block",
+        item_name: "#65755909",
+        verified: false,
+        source_ref: "https://www.satflow.com/ordinal/example",
+      },
+      {
+        collection_slug: "the-block",
+        collection_name: "Parent #65592902",
+        collection_href: "/collection/the-block",
+        item_name: "#65755909",
+        verified: true,
+        source_ref: "https://ord.net/inscription/example",
+      },
+      null,
+      null,
+      "The Block"
+    )
+
+    expect(presentation.primary_label).toBe("The Block")
+    expect(presentation.full_label).toBe("The Block • #65755909")
   })
 })
 
