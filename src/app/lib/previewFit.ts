@@ -24,6 +24,7 @@ export type NonImagePrimaryMode =
 export interface NonImagePrimaryModeOptions {
   mode?: "default" | "compact"
   hasPreviewUrl?: boolean
+  preferPreviewForHtml?: boolean
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -56,7 +57,7 @@ export function resolveNonImagePrimaryMode(
   kind: MediaKind,
   options: NonImagePrimaryModeOptions = {}
 ): NonImagePrimaryMode {
-  if (kind === "html" && options.mode === "compact" && options.hasPreviewUrl) {
+  if (kind === "html" && options.hasPreviewUrl && (options.mode === "compact" || options.preferPreviewForHtml)) {
     return "preview"
   }
 

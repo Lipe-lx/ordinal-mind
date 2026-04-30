@@ -10,12 +10,20 @@ interface Props {
   loading?: "lazy" | "eager"
   compact?: boolean
   showMeta?: boolean
+  preferPreviewForHtml?: boolean
 }
 
 /**
  * InscriptionMedia component optimized with memoization.
  */
-export const InscriptionMedia = memo(({ inscription, className, loading = "lazy", compact = false, showMeta = true }: Props) => {
+export const InscriptionMedia = memo(({
+  inscription,
+  className,
+  loading = "lazy",
+  compact = false,
+  showMeta = true,
+  preferPreviewForHtml = false,
+}: Props) => {
   const [renderFallback, setRenderFallback] = useState(false)
   const contentType = inscription.content_type || "application/octet-stream"
   const kind = detectMediaKind(contentType)
@@ -40,6 +48,7 @@ export const InscriptionMedia = memo(({ inscription, className, loading = "lazy"
   if (isNonImageFitKind(kind)) {
     return (
       <NonImageFitPreview
+        key={`${inscription.inscription_id}:${compact ? "compact" : "default"}:${showMeta ? "meta" : "plain"}`}
         kind={kind}
         contentType={contentType}
         contentUrl={contentUrl}
@@ -50,6 +59,7 @@ export const InscriptionMedia = memo(({ inscription, className, loading = "lazy"
         maxTextPreviewBytes={12 * 1024}
         showMeta={showMeta}
         title={`Inscription #${inscription.inscription_number ?? "pending"}`}
+        preferPreviewForHtml={preferPreviewForHtml}
       />
     )
   }

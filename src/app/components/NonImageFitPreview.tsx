@@ -26,14 +26,161 @@ interface Props {
   showMeta?: boolean
   title?: string
   isFullscreen?: boolean
+  preferPreviewForHtml?: boolean
 }
 
 const DEFAULT_MAX_TEXT_PREVIEW_BYTES = 24 * 1024
 const DEFAULT_EMBED_VIEWPORT_SIZE = 512
 const COMPACT_EMBED_VIEWPORT_SIZE = 384
+const HTML_PREVIEW_CACHE_VERSION = 1
+const HTML_PREVIEW_CACHE_TTL_MS = 12 * 60 * 60 * 1000
+const HTML_PREVIEW_STORAGE_PREFIX = "ordinal-mind_html-preview:"
+
+type HtmlPreviewPreference = "html" | "preview"
+
+interface HtmlPreviewCacheEntry {
+  version: number
+  savedAt: string
+  preferredMode?: HtmlPreviewPreference
+  srcDoc?: string
+}
+
+const MEMORY_HTML_PREVIEW_CACHE = new Map<string, HtmlPreviewCacheEntry>()
 
 function getEmbedViewportSize(mode: NonImageMode): number {
   return mode === "compact" ? COMPACT_EMBED_VIEWPORT_SIZE : DEFAULT_EMBED_VIEWPORT_SIZE
+}
+
+function buildHtmlPreviewStorageKey(contentUrl: string): string {
+  return `${HTML_PREVIEW_STORAGE_PREFIX}${contentUrl}`
+}
+
+function getPreviewSessionStorage(): Storage | null {
+  try {
+    return typeof sessionStorage === "undefined" ? null : sessionStorage
+  } catch {
+    return null
+  }
+}
+
+function isValidHtmlPreviewCacheEntry(entry: unknown): entry is HtmlPreviewCacheEntry {
+  if (!entry || typeof entry !== "object") return false
+  const candidate = entry as Partial<HtmlPreviewCacheEntry>
+  if (candidate.version !== HTML_PREVIEW_CACHE_VERSION) return false
+  if (!candidate.savedAt) return false
+
+  const age = Date.now() - Date.parse(candidate.savedAt)
+  return Number.isFinite(age) && age >= 0 && age < HTML_PREVIEW_CACHE_TTL_MS
+}
+
+function readHtmlPreviewCache(contentUrl: string): HtmlPreviewCacheEntry | null {
+  const cacheKey = buildHtmlPreviewStorageKey(contentUrl)
+  const memorySrcDoc = MEMORY_HTML_PREVIEW_CACHE.get(cacheKey)?.srcDoc
+  const fromMemory = MEMORY_HTML_PREVIEW_CACHE.get(cacheKey)
+  if (isValidHtmlPreviewCacheEntry(fromMemory)) {
+    return fromMemory
+  }
+
+  const storage = getPreviewSessionStorage()
+  if (!storage) return null
+
+  try {
+    const raw = storage.getItem(cacheKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!isValidHtmlPreviewCacheEntry(parsed)) {
+      storage.removeItem(cacheKey)
+      return null
+    }
+
+    const merged: HtmlPreviewCacheEntry = {
+      version: parsed.version,
+      savedAt: parsed.savedAt,
+      preferredMode: parsed.preferredMode,
+      srcDoc: memorySrcDoc,
+    }
+    MEMORY_HTML_PREVIEW_CACHE.set(cacheKey, merged)
+    return merged
+  } catch {
+    return null
+  }
+}
+
+function writeHtmlPreviewCache(
+  contentUrl: string,
+  patch: Partial<Pick<HtmlPreviewCacheEntry, "preferredMode" | "srcDoc">>
+): void {
+  const cacheKey = buildHtmlPreviewStorageKey(contentUrl)
+  const existing = readHtmlPreviewCache(contentUrl)
+  const next: HtmlPreviewCacheEntry = {
+    version: HTML_PREVIEW_CACHE_VERSION,
+    savedAt: new Date().toISOString(),
+    preferredMode: patch.preferredMode ?? existing?.preferredMode,
+    srcDoc: patch.srcDoc ?? existing?.srcDoc,
+  }
+
+  MEMORY_HTML_PREVIEW_CACHE.set(cacheKey, next)
+
+  const storage = getPreviewSessionStorage()
+  if (!storage) return
+
+  try {
+    storage.setItem(
+      cacheKey,
+      JSON.stringify({
+        version: next.version,
+        savedAt: next.savedAt,
+        preferredMode: next.preferredMode,
+      } satisfies Omit<HtmlPreviewCacheEntry, "srcDoc">)
+    )
+  } catch {
+    // Ignore storage quota failures and continue with memory cache only.
+  }
+}
+
+function createInitialRenderState(params: {
+  kind: MediaKind
+  mode: NonImageMode
+  contentUrl: string
+  previewUrl?: string
+  preferPreviewForHtml?: boolean
+}): RenderState {
+  const primaryMode = resolveNonImagePrimaryMode(params.kind, {
+    mode: params.mode,
+    hasPreviewUrl: Boolean(params.previewUrl),
+    preferPreviewForHtml: params.preferPreviewForHtml,
+  })
+
+  if (primaryMode === "text") {
+    return { status: "loading" }
+  }
+
+  if (primaryMode === "html") {
+    const cached = readHtmlPreviewCache(params.contentUrl)
+
+    if (cached?.preferredMode === "preview" && params.previewUrl) {
+      return { status: "preview", url: params.previewUrl }
+    }
+
+    if (cached?.srcDoc) {
+      return { status: "html", srcDoc: cached.srcDoc }
+    }
+
+    return { status: "loading" }
+  }
+
+  if (params.kind === "unknown") {
+    if (params.previewUrl) {
+      return { status: "preview_image", imageUrl: params.contentUrl, iframeUrl: params.previewUrl }
+    }
+    return { status: "preview", url: params.contentUrl }
+  }
+
+  if (params.previewUrl) {
+    return { status: "preview", url: params.previewUrl }
+  }
+
+  return { status: "fallback", reason: "Inline fit preview is unavailable for this media type." }
 }
 
 export function NonImageFitPreview({
@@ -48,34 +195,23 @@ export function NonImageFitPreview({
   showMeta = true,
   title,
   isFullscreen = false,
+  preferPreviewForHtml = false,
 }: Props) {
-  const [state, setState] = useState<RenderState>(() => {
-    const pMode = resolveNonImagePrimaryMode(kind, { mode, hasPreviewUrl: Boolean(previewUrl) })
-    if (pMode === "text" || pMode === "html") {
-      return { status: "loading" }
-    }
-
-    if (kind === "unknown") {
-      if (previewUrl) {
-        return { status: "preview_image", imageUrl: contentUrl, iframeUrl: previewUrl }
-      }
-      return { status: "preview", url: contentUrl }
-    }
-
-    if (previewUrl) {
-      return { status: "preview", url: previewUrl }
-    }
-
-    return { status: "fallback", reason: "Inline fit preview is unavailable for this media type." }
-  })
+  const [state, setState] = useState<RenderState>(() =>
+    createInitialRenderState({ kind, mode, contentUrl, previewUrl, preferPreviewForHtml })
+  )
   const [scaleState, setScaleState] = useState({ scale: 1, clipped: false })
   const [surfaceSize, setSurfaceSize] = useState(() => {
     const viewportSize = isFullscreen ? 1024 : getEmbedViewportSize(mode)
     return { width: viewportSize, height: viewportSize }
   })
   const primaryMode = useMemo(
-    () => resolveNonImagePrimaryMode(kind, { mode, hasPreviewUrl: Boolean(previewUrl) }),
-    [kind, mode, previewUrl]
+    () => resolveNonImagePrimaryMode(kind, {
+      mode,
+      hasPreviewUrl: Boolean(previewUrl),
+      preferPreviewForHtml,
+    }),
+    [kind, mode, preferPreviewForHtml, previewUrl]
   )
   const isEmojiText = state.status === "text" && isEmojiOnly(state.text)
 
@@ -160,6 +296,15 @@ export function NonImageFitPreview({
     }
 
     if (primaryMode === "html") {
+      const cached = readHtmlPreviewCache(contentUrl)
+      if (cached?.srcDoc) {
+        window.clearTimeout(timeoutId)
+        return () => {
+          cancelled = true
+          controller.abort()
+        }
+      }
+
       void (async () => {
         try {
           const res = await fetch(contentUrl, {
@@ -178,8 +323,10 @@ export function NonImageFitPreview({
           }
 
           const viewportSize = isFullscreen ? 1024 : getEmbedViewportSize(mode)
+          const srcDoc = buildSandboxedSrcDoc(raw, contentType, contentUrl)
+          writeHtmlPreviewCache(contentUrl, { srcDoc })
           setSurfaceSize({ width: viewportSize, height: viewportSize })
-          setState({ status: "html", srcDoc: buildSandboxedSrcDoc(raw, contentType, contentUrl) })
+          setState({ status: "html", srcDoc })
         } catch (error) {
           if ((error as DOMException).name !== "AbortError") {
             setPreviewFallbackState("Could not render this inscription inline.")
@@ -280,11 +427,12 @@ export function NonImageFitPreview({
 
     if (hasRenderableContent) {
       htmlRenderedRef.current = true
+      writeHtmlPreviewCache(contentUrl, { preferredMode: "html" })
     }
 
     setScaleState({ scale: safeScale, clipped })
     setSurfaceSize({ width: contentWidth, height: contentHeight })
-  }, [state.status])
+  }, [contentUrl, state.status])
 
   const scheduleHtmlScaleProbes = useCallback(() => {
     clearHtmlProbeTimeouts()
@@ -359,6 +507,9 @@ export function NonImageFitPreview({
       const hasRenderableContent = doc ? isRenderableHtmlDocument(doc) : false
 
       if (!doc || doc.readyState !== "complete" || !htmlRenderedRef.current || !hasRenderableContent) {
+        if (previewUrl) {
+          writeHtmlPreviewCache(contentUrl, { preferredMode: "preview" })
+        }
         setPreviewFallbackState("Could not load this inscription render inline.")
       }
     }, 7000)
@@ -371,7 +522,7 @@ export function NonImageFitPreview({
       htmlRenderedRef.current = false
       clearHtmlProbeTimeouts()
     }
-  }, [clearHtmlProbeTimeouts, scheduleHtmlScaleProbes, setPreviewFallbackState, state.status])
+  }, [clearHtmlProbeTimeouts, contentUrl, previewUrl, scheduleHtmlScaleProbes, setPreviewFallbackState, state.status])
 
   const rootClassName = [
     "non-image-fit-preview",

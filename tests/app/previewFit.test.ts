@@ -81,6 +81,19 @@ describe("preview fit helpers", () => {
     expect(resolveNonImagePrimaryMode("html", { mode: "default", hasPreviewUrl: true })).toBe("html")
   })
 
+  it("can prefer ordinals preview for html thumbnails even outside compact mode", () => {
+    expect(resolveNonImagePrimaryMode("html", {
+      mode: "default",
+      hasPreviewUrl: true,
+      preferPreviewForHtml: true,
+    })).toBe("preview")
+    expect(resolveNonImagePrimaryMode("html", {
+      mode: "default",
+      hasPreviewUrl: false,
+      preferPreviewForHtml: true,
+    })).toBe("html")
+  })
+
   it("injects base href in sandboxed html srcDoc for relative asset resolution", () => {
     const srcDoc = buildSandboxedSrcDoc(
       "<html><head></head><body><img src=\"./asset.png\" /></body></html>",

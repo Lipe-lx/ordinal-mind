@@ -90,7 +90,12 @@ export const GenealogyNode = memo(({ id, inscription, label, isRoot, compact, is
           </motion.div>
         )}
         <div className="node-image" style={{ transform: "translateZ(10px)", position: "relative" }}>
-          <InscriptionMedia inscription={inscription} compact={Boolean(compact)} showMeta={false} />
+          <InscriptionMedia
+            inscription={inscription}
+            compact={Boolean(compact)}
+            showMeta={false}
+            preferPreviewForHtml
+          />
           {/* Click capture overlay to prevent iframes/media from swallowing events */}
           <div style={{ position: "absolute", inset: 0, zIndex: 20 }} />
           {label && !compact && (
