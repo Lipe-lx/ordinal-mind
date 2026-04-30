@@ -5,6 +5,7 @@ import {
   formatContentTypeLabel,
   getMediaFallbackReason,
   getMediaPreviewMode,
+  isEmojiOnly,
   isTextLikeContentType,
 } from "../../src/app/lib/media"
 
@@ -37,5 +38,12 @@ describe("media helpers", () => {
     expect(formatContentTypeLabel("image/jpeg; charset=binary")).toBe("JPG")
     expect(formatContentTypeLabel("image/svg+xml")).toBe("SVG")
     expect(formatContentTypeLabel("image/webp")).toBe("WEBP")
+  })
+
+  it("recognizes emoji-only text previews without flagging regular text", () => {
+    expect(isEmojiOnly("🔥")).toBe(true)
+    expect(isEmojiOnly("👨‍👩‍👧‍👦")).toBe(true)
+    expect(isEmojiOnly("gm")).toBe(false)
+    expect(isEmojiOnly("🔥 gm")).toBe(false)
   })
 })

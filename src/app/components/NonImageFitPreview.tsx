@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { isEmojiOnly } from "../lib/media"
 import type { MediaKind } from "../lib/types"
 import { buildSandboxedSrcDoc, computeFitScale, resolveNonImagePrimaryMode } from "../lib/previewFit"
 
@@ -73,6 +74,7 @@ export function NonImageFitPreview({
     return { width: viewportSize, height: viewportSize }
   })
   const primaryMode = useMemo(() => resolveNonImagePrimaryMode(kind), [kind])
+  const isEmojiText = state.status === "text" && isEmojiOnly(state.text)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -204,19 +206,29 @@ export function NonImageFitPreview({
 
     const stage = stageRef.current
     const textSurface = textSurfaceRef.current
+    const effectiveMinScale = isEmojiText ? 0.1 : minScale
+    const emojiFontSize = isEmojiText
+      ? `${Math.max(64, Math.floor(Math.min(stage.clientWidth, stage.clientHeight) * 0.92))}px`
+      : null
+
+    if (emojiFontSize) {
+      textSurface.style.setProperty("--emoji-font-size", emojiFontSize)
+    } else {
+      textSurface.style.removeProperty("--emoji-font-size")
+    }
 
     const fit = computeFitScale({
       containerWidth: stage.clientWidth,
       containerHeight: stage.clientHeight,
       contentWidth: textSurface.scrollWidth,
       contentHeight: textSurface.scrollHeight,
-      minScale,
+      minScale: effectiveMinScale,
       maxScale: 1,
     })
 
     setScaleState({ scale: fit.scale, clipped: fit.clipped })
     setSurfaceSize({ width: textSurface.scrollWidth, height: textSurface.scrollHeight })
-  }, [minScale, state.status])
+  }, [isEmojiText, minScale, state.status])
 
   const recomputeHtmlScale = useCallback(() => {
     if (state.status !== "html") return
@@ -325,6 +337,7 @@ export function NonImageFitPreview({
     mode === "compact" ? "is-compact" : "",
     state.status === "html" ? "is-html" : "",
     state.status === "text" ? "is-text-content" : "",
+    isEmojiText ? "is-emoji-only" : "",
     scaleState.clipped ? "is-clipped" : "",
     className ?? "",
   ]
@@ -445,7 +458,13 @@ export function NonImageFitPreview({
       <div className="non-image-fit-stage" ref={stageRef}>
         <div
           ref={textSurfaceRef}
-          className="non-image-fit-canvas non-image-fit-canvas--text"
+          className={[
+            "non-image-fit-canvas",
+            "non-image-fit-canvas--text",
+            isEmojiText ? "non-image-fit-canvas--emoji" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           style={{
             width: `${surfaceSize.width}px`,
             height: `${surfaceSize.height}px`,
@@ -455,7 +474,7 @@ export function NonImageFitPreview({
           <pre>{state.text}</pre>
         </div>
       </div>
-      {showMeta && mode !== "compact" ? (
+      {showMeta && mode !== "compact" && !isEmojiText ? (
         <div className="non-image-fit-meta">
           <span>{contentType}</span>
           {state.truncated ? <span>Preview truncated</span> : null}
