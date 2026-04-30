@@ -85,6 +85,7 @@ export function NonImageFitPreview({
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const htmlLoadTimeoutRef = useRef<number | null>(null)
   const htmlProbeTimeoutsRef = useRef<number[]>([])
+  const htmlRenderedRef = useRef(false)
 
   const minScale = useMemo(() => {
     if (fitPolicy !== "readable") return 0.5
@@ -270,11 +271,16 @@ export function NonImageFitPreview({
 
     const stageWidth = Math.max(1, stageRef.current.clientWidth)
     const stageHeight = Math.max(1, stageRef.current.clientHeight)
+    const hasRenderableContent = isRenderableHtmlDocument(doc, contentWidth, contentHeight)
 
     // HTML/SVG should fit within the preview box footprint (contain) to ensure visibility.
     const containScale = Math.min(stageWidth / contentWidth, stageHeight / contentHeight)
     const safeScale = Number.isFinite(containScale) && containScale > 0 ? Math.min(containScale, 1) : 1
     const clipped = false
+
+    if (hasRenderableContent) {
+      htmlRenderedRef.current = true
+    }
 
     setScaleState({ scale: safeScale, clipped })
     setSurfaceSize({ width: contentWidth, height: contentHeight })
@@ -345,20 +351,24 @@ export function NonImageFitPreview({
   useEffect(() => {
     if (state.status !== "html") return
 
+    htmlRenderedRef.current = false
     scheduleHtmlScaleProbes()
 
     htmlLoadTimeoutRef.current = window.setTimeout(() => {
       const doc = iframeRef.current?.contentDocument
-      if (!doc || doc.readyState !== "complete") {
+      const hasRenderableContent = doc ? isRenderableHtmlDocument(doc) : false
+
+      if (!doc || doc.readyState !== "complete" || !htmlRenderedRef.current || !hasRenderableContent) {
         setPreviewFallbackState("Could not load this inscription render inline.")
       }
-    }, 9000)
+    }, 7000)
 
     return () => {
       if (htmlLoadTimeoutRef.current !== null) {
         window.clearTimeout(htmlLoadTimeoutRef.current)
         htmlLoadTimeoutRef.current = null
       }
+      htmlRenderedRef.current = false
       clearHtmlProbeTimeouts()
     }
   }, [clearHtmlProbeTimeouts, scheduleHtmlScaleProbes, setPreviewFallbackState, state.status])
@@ -622,4 +632,28 @@ function normalizeSingleMediaHtmlLayout(doc: Document): void {
       applyFillStyle(nestedMedia[0])
     }
   }
+}
+
+function isRenderableHtmlDocument(
+  doc: Document,
+  measuredWidth?: number,
+  measuredHeight?: number
+): boolean {
+  const body = doc.body
+  if (!body) return false
+
+  if ((measuredWidth ?? 0) > 1 || (measuredHeight ?? 0) > 1) {
+    return true
+  }
+
+  const visibleText = body.textContent?.replace(/\s+/g, "") ?? ""
+  if (visibleText.length > 0) {
+    return true
+  }
+
+  return Boolean(
+    body.querySelector(
+      "img,svg,canvas,video,iframe,audio,object,embed,p,pre,code,blockquote,h1,h2,h3,h4,h5,h6,section,article,main,div,span"
+    )
+  )
 }
