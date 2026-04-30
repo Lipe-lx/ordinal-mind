@@ -1,6 +1,7 @@
 import type { Chronicle } from "../types"
 import type { ByokConfig } from "./index"
 import type { WikiPage, WikiPageDraft } from "../wikiTypes"
+import { fetchGeminiWithRetry } from "./geminiRetry"
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
@@ -251,7 +252,7 @@ async function runAnthropicPrompt(config: ByokConfig, prompt: string): Promise<s
 
 async function runGeminiPrompt(config: ByokConfig, prompt: string): Promise<string> {
   const url = `${GEMINI_BASE_URL}/${config.model}:generateContent?key=${config.key}`
-  const response = await fetch(url, {
+  const response = await fetchGeminiWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -261,6 +262,8 @@ async function runGeminiPrompt(config: ByokConfig, prompt: string): Promise<stri
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 900 },
     }),
+  }, {
+    requestLabel: "gemini_wiki_draft",
   })
 
   if (!response.ok) {

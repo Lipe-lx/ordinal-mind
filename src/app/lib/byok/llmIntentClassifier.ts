@@ -1,6 +1,7 @@
 import type { ByokConfig } from "./index"
 import type { ChatIntentDecision, ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 import type { ChatMessage } from "./chatTypes"
+import { fetchGeminiWithRetry } from "./geminiRetry"
 
 type LlmIntentDecision = Pick<ChatIntentDecision, "intent" | "confidence" | "mode" | "reason">
 
@@ -196,7 +197,7 @@ async function requestAnthropic(params: ClassifierParams, signal: AbortSignal): 
 async function requestGemini(params: ClassifierParams, signal: AbortSignal): Promise<LlmIntentDecision | null> {
   const { system, user } = buildClassifierMessages(params)
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${params.config.model}:generateContent?key=${params.config.key}`
-  const res = await fetch(url, {
+  const res = await fetchGeminiWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -219,6 +220,8 @@ async function requestGemini(params: ClassifierParams, signal: AbortSignal): Pro
       },
     }),
     signal,
+  }, {
+    requestLabel: "gemini_intent_classifier",
   })
 
   if (!res.ok) throw await buildProviderError("Gemini", res)

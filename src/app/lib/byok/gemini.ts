@@ -13,6 +13,7 @@ import type { ChatMessage } from "./chatTypes"
 import { buildChatTurnPrompt, INITIAL_NARRATIVE_PROMPT } from "./prompt"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 import type { ChatToolPolicyDecision } from "./toolPolicy"
+import { fetchGeminiWithRetry } from "./geminiRetry"
 import { 
   sanitizeGeminiSchema, 
   sanitizeGeminiTurnOrder, 
@@ -218,11 +219,13 @@ export class GeminiAdapter implements LLMAdapter {
         }
       }
 
-      const res = await fetch(url, {
+      const res = await fetchGeminiWithRetry(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal,
+      }, {
+        requestLabel: stream ? "gemini_stream_generate_content" : "gemini_generate_content",
       })
 
       if (!res.ok) {
@@ -334,11 +337,13 @@ export class GeminiAdapter implements LLMAdapter {
           generationConfig: { maxOutputTokens: 2048 },
           ...(useSystemInstruction ? { system_instruction: { parts: [{ text: prepared.systemPrompt }] } } : {})
         }
-        const finalRes = await fetch(url, {
+        const finalRes = await fetchGeminiWithRetry(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(finalBody),
           signal,
+        }, {
+          requestLabel: "gemini_generate_content_final_answer",
         })
         if (finalRes.ok) {
           const finalData = (await finalRes.json()) as GeminiResponse
