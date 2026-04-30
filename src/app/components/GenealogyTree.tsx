@@ -1,7 +1,12 @@
 import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
-import { buildGenealogyConnections, buildGenealogyLevels, GENEALOGY_VISIBLE_LIMITS } from "../lib/genealogy"
+import {
+  buildGenealogyConnections,
+  buildGenealogyDescendantColumns,
+  buildGenealogyLevels,
+  GENEALOGY_VISIBLE_LIMITS,
+} from "../lib/genealogy"
 import { computeGenealogyAutoFitScale, GENEALOGY_LAYOUT_SETTLE_DELAYS_MS } from "../lib/genealogyLayout"
 import { formatContentTypeLabel } from "../lib/media"
 import { GenealogyNode } from "./GenealogyNode"
@@ -99,9 +104,12 @@ interface Props {
   chronicle: ChronicleResponse
 }
 
+type GenealogyViewMode = "tree" | "grouped"
+
 export const GenealogyTree = memo(({ chronicle }: Props) => {
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number, y: number }>>({})
+  const [viewMode, setViewMode] = useState<GenealogyViewMode>("grouped")
   
   const containerRef = useRef<HTMLDivElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
@@ -158,6 +166,12 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const connections = useMemo(
     () => buildGenealogyConnections(levels, root.inscription_id),
     [levels, root.inscription_id]
+  )
+  const visibleChildren = levels.find((level) => level.id === "child")?.items ?? []
+  const visibleGrandchildren = levels.find((level) => level.id === "grandchild")?.items ?? []
+  const descendantColumns = useMemo(
+    () => buildGenealogyDescendantColumns(visibleChildren, visibleGrandchildren),
+    [visibleChildren, visibleGrandchildren]
   )
 
   const isMeasuring = useRef(false)
@@ -299,6 +313,11 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     return clearPendingLayoutSync
   }, [chronicle.meta.inscription_id, clearPendingLayoutSync, syncTreeLayout])
 
+  useEffect(() => {
+    hasUserInteracted.current = false
+    syncTreeLayout(true)
+  }, [syncTreeLayout, viewMode])
+
   // Handle Zoom
   useEffect(() => {
     const container = containerRef.current
@@ -385,6 +404,26 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       onDoubleClick={handleDoubleClick}
     >
       <GenealogyBackground x={bgX} y={bgY} />
+      <div className="genealogy-toolbar">
+        <div className="genealogy-view-toggle" role="tablist" aria-label="Genealogy view mode">
+          <button
+            type="button"
+            className={`genealogy-view-toggle-btn ${viewMode === "grouped" ? "is-active" : ""}`}
+            onClick={() => setViewMode("grouped")}
+            aria-pressed={viewMode === "grouped"}
+          >
+            Grouped
+          </button>
+          <button
+            type="button"
+            className={`genealogy-view-toggle-btn ${viewMode === "tree" ? "is-active" : ""}`}
+            onClick={() => setViewMode("tree")}
+            aria-pressed={viewMode === "tree"}
+          >
+            Lineage
+          </button>
+        </div>
+      </div>
 
       <motion.div 
         className="genealogy-tree" 
@@ -481,37 +520,88 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
           />
         </div>
 
-        {/* Children Row */}
-        <div className="genealogy-row children" id="children-row">
-          <div className="children-grid">
-            {children.slice(0, GENEALOGY_VISIBLE_LIMITS.children).map((child) => (
-              <GenealogyNode 
-                key={child.inscription_id}
-                id={`node-${child.inscription_id}`}
-                inscription={child}
-                compact
-                onTap={() => setSelectedNode(child)}
-              />
+        {viewMode === "tree" ? (
+          <div className="genealogy-row descendants" id="descendants-row">
+            {descendantColumns.columns.map(({ child, grandchildren: groupedGrandchildren }) => (
+              <div key={child.inscription_id} className="descendant-column">
+                <GenealogyNode
+                  id={`node-${child.inscription_id}`}
+                  inscription={child}
+                  compact
+                  onTap={() => setSelectedNode(child)}
+                />
+                <div className="descendant-grandchildren">
+                  {groupedGrandchildren.map((grandchild) => (
+                    <GenealogyNode
+                      key={grandchild.inscription_id}
+                      id={`node-${grandchild.inscription_id}`}
+                      inscription={grandchild}
+                      compact
+                      onTap={() => setSelectedNode(grandchild)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
-            {totalChildren > GENEALOGY_VISIBLE_LIMITS.children && renderMoreCard(totalChildren - GENEALOGY_VISIBLE_LIMITS.children, true)}
+            {descendantColumns.unassignedGrandchildren.length > 0 && (
+              <div className="descendant-column descendant-column--unassigned">
+                <div className="descendant-grandchildren">
+                  {descendantColumns.unassignedGrandchildren.map((grandchild) => (
+                    <GenealogyNode
+                      key={grandchild.inscription_id}
+                      id={`node-${grandchild.inscription_id}`}
+                      inscription={grandchild}
+                      compact
+                      onTap={() => setSelectedNode(grandchild)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {totalChildren > GENEALOGY_VISIBLE_LIMITS.children && (
+              <div className="descendant-column descendant-column--overflow">
+                {renderMoreCard(totalChildren - GENEALOGY_VISIBLE_LIMITS.children, true)}
+              </div>
+            )}
+            {totalGrandchildren > GENEALOGY_VISIBLE_LIMITS.grandchildren && (
+              <div className="descendant-column descendant-column--overflow">
+                {renderMoreCard(totalGrandchildren - GENEALOGY_VISIBLE_LIMITS.grandchildren, true)}
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="genealogy-row children" id="children-row">
+              <div className="children-grid">
+                {visibleChildren.map((child) => (
+                  <GenealogyNode
+                    key={child.inscription_id}
+                    id={`node-${child.inscription_id}`}
+                    inscription={child}
+                    compact
+                    onTap={() => setSelectedNode(child)}
+                  />
+                ))}
+                {totalChildren > GENEALOGY_VISIBLE_LIMITS.children && renderMoreCard(totalChildren - GENEALOGY_VISIBLE_LIMITS.children, true)}
+              </div>
+            </div>
 
-        {/* Grandchildren Row */}
-        <div className="genealogy-row grandchildren" id="grandchildren-row">
-          <div className="children-grid">
-            {grandchildren.slice(0, GENEALOGY_VISIBLE_LIMITS.grandchildren).map((grandchild) => (
-              <GenealogyNode
-                key={grandchild.inscription_id}
-                id={`node-${grandchild.inscription_id}`}
-                inscription={grandchild}
-                compact
-                onTap={() => setSelectedNode(grandchild)}
-              />
-            ))}
-            {totalGrandchildren > GENEALOGY_VISIBLE_LIMITS.grandchildren && renderMoreCard(totalGrandchildren - GENEALOGY_VISIBLE_LIMITS.grandchildren, true)}
-          </div>
-        </div>
+            <div className="genealogy-row grandchildren" id="grandchildren-row">
+              <div className="children-grid">
+                {visibleGrandchildren.map((grandchild) => (
+                  <GenealogyNode
+                    key={grandchild.inscription_id}
+                    id={`node-${grandchild.inscription_id}`}
+                    inscription={grandchild}
+                    compact
+                    onTap={() => setSelectedNode(grandchild)}
+                  />
+                ))}
+                {totalGrandchildren > GENEALOGY_VISIBLE_LIMITS.grandchildren && renderMoreCard(totalGrandchildren - GENEALOGY_VISIBLE_LIMITS.grandchildren, true)}
+              </div>
+            </div>
+          </>
+        )}
       </motion.div>
 
       {/* Overlays */}

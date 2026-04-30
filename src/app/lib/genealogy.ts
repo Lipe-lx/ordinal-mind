@@ -27,6 +27,11 @@ export interface GenealogyConnection {
   key: string
 }
 
+export interface GenealogyDescendantColumn {
+  child: RelatedInscriptionSummary
+  grandchildren: RelatedInscriptionSummary[]
+}
+
 export function getGenealogyNodeDomId(
   inscriptionId: string,
   rootInscriptionId: string
@@ -130,4 +135,39 @@ export function buildGenealogyConnections(
       return []
     })
   })
+}
+
+export function buildGenealogyDescendantColumns(
+  children: RelatedInscriptionSummary[],
+  grandchildren: RelatedInscriptionSummary[]
+): {
+  columns: GenealogyDescendantColumn[]
+  unassignedGrandchildren: RelatedInscriptionSummary[]
+} {
+  const columns = children.map((child) => ({
+    child,
+    grandchildren: [] as RelatedInscriptionSummary[],
+  }))
+
+  const childColumnById = new Map(columns.map((column) => [column.child.inscription_id, column]))
+  const unassignedGrandchildren: RelatedInscriptionSummary[] = []
+
+  for (const grandchild of grandchildren) {
+    const relatedToIds = grandchild.related_to_ids ?? []
+    const anchorColumn = relatedToIds
+      .map((id) => childColumnById.get(id))
+      .find((column): column is GenealogyDescendantColumn => Boolean(column))
+
+    if (anchorColumn) {
+      anchorColumn.grandchildren.push(grandchild)
+      continue
+    }
+
+    unassignedGrandchildren.push(grandchild)
+  }
+
+  return {
+    columns,
+    unassignedGrandchildren,
+  }
 }

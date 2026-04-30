@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   buildGenealogyConnections,
+  buildGenealogyDescendantColumns,
   buildGenealogyLevels,
   GENEALOGY_VISIBLE_LIMITS,
   getGenealogyNodeDomId,
@@ -110,5 +111,23 @@ describe("genealogy helpers", () => {
 
     expect(levels.find((level) => level.id === "child")?.items).toHaveLength(GENEALOGY_VISIBLE_LIMITS.children)
     expect(levels.find((level) => level.id === "grandchild")?.items).toHaveLength(GENEALOGY_VISIBLE_LIMITS.grandchildren)
+  })
+
+  it("groups grandchildren under the child that generated them", () => {
+    const childOne = makeSummary("child-1i0", 8)
+    const childTwo = makeSummary("child-2i0", 9)
+    const grandchildOne = makeSummary("grandchild-1i0", 10, ["child-1i0"])
+    const grandchildTwo = makeSummary("grandchild-2i0", 11, ["child-2i0"])
+    const unassignedGrandchild = makeSummary("grandchild-3i0", 12)
+
+    const result = buildGenealogyDescendantColumns(
+      [childOne, childTwo],
+      [grandchildOne, grandchildTwo, unassignedGrandchild]
+    )
+
+    expect(result.columns).toHaveLength(2)
+    expect(result.columns[0]?.grandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-1i0"])
+    expect(result.columns[1]?.grandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-2i0"])
+    expect(result.unassignedGrandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-3i0"])
   })
 })

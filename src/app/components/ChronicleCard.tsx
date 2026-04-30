@@ -88,11 +88,7 @@ export function ChronicleCard({
           <CollectorSignalsDebug debugInfo={chronicle.debug_info.mention_providers} />
         </details>
       )}
-      {messages.length === 0 && !hasKey && (
-        <p className="chronicle-card-hint" style={{ marginBottom: "var(--space-md)" }}>
-          🔑 Set your API key to generate narratives
-        </p>
-      )}
+
       {/* Tab Switcher / Expansion Toggles */}
       <div className="chronicle-tabs">
         <button 
