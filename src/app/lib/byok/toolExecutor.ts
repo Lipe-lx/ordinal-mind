@@ -43,6 +43,8 @@ export class ToolExecutor {
   private maxCalls = 12
   private keys: ResearchKeys
   private onLog?: (log: ResearchLog) => void
+  private resultCache = new Map<string, SearchToolResult>()
+  private cacheEntries: Array<{ toolName: string; args: Record<string, unknown>; result: SearchToolResult }> = []
 
   constructor(keys: ResearchKeys, onLog?: (log: ResearchLog) => void) {
     this.keys = keys
@@ -55,6 +57,21 @@ export class ToolExecutor {
 
   async executeTool(toolName: string, args: Record<string, unknown>): Promise<SearchToolResult> {
     const id = Math.random().toString(36).substring(2, 9)
+    const sanitizedArgs = sanitizeArguments(args)
+    const cacheKey = buildToolCacheKey(toolName, sanitizedArgs)
+    const exactCached = this.resultCache.get(cacheKey)
+
+    if (exactCached) {
+      const cachedResult = cloneToolResult(exactCached)
+      this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: cachedResult.partial ? "partial" : "done", result: `${cachedResult.summary ?? toolName} (cache hit)` })
+      return cachedResult
+    }
+
+    const reusedResult = this.tryReuseToolResult(toolName, sanitizedArgs)
+    if (reusedResult) {
+      this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: reusedResult.partial ? "partial" : "done", result: `${reusedResult.summary ?? toolName} (reused)` })
+      return reusedResult
+    }
     
     if (this.callCount >= this.maxCalls) {
       const error = "Maximum tool call limit reached."
@@ -63,7 +80,6 @@ export class ToolExecutor {
     }
     
     this.callCount++
-    const sanitizedArgs = sanitizeArguments(args)
     console.log(`[ToolExecutor] Executing ${toolName} (Call ${this.callCount}/${this.maxCalls})`, sanitizedArgs)
     this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: "running" })
 
@@ -85,7 +101,7 @@ export class ToolExecutor {
           result: summary,
           error,
         })
-        return {
+        const result = {
           tool_name: toolName,
           results: [{ content: summary }],
           summary,
@@ -94,6 +110,8 @@ export class ToolExecutor {
           partial,
           error,
         }
+        this.storeToolResult(cacheKey, toolName, sanitizedArgs, result)
+        return cloneToolResult(result)
       } catch (e) {
         const error = String(e)
         this.onLog?.({ id, tool: toolName, args, status: "error", error })
@@ -126,17 +144,75 @@ export class ToolExecutor {
         this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: result.partial ? "partial" : "done", result: summary })
       }
       
-      return {
+      const normalizedResult = {
         ...result,
         summary,
         partial: result.partial ?? false,
       }
+      this.storeToolResult(cacheKey, toolName, sanitizedArgs, normalizedResult)
+      return cloneToolResult(normalizedResult)
     } catch (e) {
       const error = String(e)
       console.error(`[ToolExecutor] Error executing ${toolName}:`, e)
       this.onLog?.({ id, tool: toolName, args, status: "error", error })
       return { tool_name: toolName, results: [], summary: error, error, partial: false }
     }
+  }
+
+  private storeToolResult(
+    cacheKey: string,
+    toolName: string,
+    args: Record<string, unknown>,
+    result: SearchToolResult
+  ): void {
+    const cached = cloneToolResult(result)
+    this.resultCache.set(cacheKey, cached)
+    this.cacheEntries.push({ toolName, args: { ...args }, result: cached })
+  }
+
+  private tryReuseToolResult(toolName: string, args: Record<string, unknown>): SearchToolResult | null {
+    if (toolName !== "get_raw_events") return null
+
+    const inscriptionId = typeof args.inscription_id === "string" ? args.inscription_id : ""
+    if (!inscriptionId) return null
+
+    const requestedEventTypes = normalizeEventTypes(args.event_types)
+    const requestedLimit = normalizeLimit(args.limit, 50)
+
+    for (const entry of this.cacheEntries) {
+      if (entry.toolName !== "get_raw_events") continue
+      if (entry.args.inscription_id !== inscriptionId) continue
+
+      const payload = entry.result.data
+      const cachedEvents = Array.isArray(payload?.events) ? payload.events : null
+      if (!cachedEvents) continue
+
+      const cachedEventTypes = normalizeEventTypes(entry.args.event_types)
+      const cachedLimit = normalizeLimit(entry.args.limit, 50)
+      const cachedCount = typeof payload?.event_count === "number" ? payload.event_count : cachedEvents.length
+      const cachedIsComplete = cachedCount < cachedLimit
+
+      if (!canReuseRawEvents(requestedEventTypes, cachedEventTypes, cachedIsComplete)) continue
+
+      const filteredEvents = filterRawEventsByType(cachedEvents, requestedEventTypes).slice(0, requestedLimit)
+      const filteredPayload = {
+        ...(payload ?? {}),
+        inscription_id: inscriptionId,
+        event_count: filteredEvents.length,
+        events: filteredEvents,
+      }
+      return cloneToolResult({
+        tool_name: "get_raw_events",
+        results: [{ content: "wiki ok: get_raw_events" }],
+        summary: "wiki ok: get_raw_events",
+        facts: extractWikiFacts("get_raw_events", filteredPayload),
+        data: filteredPayload,
+        partial: entry.result.partial ?? false,
+        error: entry.result.error,
+      })
+    }
+
+    return null
   }
 
 
@@ -204,4 +280,86 @@ function sanitizeArguments(args: Record<string, unknown>): Record<string, unknow
   }
 
   return sanitized
+}
+
+function buildToolCacheKey(toolName: string, args: Record<string, unknown>): string {
+  return JSON.stringify({
+    toolName,
+    args: canonicalizeValue(args),
+  })
+}
+
+function canonicalizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const normalized = value.map((item) => canonicalizeValue(item))
+    if (normalized.every((item) => typeof item === "string")) {
+      return [...(normalized as string[])].sort()
+    }
+    return normalized
+  }
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entryValue]) => [key, canonicalizeValue(entryValue)])
+    return Object.fromEntries(entries)
+  }
+
+  return value
+}
+
+function cloneToolResult(result: SearchToolResult): SearchToolResult {
+  return {
+    ...result,
+    results: result.results.map((item) => ({ ...item })),
+    facts: result.facts ? { ...result.facts } : undefined,
+    data: result.data ? cloneRecord(result.data) : undefined,
+  }
+}
+
+function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>
+}
+
+function normalizeEventTypes(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const normalized = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+  if (normalized.length === 0) return null
+  return Array.from(new Set(normalized)).sort()
+}
+
+function normalizeLimit(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
+function canReuseRawEvents(
+  requestedEventTypes: string[] | null,
+  cachedEventTypes: string[] | null,
+  cachedIsComplete: boolean
+): boolean {
+  if (!requestedEventTypes) {
+    return cachedEventTypes === null
+  }
+
+  if (cachedEventTypes === null) {
+    return cachedIsComplete
+  }
+
+  if (!cachedIsComplete) return false
+
+  const cachedSet = new Set(cachedEventTypes)
+  return requestedEventTypes.every((eventType) => cachedSet.has(eventType))
+}
+
+function filterRawEventsByType(events: unknown[], requestedEventTypes: string[] | null): Record<string, unknown>[] {
+  const rawEvents = events.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+  if (!requestedEventTypes) return rawEvents.map((event) => cloneRecord(event))
+
+  const allowed = new Set(requestedEventTypes)
+  return rawEvents
+    .filter((event) => typeof event.event_type === "string" && allowed.has(event.event_type.toLowerCase()))
+    .map((event) => cloneRecord(event))
 }

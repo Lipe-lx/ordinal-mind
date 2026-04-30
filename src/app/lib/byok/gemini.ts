@@ -346,6 +346,10 @@ export class GeminiAdapter implements LLMAdapter {
           requestLabel: "gemini_generate_content_final_answer",
         })
         if (finalRes.ok) {
+          if (stream) {
+            const finalStream = await this.consumeGeminiStreamWithTools(finalRes, onChunk, signal)
+            return { text: cleanResponseText(finalStream.text), inputMode }
+          }
           const finalData = (await finalRes.json()) as GeminiResponse
           return { text: extractGeminiText(finalData), inputMode }
         }

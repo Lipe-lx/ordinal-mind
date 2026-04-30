@@ -96,6 +96,8 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("complete sentences")
     expect(prompt).toContain("Use <thought> tags for internal reasoning")
     expect(prompt).toContain("Everything outside <final_answer> will be hidden")
+    expect(prompt).toContain("emit all needed tool calls in the same response turn so they can run in parallel")
+    expect(prompt).toContain("prefer a single get_raw_events call")
   })
 
   it("instructs follow-up corrections to use parent context without guessing", () => {

@@ -63,6 +63,10 @@ You have access to research tools. Before writing the Chronicle, research the co
 
 Available tools: ${toolNames}.
 Use 2-5 tool calls to gather context. Cite sources with URLs.
+When multiple tools are needed, emit them together in the same response turn so they can run in parallel.
+Do not repeat the same tool call with the same arguments.
+If a transfer/sale question needs both a compact overview and exact rows, call get_timeline and get_raw_events in the same turn.
+For transfer/sale questions, prefer one get_raw_events call with event_types including all needed categories, such as ["transfer","sale"], instead of separate narrow calls.
 After research, write the Chronicle integrating on-chain data and cultural context.
 
 If tools are unavailable or return no results, write using only provided factual data.`
@@ -160,6 +164,10 @@ ${intentSpecific}
 - If any tool returns partial data or empty results, explicitly flag incompleteness to the user.
 - If the user asks for a recap/resumo/narrativa, then expand into a full narrative.
 - If get_collection_context returns collection_size of 0 or null, do NOT retry the same call with different parameters. Instead, use web_search or deep_research to find contextual information.
+- If multiple factual tools are relevant, emit all needed tool calls in the same response turn so they can run in parallel.
+- Never repeat a tool call with the same arguments unless the earlier result explicitly says partial, missing, or errored.
+- For transfer/sale questions, prefer a single get_raw_events call that includes all required event_types, such as ["transfer","sale"], instead of separate calls for each type.
+- If you need both the compact history and the raw rows, call get_timeline and get_raw_events together in the same turn.
 - REGRA CRÍTICA: Nunca invente números de supply, datas de mint ou volumes de venda. Se a ferramenta falhar em trazer o dado exato, diga que a informação não foi encontrada nos registros públicos.`
 }
 

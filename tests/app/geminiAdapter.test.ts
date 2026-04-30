@@ -258,6 +258,83 @@ describe("GeminiAdapter", () => {
     expect(modelPart.thoughtSignature).toBe("sig_stream_1")
     expect((responsePart.functionResponse as Record<string, unknown>).id).toBe("fc_stream_1")
   })
+
+  it("parses the final Gemini SSE answer after repeated tool loops", async () => {
+    const emittedChunks: string[] = []
+    let requestCount = 0
+
+    const fetchMock = vi.fn()
+      .mockImplementation(async (url: string) => {
+        if (!url.includes("generativelanguage.googleapis.com")) {
+          return new Response(new Blob(["png-binary"], { type: "image/png" }), { status: 200 })
+        }
+
+        requestCount += 1
+
+        if (requestCount <= 7) {
+          return sseResponse([
+            {
+              candidates: [{
+                content: {
+                  role: "model",
+                  parts: [{
+                    functionCall: {
+                      id: `fc_loop_${requestCount}`,
+                      name: "get_collection_context",
+                      args: { collection_slug: `runestone-${requestCount}` },
+                    },
+                  }],
+                },
+              }],
+            },
+          ])
+        }
+
+        return sseResponse([
+          {
+            candidates: [{
+              content: {
+                role: "model",
+                parts: [{ text: "<final_answer>Resposta final factual.</final_answer>" }],
+              },
+            }],
+          },
+        ])
+      })
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const toolExecutor = {
+      getKeys: () => ({}),
+      executeTool: vi.fn().mockResolvedValue({
+        tool_name: "get_collection_context",
+        results: [{ content: "wiki ok" }],
+        summary: "wiki ok",
+        facts: { collection_size: 112383 },
+      }),
+    } as unknown as ToolExecutor
+
+    const adapter = new GeminiAdapter("AIza-test", "gemini-3.1-pro-preview")
+    const result = await adapter.chatStream({
+      chronicle,
+      history: [],
+      userMessage: "Continue pesquisando e responda no final.",
+      mode: "qa",
+      intent: "chronicle_query",
+      toolPolicyDecision: {
+        policy: "narrow_factual",
+        allowedToolNames: ["get_collection_context"],
+        geminiMode: "ANY",
+        reason: "qa_narrow_factual",
+      },
+      onChunk: (text) => emittedChunks.push(text),
+      toolExecutor,
+    })
+
+    expect(result.text).toContain("Resposta final factual.")
+    expect(emittedChunks.join("")).toContain("<final_answer>Resposta final factual.</final_answer>")
+    expect(fetchMock).toHaveBeenCalledTimes(9)
+  })
 })
 
 function sseResponse(events: unknown[]): Response {

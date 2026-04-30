@@ -28,7 +28,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "get_raw_events",
-    description: "Fetch immutable Layer 0 events for a specific inscription. Use this first for precise factual claims about mint, transfers, sales, timestamps, and provenance. The response is event-level data and is better for exact answers than wiki summaries.",
+    description: "Fetch immutable Layer 0 events for a specific inscription. Use this first for precise factual claims about mint, transfers, sales, timestamps, and provenance. The response is event-level data and is better for exact answers than wiki summaries. If you need more than one event category, request them together in one call via event_types, for example [\"transfer\",\"sale\"], instead of issuing separate narrow calls.",
     parameters: {
       type: "object",
       properties: {
@@ -45,7 +45,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "get_timeline",
-    description: "Return the rendered Chronicle timeline for an inscription from cache, with Layer 0 fallback. Use this when you need a concise factual view of the full event history rather than raw event rows.",
+    description: "Return the rendered Chronicle timeline for an inscription from cache, with Layer 0 fallback. Use this when you need a concise factual view of the full event history rather than raw event rows. If you also need exact event rows, call get_timeline and get_raw_events in the same response turn so both can run in parallel.",
     parameters: {
       type: "object",
       properties: {
@@ -56,7 +56,7 @@ export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   },
   {
     name: "get_collection_context",
-    description: "Return public collection context for a collection slug or inscription id. Use this for collection-level facts such as the mapped collection size, wiki summary, and collection metadata. Prefer this over broad web search for short factual questions like collection size.",
+    description: "Return public collection context for a collection slug or inscription id. Use this for collection-level facts such as the mapped collection size, wiki summary, and collection metadata. Prefer this over broad web search for short factual questions like collection size. Do not repeat the same request with equivalent arguments unless the prior result was partial or missing.",
     parameters: {
       type: "object",
       properties: {
