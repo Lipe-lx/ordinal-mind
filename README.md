@@ -1,130 +1,95 @@
-# Ordinal Mind
+# 📜 Ordinal Mind
 
-Factual Chronicle engine for Bitcoin Ordinals collectors.
+> **A Factual Chronicle Engine for Bitcoin Ordinals.**
 
-Ordinal Mind takes an inscription ID/number and returns:
-- a verifiable temporal timeline (factual-first)
-- collection and provenance context
-- optional client-side AI chat/narrative (BYOK)
+Ordinal Mind is a verifiable memory engine for Bitcoin Ordinals. It transforms an inscription ID or taproot address into a temporal tree of events, backed by public on-chain data and enhanced by optional, client-side AI synthesis.
 
-The product remains useful without AI: timeline and source-backed data are the core.
+---
 
-## Product Principles
+## ✨ Product Soul
 
-- Factual first: timeline events are source-backed and chronologically deterministic.
-- Public data only: no login, no wallet connect, no paid APIs required by default.
-- BYOK only: LLM keys stay in the browser; Worker never proxies/stores user LLM keys.
-- Graceful degradation: if LLM/chat fails, timeline still renders.
+- 🔍 **Factual First**: Timeline events are source-backed, chronologically deterministic, and verifiable.
+- 🛡️ **Public Data Only**: No login, no wallet connect, and no paid APIs required. We only use what's on the open web.
+- 🔑 **BYOK AI (Client-Side)**: Your LLM keys stay in your browser. The server never proxies, logs, or sees your secrets.
+- 📉 **Graceful Degradation**: If AI synthesis fails or is missing, the core factual timeline remains perfectly functional.
 
-## Current Feature Set
+---
 
-- Chronicle pipeline on Worker:
-  - resolver for inscription input
-  - multi-source fetch (ordinals, mempool, collections, mentions, research, UniSat when key exists)
-  - timeline build + validation + rarity + cache
-- SSE scan mode (`/api/chronicle?stream=1`) with progress events.
-- Chronicle UI with:
-  - Temporal Timeline
-  - Chronicle Narrative chat
-  - Genealogical Tree
-  - Sources and collector signals widgets
-- BYOK providers:
-  - OpenAI, Anthropic, Gemini, OpenRouter
-- Chat UX (current):
-  - multi-session history per inscription (new/resume/rename/delete)
-  - intent routing (greeting/smalltalk/query/etc.)
-  - QA-vs-narrative policy and anti-repetition guardrails
-  - localStorage thread memory per inscription + cross-session user-intent memory
-- Chronicle Wiki (D1-backed, fail-soft):
-  - raw event persistence in `raw_chronicle_events`
-  - BYOK-generated wiki page ingest with source-event validation
-  - D1 FTS search and wiki chat tools
-  - schema health endpoint for local/remote D1 readiness
-  - `GET /api/wiki/health`
-  - `POST /api/wiki/ingest`
-  - `POST /api/wiki/tools/search_wiki`
-  - `POST /api/wiki/tools/get_raw_events`
-  - `POST /api/wiki/tools/get_timeline`
-  - `POST /api/wiki/tools/get_collection_context`
-  - `GET /api/wiki/:slug`
+## 🚀 Key Features
 
-## Stack
+- **🌐 Multi-Source Chronicle**: Aggregates data from Ordinals.com, Mempool.space, UniSat, and web discovery.
+- **🌳 Genealogical Tree**: Visualizes the ancestry and provenance of any inscription.
+- **💬 Chronicle Narrative**: Interactive BYOK chat for deep research, intent-aware and QA-optimized.
+- **📚 Wiki Layer (L0-L2)**: Persistent, D1-backed knowledge base that evolves with user research.
+- **⚡ Real-time Scan**: SSE-powered progress tracking for deep asset resolution.
+- **📊 Collector Widgets**: Specialized views for Rarity, Ownership, Sources, and Market Signals.
 
-- Frontend: React 19, React Router 7, Vite 6, Motion, React Markdown
-- Backend: Cloudflare Worker (TypeScript)
-- Cache: Cloudflare KV (`CHRONICLES_KV`)
-- Tests: Vitest
-- Styling: CSS tokens in `src/app/index.css`
+---
 
-## Quick Start
+## 🛠️ Technology Stack
 
-### Prerequisites
-- Node.js 20+
-- npm
+![React](https://img.shields.io/badge/React-19-blue?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare)
+![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020?logo=cloudflare)
+![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?logo=vite)
+![Motion](https://img.shields.io/badge/Motion-12-black)
 
-### Install
+---
+
+## 🏁 Quick Start
+
+### 1. Prerequisites
+- **Node.js**: 20+
+- **npm**: 10+
+
+### 2. Installation
 ```bash
 npm install
 ```
 
-### Run locally
+### 3. Local Development
 ```bash
+# Initialize local database
 npm run db:migrate:local
+
+# Start dev server
 npm run dev
 ```
 
-`npm run dev` uses local Miniflare D1 state. If you only apply migrations with
-`--remote`, local dev can still report missing wiki tables.
-
-### Build
+### 4. Testing & Quality
 ```bash
-npm run build
-```
-
-### Tests
-```bash
+# Run all tests
 npm run test
-npm run test:smoke
-```
 
-### Typecheck
-```bash
+# Run smoke tests
+npm run test:smoke
+
+# Typecheck
 npm run typecheck
 ```
 
-### Deploy
-```bash
-npm run db:migrate:remote
-npm run deploy
-```
+---
 
-## API Surface (Current)
+## 📡 API Surface
 
-- `GET /api/chronicle?id=<id|number>`
-- `GET /api/chronicle?id=<id|number>&stream=1`
-- `GET /api/chronicle?id=<id|number>&lite=1`
-- `GET /api/wiki/health`
-- `POST /api/wiki/ingest`
-- `POST /api/wiki/tools/search_wiki`
-- `POST /api/wiki/tools/get_raw_events`
-- `POST /api/wiki/tools/get_timeline`
-- `POST /api/wiki/tools/get_collection_context`
-- `GET /api/wiki/:slug`
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/chronicle` | `GET` | Resolve inscription metadata and events. |
+| `/api/wiki/:slug` | `GET` | Retrieve a wiki page by its slug. |
+| `/api/wiki/ingest` | `POST` | Ingest new BYOK-generated wiki content. |
+| `/api/wiki/health` | `GET` | Check D1 database health and schema state. |
 
-## Wiki D1 Troubleshooting
+---
 
-- `no such table: raw_chronicle_events`: run `npm run db:migrate:local` for local dev, or `npm run db:migrate:remote` for deployed D1.
-- `no such table: wiki_pages`: same fix; both wiki migrations must be applied to the D1 database used by the runtime.
-- Local vs remote D1: `vite dev`/Miniflare reads local D1 state by default, while `--remote` applies migrations only to the Cloudflare-hosted database.
+## 📖 Internal Documentation
 
-## Security Notes
+- 🗺️ [**ARCHITECTURE.md**](./ARCHITECTURE.md): Runtime flow and data layer.
+- 🗺️ [**CODEBASE.md**](./CODEBASE.md): Detailed file-by-file directory.
+- 🤖 [**AGENTS.md**](./AGENTS.md): Core product rules and implementation constraints.
 
-- LLM keys are managed in browser storage via BYOK UI.
-- Worker only handles public data aggregation and caching.
-- No server-side LLM completion with user keys.
+---
 
-## Docs
-
-- [CODEBASE.md](./CODEBASE.md): file-by-file map
-- [ARCHITECTURE.md](./ARCHITECTURE.md): runtime architecture and data flow
-- [AGENTS.md](./AGENTS.md): implementation constraints and product rules
+<p align="center">
+  <i>Built for the Ordinals collector who values truth over hype.</i>
+</p>
