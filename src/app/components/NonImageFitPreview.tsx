@@ -81,6 +81,7 @@ export function NonImageFitPreview({
   const textSurfaceRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const htmlLoadTimeoutRef = useRef<number | null>(null)
+  const htmlProbeTimeoutsRef = useRef<number[]>([])
 
   const minScale = useMemo(() => {
     if (fitPolicy !== "readable") return 0.5
@@ -230,6 +231,13 @@ export function NonImageFitPreview({
     setSurfaceSize({ width: textSurface.scrollWidth, height: textSurface.scrollHeight })
   }, [isEmojiText, minScale, state.status])
 
+  const clearHtmlProbeTimeouts = useCallback(() => {
+    for (const timeoutId of htmlProbeTimeoutsRef.current) {
+      window.clearTimeout(timeoutId)
+    }
+    htmlProbeTimeoutsRef.current = []
+  }, [])
+
   const recomputeHtmlScale = useCallback(() => {
     if (state.status !== "html") return
     if (!stageRef.current || !iframeRef.current) return
@@ -268,6 +276,21 @@ export function NonImageFitPreview({
     setScaleState({ scale: safeScale, clipped })
     setSurfaceSize({ width: contentWidth, height: contentHeight })
   }, [state.status])
+
+  const scheduleHtmlScaleProbes = useCallback(() => {
+    clearHtmlProbeTimeouts()
+
+    // Some HTML inscriptions finish layout after load because they bootstrap
+    // via delayed scripts, fonts, or canvas work. We keep probing for a while
+    // instead of assuming the first onLoad measurement is final.
+    const delays = [0, 80, 180, 320, 500, 800, 1200, 1800, 2600, 3600]
+
+    htmlProbeTimeoutsRef.current = delays.map((delay) =>
+      window.setTimeout(() => {
+        recomputeHtmlScale()
+      }, delay)
+    )
+  }, [clearHtmlProbeTimeouts, recomputeHtmlScale])
 
   const recomputePreviewScale = useCallback(() => {
     if (state.status !== "preview") return
@@ -313,24 +336,29 @@ export function NonImageFitPreview({
       window.clearTimeout(htmlLoadTimeoutRef.current)
       htmlLoadTimeoutRef.current = null
     }
-    recomputeHtmlScale()
-    setTimeout(recomputeHtmlScale, 120)
-    setTimeout(recomputeHtmlScale, 360)
-  }, [recomputeHtmlScale])
+    scheduleHtmlScaleProbes()
+  }, [scheduleHtmlScaleProbes])
 
   useEffect(() => {
     if (state.status !== "html") return
+
+    scheduleHtmlScaleProbes()
+
     htmlLoadTimeoutRef.current = window.setTimeout(() => {
-      setPreviewFallbackState("Could not load this inscription render inline.")
-    }, 3500)
+      const doc = iframeRef.current?.contentDocument
+      if (!doc || doc.readyState !== "complete") {
+        setPreviewFallbackState("Could not load this inscription render inline.")
+      }
+    }, 9000)
 
     return () => {
       if (htmlLoadTimeoutRef.current !== null) {
         window.clearTimeout(htmlLoadTimeoutRef.current)
         htmlLoadTimeoutRef.current = null
       }
+      clearHtmlProbeTimeouts()
     }
-  }, [setPreviewFallbackState, state.status])
+  }, [clearHtmlProbeTimeouts, scheduleHtmlScaleProbes, setPreviewFallbackState, state.status])
 
   const rootClassName = [
     "non-image-fit-preview",
