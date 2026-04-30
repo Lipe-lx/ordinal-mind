@@ -50,7 +50,7 @@ export function NonImageFitPreview({
   isFullscreen = false,
 }: Props) {
   const [state, setState] = useState<RenderState>(() => {
-    const pMode = resolveNonImagePrimaryMode(kind)
+    const pMode = resolveNonImagePrimaryMode(kind, { mode, hasPreviewUrl: Boolean(previewUrl) })
     if (pMode === "text" || pMode === "html") {
       return { status: "loading" }
     }
@@ -73,7 +73,10 @@ export function NonImageFitPreview({
     const viewportSize = isFullscreen ? 1024 : getEmbedViewportSize(mode)
     return { width: viewportSize, height: viewportSize }
   })
-  const primaryMode = useMemo(() => resolveNonImagePrimaryMode(kind), [kind])
+  const primaryMode = useMemo(
+    () => resolveNonImagePrimaryMode(kind, { mode, hasPreviewUrl: Boolean(previewUrl) }),
+    [kind, mode, previewUrl]
+  )
   const isEmojiText = state.status === "text" && isEmojiOnly(state.text)
 
   const containerRef = useRef<HTMLDivElement>(null)

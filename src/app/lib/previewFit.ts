@@ -21,6 +21,11 @@ export type NonImagePrimaryMode =
   | "preview"
   | "preview_image_candidate"
 
+export interface NonImagePrimaryModeOptions {
+  mode?: "default" | "compact"
+  hasPreviewUrl?: boolean
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
@@ -47,7 +52,14 @@ export function isNonImageFitKind(kind: MediaKind): boolean {
   return kind !== "image" && kind !== "audio" && kind !== "video"
 }
 
-export function resolveNonImagePrimaryMode(kind: MediaKind): NonImagePrimaryMode {
+export function resolveNonImagePrimaryMode(
+  kind: MediaKind,
+  options: NonImagePrimaryModeOptions = {}
+): NonImagePrimaryMode {
+  if (kind === "html" && options.mode === "compact" && options.hasPreviewUrl) {
+    return "preview"
+  }
+
   switch (kind) {
     case "text":
       return "text"

@@ -75,6 +75,12 @@ describe("preview fit helpers", () => {
     expect(resolveNonImagePrimaryMode("unknown")).toBe("preview_image_candidate")
   })
 
+  it("uses ordinals preview for compact html cards when a preview url exists", () => {
+    expect(resolveNonImagePrimaryMode("html", { mode: "compact", hasPreviewUrl: true })).toBe("preview")
+    expect(resolveNonImagePrimaryMode("html", { mode: "compact", hasPreviewUrl: false })).toBe("html")
+    expect(resolveNonImagePrimaryMode("html", { mode: "default", hasPreviewUrl: true })).toBe("html")
+  })
+
   it("injects base href in sandboxed html srcDoc for relative asset resolution", () => {
     const srcDoc = buildSandboxedSrcDoc(
       "<html><head></head><body><img src=\"./asset.png\" /></body></html>",
