@@ -214,6 +214,11 @@ export function NonImageFitPreview({
     [kind, mode, preferPreviewForHtml, previewUrl]
   )
   const isEmojiText = state.status === "text" && isEmojiOnly(state.text)
+  const isShortText = useMemo(() => {
+    if (state.status !== "text" || isEmojiText) return false
+    const trimmed = state.text.trim()
+    return trimmed.length > 0 && trimmed.length < 120 && trimmed.split("\n").length <= 3
+  }, [state, isEmojiText])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -225,8 +230,9 @@ export function NonImageFitPreview({
 
   const minScale = useMemo(() => {
     if (fitPolicy !== "readable") return 0.5
+    if (primaryMode === "text") return mode === "compact" ? 0.65 : 0.8
     return mode === "compact" ? 0.42 : 0.55
-  }, [fitPolicy, mode])
+  }, [fitPolicy, mode, primaryMode])
 
   const setPreviewFallbackState = useCallback(
     (reason: string) => {
@@ -530,6 +536,7 @@ export function NonImageFitPreview({
     state.status === "html" ? "is-html" : "",
     state.status === "text" ? "is-text-content" : "",
     isEmojiText ? "is-emoji-only" : "",
+    isShortText ? "is-short-text" : "",
     scaleState.clipped ? "is-clipped" : "",
     className ?? "",
   ]
@@ -654,6 +661,7 @@ export function NonImageFitPreview({
             "non-image-fit-canvas",
             "non-image-fit-canvas--text",
             isEmojiText ? "non-image-fit-canvas--emoji" : "",
+            isShortText ? "is-short-text" : "",
           ]
             .filter(Boolean)
             .join(" ")}
