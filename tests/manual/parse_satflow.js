@@ -1,5 +1,7 @@
 const fs = require('fs');
-const html = fs.readFileSync('satflow_test.html', 'utf-8');
+const path = require('path');
+const htmlPath = path.join(__dirname, 'satflow_test.html');
+const html = fs.readFileSync(htmlPath, 'utf-8');
 
 // The JSON might be embedded in a script tag as self.__next_f.push
 // Or directly as a JS object.

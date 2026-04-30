@@ -35,3 +35,6 @@ dist-ssr
 .env.test.local
 .env.production.local
 *.tsbuildinfo
+lint_errors.json
+lint_errors.txt
+src_lint.txt
