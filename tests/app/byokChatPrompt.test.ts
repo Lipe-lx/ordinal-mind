@@ -94,8 +94,8 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("Answer in the same language as the latest user message.")
     expect(prompt).toContain("between these exact tags: <final_answer> and </final_answer>")
     expect(prompt).toContain("complete sentences")
-    expect(prompt).toContain("Do not copy placeholder text")
-    expect(prompt).toContain("Do not include internal reasoning")
+    expect(prompt).toContain("Use <thought> tags for internal reasoning")
+    expect(prompt).toContain("Everything outside <final_answer> will be hidden")
   })
 
   it("instructs follow-up corrections to use parent context without guessing", () => {

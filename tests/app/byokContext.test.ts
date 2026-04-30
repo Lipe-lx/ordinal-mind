@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Chronicle } from "../../src/app/lib/types"
 import { buildSynthesisContext } from "../../src/app/lib/byok/prompt"
-import { getVisionFallbackReason, prepareSynthesisInput } from "../../src/app/lib/byok/context"
+import {
+  getVisionFallbackReason,
+  prepareSynthesisInput,
+  resetPreparedContentCacheForTests,
+  shouldAttachContentForChat,
+} from "../../src/app/lib/byok/context"
+import type { ChatMessage } from "../../src/app/lib/byok/chatTypes"
 
 const chronicle: Chronicle = {
   inscription_id: "rooti0",
@@ -186,6 +192,7 @@ const chronicle: Chronicle = {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  resetPreparedContentCacheForTests()
 })
 
 describe("buildSynthesisContext", () => {
@@ -206,7 +213,7 @@ describe("buildSynthesisContext", () => {
 })
 
 describe("prepareSynthesisInput", () => {
-  it("uses image + context when the provider supports public URLs", async () => {
+  it("uses attachments + context when the provider supports public image URLs", async () => {
     const prepared = await prepareSynthesisInput(chronicle, {
       supportsVisionInput: true,
       supportsToolCalling: true,
@@ -214,14 +221,26 @@ describe("prepareSynthesisInput", () => {
       preferredApi: "responses",
     })
 
-    expect(prepared.inputMode).toBe("image+context")
-    expect(prepared.image).toMatchObject({
+    expect(prepared.inputMode).toBe("attachments+context")
+    expect(prepared.attachments[0]).toMatchObject({
+      kind: "image",
       transport: "public_url",
       url: "https://ordinals.com/content/rooti0",
     })
+    expect(prepared.contentDigest).toContain("Primary inscription media attached directly")
   })
 
-  it("falls back to text-only for non-vision content", async () => {
+  it("attaches inline text for SVG inscriptions and records a digest", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<svg><text>Quantum Cat</text></svg>", {
+          status: 200,
+          headers: { "Content-Type": "image/svg+xml" },
+        })
+      )
+    )
+
     const prepared = await prepareSynthesisInput(
       {
         ...chronicle,
@@ -244,8 +263,55 @@ describe("prepareSynthesisInput", () => {
       }
     )
 
-    expect(prepared.inputMode).toBe("text-only")
-    expect(prepared.fallbackReason).toContain("SVG")
+    expect(prepared.inputMode).toBe("attachments+context")
+    expect(prepared.attachments[0]).toMatchObject({
+      kind: "text",
+      transport: "inline_text",
+      mimeType: "image/svg+xml",
+    })
+    expect(prepared.attachments[0].text).toContain("Quantum Cat")
+    expect(prepared.contentDigest).toContain("inline text")
+  })
+
+  it("reuses the local content cache for repeated text-like inscriptions", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{"name":"Quantum Cat","palette":["gold","black"]}', {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const textChronicle = {
+      ...chronicle,
+      media_context: {
+        kind: "text" as const,
+        content_type: "application/json",
+        content_url: "https://ordinals.com/content/rooti0",
+        preview_url: "https://ordinals.com/content/rooti0",
+        vision_eligible: false,
+        vision_transport: "unsupported" as const,
+      },
+    }
+
+    const first = await prepareSynthesisInput(textChronicle, {
+      supportsVisionInput: true,
+      supportsToolCalling: true,
+      imageTransport: "public_url",
+      preferredApi: "responses",
+    })
+    const second = await prepareSynthesisInput(textChronicle, {
+      supportsVisionInput: true,
+      supportsToolCalling: true,
+      imageTransport: "public_url",
+      preferredApi: "responses",
+    })
+
+    expect(first.inputMode).toBe("attachments+context")
+    expect(second.inputMode).toBe("attachments+context")
+    expect(first.attachments[0].text).toContain("Quantum Cat")
+    expect(second.attachments[0].text).toContain("Quantum Cat")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it("prepares inline image data for Gemini-style providers", async () => {
@@ -263,10 +329,10 @@ describe("prepareSynthesisInput", () => {
       preferredApi: "generateContent",
     })
 
-    expect(prepared.inputMode).toBe("image+context")
-    expect(prepared.image?.transport).toBe("inline_data")
-    expect(prepared.image?.mimeType).toBe("image/png")
-    expect(prepared.image?.data).toBeTruthy()
+    expect(prepared.inputMode).toBe("attachments+context")
+    expect(prepared.attachments[0].transport).toBe("inline_data")
+    expect(prepared.attachments[0].mimeType).toBe("image/png")
+    expect(prepared.attachments[0].data).toBeTruthy()
   })
 
   it("falls back to text-only when inline image loading fails", async () => {
@@ -281,6 +347,129 @@ describe("prepareSynthesisInput", () => {
 
     expect(prepared.inputMode).toBe("text-only")
     expect(prepared.fallbackReason).toContain("could not be loaded inline")
+  })
+})
+
+describe("shouldAttachContentForChat", () => {
+  it("attaches the inscription image on the first chat turn", () => {
+    expect(
+      shouldAttachContentForChat({
+        chronicle,
+        history: [],
+        userMessage: "When was it minted?",
+        mode: "qa",
+        intent: "chronicle_query",
+      })
+    ).toBe(true)
+  })
+
+  it("reattaches the inscription image for follow-up visual questions", () => {
+    const history: ChatMessage[] = [
+      {
+        id: "u1",
+        role: "user",
+        content: "When was it minted?",
+        createdAt: "2026-04-25T00:00:00.000Z",
+        turnId: "t1",
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "It was minted in block 840000.",
+        createdAt: "2026-04-25T00:00:01.000Z",
+        turnId: "t1",
+      },
+    ]
+
+    expect(
+      shouldAttachContentForChat({
+        chronicle,
+        history,
+        userMessage: "Do que se refere a imagem?",
+        mode: "qa",
+        intent: "chronicle_query",
+      })
+    ).toBe(true)
+  })
+
+  it("keeps visual context for short follow-ups after a media-focused turn", () => {
+    const history: ChatMessage[] = [
+      {
+        id: "u1",
+        role: "user",
+        content: "What does the image show?",
+        createdAt: "2026-04-25T00:00:00.000Z",
+        turnId: "t1",
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "It appears to show a stylized cat.",
+        createdAt: "2026-04-25T00:00:01.000Z",
+        turnId: "t1",
+      },
+    ]
+
+    expect(
+      shouldAttachContentForChat({
+        chronicle,
+        history,
+        userMessage: "And the colors?",
+        mode: "qa",
+        intent: "chronicle_query",
+      })
+    ).toBe(true)
+  })
+
+  it("does not reattach the image for unrelated follow-ups", () => {
+    const history: ChatMessage[] = [
+      {
+        id: "u1",
+        role: "user",
+        content: "When was it minted?",
+        createdAt: "2026-04-25T00:00:00.000Z",
+        turnId: "t1",
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "It was minted in block 840000.",
+        createdAt: "2026-04-25T00:00:01.000Z",
+        turnId: "t1",
+      },
+    ]
+
+    expect(
+      shouldAttachContentForChat({
+        chronicle,
+        history,
+        userMessage: "Who owns it now?",
+        mode: "qa",
+        intent: "chronicle_query",
+      })
+    ).toBe(false)
+  })
+
+  it("attaches text-like inscription content on the first chat turn", () => {
+    expect(
+      shouldAttachContentForChat({
+        chronicle: {
+          ...chronicle,
+          media_context: {
+            kind: "html",
+            content_type: "text/html",
+            content_url: "https://ordinals.com/content/rooti0",
+            preview_url: "https://ordinals.com/preview/rooti0",
+            vision_eligible: false,
+            vision_transport: "unsupported",
+          },
+        },
+        history: [],
+        userMessage: "Summarize this inscription.",
+        mode: "qa",
+        intent: "chronicle_query",
+      })
+    ).toBe(true)
   })
 })
 

@@ -1,8 +1,12 @@
 import type { LLMAdapter, Provider } from "./index"
 import type { Chronicle } from "../types"
-import type { PreparedImageInput, ProviderCapabilities, SynthesisMode } from "./context"
+import type { PreparedAttachmentInput, ProviderCapabilities, SynthesisMode } from "./context"
 import type { SynthesisResult } from "./index"
-import { prepareSynthesisInput } from "./context"
+import {
+  prepareSynthesisInput,
+  renderTextAttachmentBlock,
+  shouldAttachContentForChat,
+} from "./context"
 import { consumeSSE } from "./streamParser"
 import type { ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
@@ -97,7 +101,13 @@ export class GeminiAdapter implements LLMAdapter {
       userMessage || INITIAL_NARRATIVE_PROMPT,
       { mode, intent }
     )
-    const enableVision = history.length === 0
+    const enableAttachments = shouldAttachContentForChat({
+      chronicle,
+      history,
+      userMessage: userMessage || INITIAL_NARRATIVE_PROMPT,
+      mode,
+      intent,
+    })
 
     if (isGemmaModel(this.model)) {
       return await this.request(
@@ -108,7 +118,7 @@ export class GeminiAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision,
+        enableAttachments,
         toolPolicyDecision
       )
     }
@@ -122,7 +132,7 @@ export class GeminiAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision,
+        enableAttachments,
         toolPolicyDecision
       )
     } catch (err) {
@@ -136,7 +146,7 @@ export class GeminiAdapter implements LLMAdapter {
           signal,
           toolExecutor,
           conversationPrompt,
-          enableVision,
+          enableAttachments,
           toolPolicyDecision
         )
       }
@@ -152,14 +162,14 @@ export class GeminiAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true,
+    allowAttachments = true,
     toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride
       ? (useSystemInstruction ? promptOverride : `${prepared.systemPrompt}\n\n${promptOverride}`)
       : (useSystemInstruction ? prepared.userPrompt : prepared.combinedPrompt)
-    const image = allowVisionInput ? prepared.image : undefined
+    const attachments = allowAttachments ? prepared.attachments : []
     const action = stream ? "streamGenerateContent" : "generateContent"
     const streamParam = stream ? "&alt=sse" : ""
     const url = `${BASE_URL}/${this.model}:${action}?key=${this.key}${streamParam}`
@@ -177,13 +187,13 @@ export class GeminiAdapter implements LLMAdapter {
         role: "user",
         parts: buildGeminiParts(
           userPrompt,
-          image
+          attachments
         ),
       },
     ]
 
     const isGemma4 = this.model.toLowerCase().includes("gemma-4")
-    const inputMode: SynthesisMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const inputMode: SynthesisMode = allowAttachments ? prepared.inputMode : "text-only"
     let lastModelText = ""
     const executedCalls = new Set<string>()
 
@@ -391,14 +401,19 @@ export class GeminiAdapter implements LLMAdapter {
   }
 }
 
-function buildGeminiParts(text: string, image?: PreparedImageInput) {
+function buildGeminiParts(text: string, attachments: PreparedAttachmentInput[]) {
   return [
     { text },
-    ...(image ? [toGeminiImagePart(image)] : []),
+    ...attachments.map((attachment) => {
+      if (attachment.kind === "image") {
+        return toGeminiImagePart(attachment)
+      }
+      return { text: renderTextAttachmentBlock(attachment) }
+    }),
   ]
 }
 
-function toGeminiImagePart(image: PreparedImageInput) {
+function toGeminiImagePart(image: PreparedAttachmentInput) {
   if (image.transport === "inline_data") {
     return {
       inline_data: {
@@ -409,7 +424,7 @@ function toGeminiImagePart(image: PreparedImageInput) {
   }
   return {
     file_data: {
-      mime_type: "text/plain",
+      mime_type: image.mimeType || "image/png",
       file_uri: image.url || "",
     },
   }

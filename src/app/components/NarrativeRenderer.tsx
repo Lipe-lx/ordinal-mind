@@ -106,7 +106,7 @@ export function NarrativeRenderer({
               )}
               {inputMode && (
                 <span className="narrative-model-badge">
-                  {inputMode === "image+context" ? "image + context" : "text-only"}
+                  {inputMode === "text-only" ? "text-only" : "attachments + context"}
                 </span>
               )}
               {elapsed >= 10 && (

@@ -327,7 +327,7 @@ export function NarrativeChatRenderer({
         <div className="narrative-chat-footer">
           <div className="narrative-chat-meta">
             {providerName && modelName && <span className="model-badge">{providerName} · {modelName}</span>}
-            {inputMode === "image+context" && <span>image + context</span>}
+            {inputMode && inputMode !== "text-only" && <span>attachments + context</span>}
             {wikiStatusLabel && <span>{wikiStatusLabel}</span>}
             {elapsed >= 10 && <span>{elapsed}s</span>}
           </div>

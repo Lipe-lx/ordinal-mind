@@ -1,8 +1,12 @@
 import type { LLMAdapter, Provider } from "./index"
 import type { Chronicle } from "../types"
-import type { PreparedImageInput, ProviderCapabilities } from "./context"
+import type { PreparedAttachmentInput, ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
-import { prepareSynthesisInput } from "./context"
+import {
+  prepareSynthesisInput,
+  renderTextAttachmentBlock,
+  shouldAttachContentForChat,
+} from "./context"
 import { consumeSSE } from "./streamParser"
 import type { ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
@@ -111,7 +115,13 @@ export class OpenRouterAdapter implements LLMAdapter {
       userMessage || INITIAL_NARRATIVE_PROMPT,
       { mode, intent }
     )
-    const enableVision = history.length === 0
+    const enableAttachments = shouldAttachContentForChat({
+      chronicle,
+      history,
+      userMessage: userMessage || INITIAL_NARRATIVE_PROMPT,
+      mode,
+      intent,
+    })
 
     try {
       return await this.request(
@@ -122,7 +132,7 @@ export class OpenRouterAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision,
+        enableAttachments,
         toolPolicyDecision
       )
     } catch (err) {
@@ -135,7 +145,7 @@ export class OpenRouterAdapter implements LLMAdapter {
           signal,
           toolExecutor,
           conversationPrompt,
-          enableVision,
+          enableAttachments,
           toolPolicyDecision
         )
       }
@@ -151,12 +161,12 @@ export class OpenRouterAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true,
+    allowAttachments = true,
     toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride ?? prepared.userPrompt
-    const image = allowVisionInput ? prepared.image : undefined
+    const attachments = allowAttachments ? prepared.attachments : []
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       type: "function",
       function: {
@@ -171,17 +181,17 @@ export class OpenRouterAdapter implements LLMAdapter {
           { role: "system", content: prepared.systemPrompt },
           {
             role: "user",
-            content: buildOpenRouterContent(userPrompt, image),
+            content: buildOpenRouterContent(userPrompt, attachments),
           },
         ]
       : [
           {
             role: "user",
-            content: buildOpenRouterContent(promptOverride ? `${prepared.systemPrompt}\n\n${userPrompt}` : prepared.combinedPrompt, image),
+            content: buildOpenRouterContent(promptOverride ? `${prepared.systemPrompt}\n\n${userPrompt}` : prepared.combinedPrompt, attachments),
           },
         ]
     
-    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const inputMode = allowAttachments ? prepared.inputMode : "text-only"
 
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
@@ -308,20 +318,29 @@ export class OpenRouterAdapter implements LLMAdapter {
   }
 }
 
-function buildOpenRouterContent(text: string, image?: PreparedImageInput) {
-  if (!image) return text
+function buildOpenRouterContent(text: string, attachments: PreparedAttachmentInput[]) {
+  if (attachments.length === 0) return text
 
   return [
     { type: "text", text },
-    {
-      type: "image_url",
-      image_url: {
-        url:
-          image.transport === "public_url"
-            ? (image.url || "")
-            : `data:${image.mimeType};base64,${image.data}`,
-      },
-    },
+    ...attachments.map((attachment) => {
+      if (attachment.kind === "image") {
+        return {
+          type: "image_url",
+          image_url: {
+            url:
+              attachment.transport === "public_url"
+                ? (attachment.url || "")
+                : `data:${attachment.mimeType};base64,${attachment.data}`,
+          },
+        }
+      }
+
+      return {
+        type: "text",
+        text: renderTextAttachmentBlock(attachment),
+      }
+    }),
   ]
 }
 

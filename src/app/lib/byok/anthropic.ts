@@ -1,8 +1,12 @@
 import type { LLMAdapter, Provider } from "./index"
 import type { Chronicle } from "../types"
-import type { PreparedImageInput, ProviderCapabilities } from "./context"
+import type { PreparedAttachmentInput, ProviderCapabilities } from "./context"
 import type { SynthesisResult } from "./index"
-import { prepareSynthesisInput } from "./context"
+import {
+  prepareSynthesisInput,
+  renderTextAttachmentBlock,
+  shouldAttachContentForChat,
+} from "./context"
 import { consumeSSE } from "./streamParser"
 import type { ToolExecutor } from "./toolExecutor"
 import type { ChatMessage } from "./chatTypes"
@@ -14,7 +18,7 @@ const API_URL = "https://api.anthropic.com/v1/messages"
 
 type AnthropicContent = 
   | { type: string; text?: string }
-  | { type: string; source?: { type: string; media_type: string; data: string } }
+  | { type: string; source?: { type: string; media_type?: string; data?: string; url?: string } }
   | { type: string; id?: string; name?: string; input?: Record<string, unknown> }
   | { type: string; tool_use_id?: string; content?: string };
 
@@ -118,7 +122,13 @@ export class AnthropicAdapter implements LLMAdapter {
       userMessage || INITIAL_NARRATIVE_PROMPT,
       { mode, intent }
     )
-    const enableVision = history.length === 0
+    const enableAttachments = shouldAttachContentForChat({
+      chronicle,
+      history,
+      userMessage: userMessage || INITIAL_NARRATIVE_PROMPT,
+      mode,
+      intent,
+    })
 
     try {
       return await this.requestWithSystemMessage(
@@ -128,7 +138,7 @@ export class AnthropicAdapter implements LLMAdapter {
         signal,
         toolExecutor,
         conversationPrompt,
-        enableVision,
+        enableAttachments,
         toolPolicyDecision
       )
     } catch (err) {
@@ -140,7 +150,7 @@ export class AnthropicAdapter implements LLMAdapter {
           signal,
           toolExecutor,
           conversationPrompt,
-          enableVision,
+          enableAttachments,
           toolPolicyDecision
         )
       }
@@ -155,20 +165,20 @@ export class AnthropicAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true,
+    allowAttachments = true,
     toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride ?? prepared.userPrompt
-    const image = allowVisionInput ? prepared.image : undefined
+    const attachments = allowAttachments ? prepared.attachments : []
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters
     })) : undefined
 
-    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, image) }]
-    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, attachments) }]
+    const inputMode = allowAttachments ? prepared.inputMode : "text-only"
     const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
@@ -295,22 +305,22 @@ export class AnthropicAdapter implements LLMAdapter {
     signal?: AbortSignal,
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
-    allowVisionInput = true,
+    allowAttachments = true,
     toolPolicyDecision?: ChatToolPolicyDecision
   ): Promise<SynthesisResult> {
     const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
     const userPrompt = promptOverride
       ? `${prepared.systemPrompt}\n\n${promptOverride}`
       : prepared.combinedPrompt
-    const image = allowVisionInput ? prepared.image : undefined
+    const attachments = allowAttachments ? prepared.attachments : []
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters
     })) : undefined
 
-    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, image) }]
-    const inputMode = allowVisionInput ? prepared.inputMode : "text-only"
+    const messages: AnthropicMessage[] = [{ role: "user", content: buildAnthropicContent(userPrompt, attachments) }]
+    const inputMode = allowAttachments ? prepared.inputMode : "text-only"
     const executedCalls = new Set<string>()
 
     for (let i = 0; i < 7; i++) {
@@ -490,14 +500,19 @@ export class AnthropicAdapter implements LLMAdapter {
   }
 }
 
-function buildAnthropicContent(text: string, image?: PreparedImageInput) {
+function buildAnthropicContent(text: string, attachments: PreparedAttachmentInput[]) {
   return [
     { type: "text", text },
-    ...(image ? [toAnthropicImageBlock(image)] : []),
+    ...attachments.map((attachment) => {
+      if (attachment.kind === "image") {
+        return toAnthropicImageBlock(attachment)
+      }
+      return { type: "text", text: renderTextAttachmentBlock(attachment) }
+    }),
   ]
 }
 
-function toAnthropicImageBlock(image: PreparedImageInput) {
+function toAnthropicImageBlock(image: PreparedAttachmentInput) {
   if (image.transport === "public_url") {
     return {
       type: "image",
