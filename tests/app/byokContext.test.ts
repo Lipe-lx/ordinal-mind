@@ -87,6 +87,7 @@ const chronicle: Chronicle = {
         source_ref: "https://ordinals.com/r/children/rooti0/inscriptions",
         partial: false,
       },
+      grandchildren: null,
       gallery: {
         gallery_id: "rooti0",
         items: [
@@ -102,6 +103,8 @@ const chronicle: Chronicle = {
         source_ref: "https://ordinals.com/gallery/rooti0",
         partial: false,
       },
+      grandparents: null,
+      greatGrandparents: null,
     },
     registry: {
       match: {

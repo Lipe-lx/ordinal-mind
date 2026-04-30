@@ -1,6 +1,7 @@
 import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
+import { buildGenealogyConnections, buildGenealogyLevels } from "../lib/genealogy"
 import { formatContentTypeLabel } from "../lib/media"
 import { GenealogyNode } from "./GenealogyNode"
 import { InscriptionMedia } from "./InscriptionMedia"
@@ -138,79 +139,23 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const grandparents = useMemo(() => protocol.grandparents?.items ?? [], [protocol.grandparents?.items])
   const greatGrandparents = useMemo(() => protocol.greatGrandparents?.items ?? [], [protocol.greatGrandparents?.items])
   const children = useMemo(() => protocol.children?.items ?? [], [protocol.children?.items])
+  const grandchildren = useMemo(() => protocol.grandchildren?.items ?? [], [protocol.grandchildren?.items])
   const totalChildren = protocol.children?.total_count ?? 0
+  const totalGrandchildren = protocol.grandchildren?.total_count ?? 0
 
-  const levels = useMemo(() => [
-    { id: "ggp", items: greatGrandparents.slice(0, 9) },
-    { id: "gp", items: grandparents.slice(0, 9) },
-    { id: "p", items: parents.slice(0, 9) },
-    { id: "root", items: [root] },
-    { id: "child", items: children.slice(0, 9) }
-  ], [greatGrandparents, grandparents, parents, root, children])
+  const levels = useMemo(() => buildGenealogyLevels({
+    greatGrandparents,
+    grandparents,
+    parents,
+    root,
+    children,
+    grandchildren,
+  }), [greatGrandparents, grandparents, parents, root, children, grandchildren])
 
-  // 1. Memoize the connection map to avoid re-calculating relationship logic on every frame
-  const connections = useMemo(() => {
-    const renderedNodesMap = new Map<string, { item: RelatedInscriptionSummary, levelId: string, domId: string }>()
-    levels.forEach(lvl => lvl.items.forEach(item => {
-      const id = item.inscription_id === root.inscription_id ? "node-root" : `node-${item.inscription_id}`
-      renderedNodesMap.set(item.inscription_id, { item, levelId: lvl.id, domId: id })
-    }))
-
-    return levels.flatMap((currentLevel, levelIdx) => {
-      return currentLevel.items.flatMap((node) => {
-        const nodeDomId = node.inscription_id === root.inscription_id ? "node-root" : `node-${node.inscription_id}`
-        const explicitRelations = node.related_to_ids || []
-        
-        const renderedExplicitParents = explicitRelations
-          .map(id => renderedNodesMap.get(id))
-          .filter((p): p is { item: RelatedInscriptionSummary, levelId: string, domId: string } => !!p)
-
-        if (renderedExplicitParents.length > 0) {
-          return renderedExplicitParents.map((p) => ({
-            startId: p.domId,
-            endId: nodeDomId,
-            key: `${node.inscription_id}-${p.item.inscription_id}`
-          }))
-        }
-
-        if (currentLevel.id === "root") {
-          const parentLevel = levels.find(l => l.id === "p")
-          return (parentLevel?.items || []).map(p => ({
-            startId: `node-${p.inscription_id}`,
-            endId: "node-root",
-            key: `root-p-${p.inscription_id}-fallback`
-          }))
-        }
-
-        if (currentLevel.id === "child") {
-          return [{
-            startId: "node-root",
-            endId: nodeDomId,
-            key: `child-root-${node.inscription_id}-fallback`
-          }]
-        }
-
-        let fallbackLevelIdx = -1
-        for (let i = levelIdx - 1; i >= 0; i--) {
-          if (levels[i].items.length > 0) {
-            fallbackLevelIdx = i
-            break
-          }
-        }
-
-        if (fallbackLevelIdx !== -1) {
-          const fallbackLevel = levels[fallbackLevelIdx]
-          return fallbackLevel.items.map(p => ({
-            startId: p.inscription_id === root.inscription_id ? "node-root" : `node-${p.inscription_id}`,
-            endId: nodeDomId,
-            key: `${node.inscription_id}-${p.inscription_id}-fallback`
-          }))
-        }
-
-        return []
-      })
-    })
-  }, [levels, root])
+  const connections = useMemo(
+    () => buildGenealogyConnections(levels, root.inscription_id),
+    [levels, root.inscription_id]
+  )
 
   const isMeasuring = useRef(false)
   /**
@@ -508,6 +453,22 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               />
             ))}
             {totalChildren > 9 && renderMoreCard(totalChildren - 9, true)}
+          </div>
+        </div>
+
+        {/* Grandchildren Row */}
+        <div className="genealogy-row grandchildren" id="grandchildren-row">
+          <div className="children-grid">
+            {grandchildren.slice(0, 9).map((grandchild) => (
+              <GenealogyNode
+                key={grandchild.inscription_id}
+                id={`node-${grandchild.inscription_id}`}
+                inscription={grandchild}
+                compact
+                onTap={() => setSelectedNode(grandchild)}
+              />
+            ))}
+            {totalGrandchildren > 9 && renderMoreCard(totalGrandchildren - 9, true)}
           </div>
         </div>
       </motion.div>

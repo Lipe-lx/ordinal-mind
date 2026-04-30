@@ -51,7 +51,7 @@ const chronicle = {
     vision_transport: "public_url",
   },
   collection_context: {
-    protocol: { parents: null, children: null, gallery: null, grandparents: null, greatGrandparents: null },
+    protocol: { parents: null, children: null, grandchildren: null, gallery: null, grandparents: null, greatGrandparents: null },
     registry: { match: null, issues: [] },
     market: { match: null },
     profile: null,

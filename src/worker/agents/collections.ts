@@ -34,6 +34,8 @@ const COINGECKO_NFT_API_BASE_URL = "https://api.coingecko.com/api/v3/nfts"
 
 const MAX_PARENT_ITEMS = 10
 const MAX_CHILD_ITEMS = 20
+const MAX_GRANDCHILD_PARENT_ITEMS = 5
+const MAX_GRANDCHILD_ITEMS_PER_CHILD = 5
 const MAX_GALLERY_ITEMS = 20
 const CONTENT_TYPE_ENRICH_BATCH_SIZE = 4
 
@@ -193,6 +195,7 @@ export async function fetchCollectionContext(
   // Resolve grandparents for ALL parents in parallel
   let grandparents: ProtocolRelationSet | null = null
   let greatGrandparents: ProtocolRelationSet | null = null
+  let grandchildren: ProtocolRelationSet | null = null
   if (parents && parents.items.length > 0) {
     const parentIds = parents.items.slice(0, 5).map(p => p.inscription_id)
     const gpResults = await Promise.allSettled(
@@ -287,6 +290,66 @@ export async function fetchCollectionContext(
           source_ref: "great-grandparent-ancestry",
           partial: hasMoreGgp
         }
+      }
+    }
+  }
+
+  if (children && children.items.length > 0) {
+    const childIds = children.items
+      .slice(0, MAX_GRANDCHILD_PARENT_ITEMS)
+      .map((child) => child.inscription_id)
+    const grandchildResults = await Promise.allSettled(
+      childIds.map((childId) =>
+        fetchProtocolRelations(
+          `${ORDINALS_BASE_URL}/r/children/${childId}/inscriptions`,
+          "children",
+          MAX_GRANDCHILD_ITEMS_PER_CHILD,
+          fetchedAt,
+          sourceCatalog,
+          childId
+        )
+      )
+    )
+
+    const allGrandchildItems: RelatedInscriptionSummary[] = []
+    const seenGrandchildIds = new Map<string, RelatedInscriptionSummary>()
+    let totalGrandchildCount = 0
+    let hasMoreGrandchildren = children.more || children.items.length > MAX_GRANDCHILD_PARENT_ITEMS
+    let partialGrandchildren = children.more || children.items.length > MAX_GRANDCHILD_PARENT_ITEMS
+
+    for (const res of grandchildResults) {
+      if (res.status === "fulfilled" && res.value) {
+        for (const grandchild of res.value.items) {
+          const existing = seenGrandchildIds.get(grandchild.inscription_id)
+          if (existing) {
+            if (grandchild.related_to_ids) {
+              existing.related_to_ids = Array.from(new Set([
+                ...(existing.related_to_ids || []),
+                ...grandchild.related_to_ids,
+              ]))
+            }
+          } else {
+            seenGrandchildIds.set(grandchild.inscription_id, grandchild)
+            allGrandchildItems.push(grandchild)
+          }
+        }
+        totalGrandchildCount += res.value.total_count
+        if (res.value.more || res.value.partial) {
+          hasMoreGrandchildren = true
+          partialGrandchildren = true
+        }
+      } else {
+        partialGrandchildren = true
+      }
+    }
+
+    if (allGrandchildItems.length > 0 || partialGrandchildren) {
+      grandchildren = {
+        items: allGrandchildItems,
+        total_count: totalGrandchildCount,
+        more: hasMoreGrandchildren,
+        source_ref: "multi-child-descendancy",
+        partial: partialGrandchildren,
       }
     }
   }
@@ -393,6 +456,7 @@ export async function fetchCollectionContext(
     protocol: {
       parents,
       children,
+      grandchildren,
       gallery: protocolGallery,
       grandparents,
       greatGrandparents,

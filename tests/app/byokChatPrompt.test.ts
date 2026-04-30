@@ -60,6 +60,7 @@ const chronicle = {
     protocol: {
       parents: null,
       children: null,
+      grandchildren: null,
       gallery: null,
       grandparents: null,
       greatGrandparents: null,

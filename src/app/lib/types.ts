@@ -234,6 +234,7 @@ export interface CollectionContext {
   protocol: {
     parents: ProtocolRelationSet | null
     children: ProtocolRelationSet | null
+    grandchildren: ProtocolRelationSet | null
     gallery: ProtocolGalleryContext | null
     grandparents: ProtocolRelationSet | null
     greatGrandparents: ProtocolRelationSet | null

@@ -4,6 +4,7 @@ import {
   buildCollectionProfile,
   buildMediaContext,
   buildPresentation,
+  fetchCollectionContext,
   findLegacyCollectionMembership,
   parseCoinGeckoNftOfficialXProfiles,
   parseOrdMarketOverlay,
@@ -30,6 +31,13 @@ const baseMeta: InscriptionMeta = {
   owner_address: "bc1ptest",
   genesis_txid: "meta123",
   genesis_vout: 0,
+}
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
 }
 
 describe("collection registry parsing", () => {
@@ -647,6 +655,134 @@ describe("collection profile marketplace signals", () => {
     )
 
     expect(profile?.name).toBe("The Block")
+  })
+})
+
+describe("collection context descendants", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("resolves grandchildren from visible children and preserves child lineage links", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+
+      if (url === `https://ordinals.com/inscription/${baseMeta.inscription_id}`) {
+        return jsonResponse({
+          id: baseMeta.inscription_id,
+          number: baseMeta.inscription_number,
+          properties: {
+            attributes: {
+              title: "Root Inscription",
+            },
+          },
+        })
+      }
+
+      if (url === `https://ordinals.com/r/parents/${baseMeta.inscription_id}/inscriptions`) {
+        return jsonResponse({ parents: [], more: false, page: 0 })
+      }
+
+      if (url === `https://ordinals.com/r/children/${baseMeta.inscription_id}/inscriptions`) {
+        return jsonResponse({
+          children: [
+            {
+              id: "child-1i0",
+              number: 1001,
+              content_type: "image/png",
+              height: 840001,
+              timestamp: 1713571300,
+            },
+            {
+              id: "child-2i0",
+              number: 1002,
+              content_type: "image/png",
+              height: 840002,
+              timestamp: 1713571400,
+            },
+          ],
+          more: false,
+          page: 0,
+        })
+      }
+
+      if (url === "https://ordinals.com/r/children/child-1i0/inscriptions") {
+        return jsonResponse({
+          children: [
+            {
+              id: "grandchild-1i0",
+              number: 2001,
+              content_type: "image/png",
+              height: 840003,
+              timestamp: 1713571500,
+            },
+            {
+              id: "shared-grandchildi0",
+              number: 2002,
+              content_type: "image/png",
+              height: 840004,
+              timestamp: 1713571600,
+            },
+          ],
+          more: false,
+          page: 0,
+        })
+      }
+
+      if (url === "https://ordinals.com/r/children/child-2i0/inscriptions") {
+        return jsonResponse({
+          children: [
+            {
+              id: "shared-grandchildi0",
+              number: 2002,
+              content_type: "image/png",
+              height: 840004,
+              timestamp: 1713571600,
+            },
+            {
+              id: "grandchild-2i0",
+              number: 2003,
+              content_type: "image/png",
+              height: 840005,
+              timestamp: 1713571700,
+            },
+          ],
+          more: true,
+          page: 0,
+        })
+      }
+
+      if (
+        url === "https://raw.githubusercontent.com/TheWizardsOfOrd/ordinals-collections/main/collections.json" ||
+        url === "https://raw.githubusercontent.com/TheWizardsOfOrd/ordinals-collections/main/collections-needs-info.json"
+      ) {
+        return jsonResponse([])
+      }
+
+      return new Response("not found", { status: 404 })
+    }))
+
+    const result = await fetchCollectionContext(baseMeta.inscription_id, baseMeta)
+    const children = result.collectionContext.protocol.children
+    const grandchildren = result.collectionContext.protocol.grandchildren
+
+    expect(children?.items).toHaveLength(2)
+    expect(grandchildren).not.toBeNull()
+    expect(grandchildren?.items.map((item) => item.inscription_id)).toEqual([
+      "grandchild-1i0",
+      "shared-grandchildi0",
+      "grandchild-2i0",
+    ])
+    expect(grandchildren?.total_count).toBe(4)
+    expect(grandchildren?.more).toBe(true)
+    expect(grandchildren?.partial).toBe(true)
+    expect(
+      grandchildren?.items.find((item) => item.inscription_id === "shared-grandchildi0")?.related_to_ids
+    ).toEqual(["child-1i0", "child-2i0"])
   })
 })
 

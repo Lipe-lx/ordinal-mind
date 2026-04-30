@@ -293,7 +293,7 @@ async function handleStandardChronicle(
     : {
         mediaContext: buildMediaContext(meta),
         collectionContext: {
-          protocol: { parents: null, children: null, gallery: null, grandparents: null, greatGrandparents: null },
+          protocol: { parents: null, children: null, grandchildren: null, gallery: null, grandparents: null, greatGrandparents: null },
           registry: { match: null, issues: [] },
           market: { match: null, satflow_match: null, ord_net_match: null },
           profile: null,
