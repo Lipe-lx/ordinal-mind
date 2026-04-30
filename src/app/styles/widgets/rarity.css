@@ -1,0 +1,108 @@
+.widget-rarity-grid-wrapper {
+  margin-top: 4px;
+}
+
+.widget-rarity-grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-left: 4px;
+}
+
+.widget-rarity-grid-label {
+  font-size: 0.688rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.widget-rarity-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.widget-rarity-page-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.widget-rarity-page-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.widget-rarity-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.widget-rarity-page-indicator {
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  min-width: 30px;
+  text-align: center;
+}
+
+.widget-rarity-rank-cell {
+  margin-bottom: 6px;
+}
+
+.widget-rarity-grid-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.widget-rarity-confidence-mini {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.widget-rarity-confidence-mini.tone-high { color: var(--rarity-uncommon); }
+.widget-rarity-confidence-mini.tone-medium { color: var(--rarity-legendary); }
+.widget-rarity-confidence-mini.tone-low { color: var(--danger); }
+
+.widget-rarity-source-mini {
+  font-size: 0.625rem;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.widget-rarity-grid-wrapper .widget-meta-cell {
+  padding: 4px 10px;
+}
+
+.widget-rarity-traits-grid .widget-meta-cell {
+  min-height: 56px;
+}
+
+.widget-meta-cell-empty {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}

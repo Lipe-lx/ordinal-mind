@@ -1,0 +1,60 @@
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  text-align: center;
+  gap: var(--space-2xl);
+}
+
+.home-title {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.home-title-accent {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.home-subtitle {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: var(--text-secondary);
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.home-search {
+  display: flex;
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 640px;
+}
+
+.home-search .input-field {
+  flex: 1;
+}
+
+.home-search .btn {
+  padding: var(--space-md) var(--space-xl);
+  white-space: nowrap;
+}
+
+.home-hint {
+  font-size: 0.813rem;
+  color: var(--text-tertiary);
+}
+
+.home-error {
+  color: #ef4444;
+  font-size: 0.875rem;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}

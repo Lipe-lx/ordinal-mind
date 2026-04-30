@@ -56,7 +56,13 @@ This is the current structure and responsibility map of the repository.
 
 ### Styling
 
-- `index.css`: design tokens + all layout/component styles.
+- `index.css`: global stylesheet entrypoint; imports the modular CSS tree in cascade-safe order.
+- `styles/base/*`: tokens, reset, glass utility, and shared fade-in animation.
+- `styles/components/*`: reusable primitives such as buttons, inputs, badges, tooltip, modal, and skeleton.
+- `styles/features/chronicle/*`: chronicle shell, card, timeline, navigation, tabs, and genealogy views.
+- `styles/features/narrative/*`: narrative rendering, chat shell, and chat history modal.
+- `styles/widgets/*`: metadata, provenance/collection context, ownership, sources, and rarity widgets.
+- `styles/legacy-responsive.css`: temporary responsive overrides kept separate to avoid regressions during migration.
 
 ## Worker (`src/worker`)
 
@@ -109,4 +115,5 @@ This is the current structure and responsibility map of the repository.
 ## Current Known Boundaries
 
 - Wiki requires D1 migrations locally and remotely; use `npm run db:migrate:local` for `npm run dev` and `npm run db:migrate:remote` for deployed D1.
-- Typecheck currently fails on a known preexisting type mismatch in `src/worker/agents/collections.ts` unrelated to chat/docs updates.
+- Production builds may still emit the existing chunk-size warning from Vite.
+- In sandboxed environments, Wrangler may emit a non-blocking log-write warning when it cannot write outside the workspace.

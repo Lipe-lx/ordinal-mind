@@ -1,0 +1,32 @@
+.address-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 800px;
+}
+
+.address-item {
+  cursor: pointer;
+  padding: var(--space-md);
+  text-align: center;
+}
+
+.address-item:hover {
+  border-color: var(--accent-primary);
+}
+
+.address-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.address-item-number {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--accent-primary);
+}

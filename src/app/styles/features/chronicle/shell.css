@@ -1,0 +1,38 @@
+.chronicle-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.chronicle {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 380px;
+  gap: var(--space-lg);
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1280px) {
+  .chronicle {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .timeline-panel {
+    grid-column: 1 / -1;
+    height: auto;
+    max-height: 600px;
+  }
+}
+
+@media (max-width: 900px) {
+  .chronicle {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chronicle-header-number {
+  font-family: var(--font-mono);
+  color: var(--accent-primary);
+}

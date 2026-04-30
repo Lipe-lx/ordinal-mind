@@ -1,0 +1,53 @@
+.portal-tooltip {
+  pointer-events: none;
+  padding: 8px 12px;
+  max-width: 240px;
+  border-radius: 6px;
+  background: rgba(18, 18, 32, 0.97);
+  backdrop-filter: blur(12px);
+  color: #f0f0f5;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: normal;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(247, 147, 26, 0.35);
+  --arrow-left: 50%;
+}
+
+.portal-tooltip.side-top {
+  animation: portal-tooltip-in-top 0.12s ease-out forwards;
+}
+
+.portal-tooltip.side-bottom {
+  animation: portal-tooltip-in-bottom 0.12s ease-out forwards;
+}
+
+@keyframes portal-tooltip-in-top {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)); }
+  to   { opacity: 1; transform: translate(-50%, calc(-100% - 10px)); }
+}
+
+@keyframes portal-tooltip-in-bottom {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to   { opacity: 1; transform: translate(-50%, 10px); }
+}
+
+.portal-tooltip-arrow {
+  position: absolute;
+  left: var(--arrow-left, 50%);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+}
+
+.portal-tooltip.side-top .portal-tooltip-arrow {
+  bottom: -6px;
+  border-top: 6px solid rgba(247, 147, 26, 0.35);
+}
+
+.portal-tooltip.side-bottom .portal-tooltip-arrow {
+  top: -6px;
+  border-bottom: 6px solid rgba(247, 147, 26, 0.35);
+}

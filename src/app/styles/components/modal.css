@@ -1,0 +1,86 @@
+.byok-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.byok-modal {
+  width: 100%;
+  max-width: 480px;
+  padding: var(--space-2xl);
+  margin: var(--space-lg);
+}
+
+.byok-modal h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: var(--space-sm);
+}
+
+.byok-modal p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-lg);
+  line-height: 1.6;
+}
+
+.byok-modal .input-field {
+  margin-bottom: var(--space-md);
+}
+
+.byok-tabs {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.byok-tab-btn {
+  padding: var(--space-sm) 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-tertiary);
+  font-size: 0.813rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.byok-tab-btn:hover {
+  color: var(--text-secondary);
+}
+
+.byok-tab-btn.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.provider-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.813rem;
+  font-weight: 500;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.provider-badge.anthropic { background: rgba(204, 127, 68, 0.15); color: #cc7f44; }
+.provider-badge.openai { background: rgba(16, 163, 127, 0.15); color: #10a37f; }
+.provider-badge.gemini { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
+.provider-badge.unknown { background: var(--bg-surface); color: var(--text-tertiary); }
+
+.byok-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}

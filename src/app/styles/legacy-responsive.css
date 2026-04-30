@@ -1,0 +1,62 @@
+@media (max-width: 640px) {
+  .layout-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .layout-main {
+    padding: var(--space-lg) var(--space-md);
+    overflow-y: auto;
+  }
+
+  .home-search {
+    flex-direction: column;
+  }
+
+  .chronicle {
+    gap: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .chronicle-sidebar-left {
+    height: auto;
+    overflow: visible;
+  }
+
+  .chronicle-card {
+    height: auto;
+    overflow: visible;
+  }
+
+  .timeline-panel {
+    height: auto;
+    overflow: visible;
+  }
+
+  .temporal-tree {
+    padding-left: var(--space-xl);
+  }
+
+  .widget-meta-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .widget-ownership-chain {
+    gap: var(--space-sm);
+  }
+
+  .widget-ownership-chain.condensed {
+    gap: var(--space-sm);
+  }
+
+  .narrative-loading-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .layout-mode-narrative .narrative-chat-shell {
+    --chat-side-padding: var(--space-md);
+  }
+}

@@ -1,0 +1,31 @@
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  text-align: center;
+  gap: var(--space-lg);
+}
+
+.error-boundary h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.error-boundary p {
+  color: var(--text-secondary);
+  max-width: 480px;
+}
+
+.error-details {
+  font-family: var(--font-mono);
+  font-size: 0.813rem;
+  color: var(--text-tertiary);
+  background: var(--bg-surface);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  max-width: 600px;
+  overflow-x: auto;
+  text-align: left;
+}
