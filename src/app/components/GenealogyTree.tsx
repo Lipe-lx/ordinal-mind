@@ -1,7 +1,8 @@
 import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
-import { buildGenealogyConnections, buildGenealogyLevels } from "../lib/genealogy"
+import { buildGenealogyConnections, buildGenealogyLevels, GENEALOGY_VISIBLE_LIMITS } from "../lib/genealogy"
+import { computeGenealogyAutoFitScale, GENEALOGY_LAYOUT_SETTLE_DELAYS_MS } from "../lib/genealogyLayout"
 import { formatContentTypeLabel } from "../lib/media"
 import { GenealogyNode } from "./GenealogyNode"
 import { InscriptionMedia } from "./InscriptionMedia"
@@ -104,7 +105,9 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   
   const containerRef = useRef<HTMLDivElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
-  const hasAutoFitted = useRef<string | null>(null)
+  const hasUserInteracted = useRef(false)
+  const settleTimeoutsRef = useRef<number[]>([])
+  const syncRafRef = useRef<number | null>(null)
   
   // Zoom & Pan State
   const scale = useMotionValue(1)
@@ -195,56 +198,106 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     })
   }, [])
 
-  // Setup ResizeObserver for robust measurement
-  useEffect(() => {
-    if (!treeRef.current) return
+  const applyAutoFit = useCallback(() => {
+    if (!containerRef.current || !treeRef.current) return
 
-    const observer = new ResizeObserver(() => {
-      measurePositions()
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const treeWidth = treeRef.current.offsetWidth
+    const treeHeight = treeRef.current.offsetHeight
+    const autoScale = computeGenealogyAutoFitScale({
+      containerWidth: containerRect.width,
+      containerHeight: containerRect.height,
+      treeWidth,
+      treeHeight,
     })
 
-    observer.observe(treeRef.current)
+    scale.set(autoScale)
+    x.set(0)
+    y.set(0)
+  }, [scale, x, y])
+
+  const syncTreeLayout = useCallback((withAutoFit: boolean) => {
+    if (syncRafRef.current !== null) {
+      cancelAnimationFrame(syncRafRef.current)
+    }
+
+    syncRafRef.current = requestAnimationFrame(() => {
+      syncRafRef.current = null
+      if (withAutoFit && !hasUserInteracted.current) {
+        applyAutoFit()
+      }
+      measurePositions()
+    })
+  }, [applyAutoFit, measurePositions])
+
+  const clearPendingLayoutSync = useCallback(() => {
+    settleTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    settleTimeoutsRef.current = []
+
+    if (syncRafRef.current !== null) {
+      cancelAnimationFrame(syncRafRef.current)
+      syncRafRef.current = null
+    }
+  }, [])
+
+  const markUserInteracted = useCallback(() => {
+    hasUserInteracted.current = true
+  }, [])
+
+  // Setup ResizeObserver for robust measurement
+  useEffect(() => {
+    const treeElement = treeRef.current
+    if (!treeElement) return
+
+    const observer = new ResizeObserver(() => {
+      syncTreeLayout(true)
+    })
+
+    observer.observe(treeElement)
     
     // Also observe the container to handle window/container resizing
     if (containerRef.current) {
       observer.observe(containerRef.current)
     }
 
-    return () => observer.disconnect()
-  }, [measurePositions])
+    const mutationObserver = new MutationObserver(() => {
+      syncTreeLayout(true)
+    })
+    mutationObserver.observe(treeElement, {
+      childList: true,
+      subtree: true,
+    })
 
-  // Initial Auto-fit
-  useEffect(() => {
-    if (hasAutoFitted.current === chronicle.meta.inscription_id) return
+    const mediaLifecycleHandler = () => {
+      syncTreeLayout(true)
+    }
+    const mediaLifecycleEvents = ["load", "loadeddata", "canplay", "error"]
+    mediaLifecycleEvents.forEach((eventName) => {
+      treeElement.addEventListener(eventName, mediaLifecycleHandler, true)
+    })
 
-    const timer = setTimeout(() => {
-      if (!containerRef.current || !treeRef.current) return
-
-      const containerRect = containerRef.current.getBoundingClientRect()
-      const treeWidth = treeRef.current.offsetWidth
-      const treeHeight = treeRef.current.offsetHeight
-      
-      const availableWidth = containerRect.width
-      const availableHeight = containerRect.height
-      
-      const scaleX = availableWidth / treeWidth
-      const scaleY = availableHeight / treeHeight
-      // Add a 10% zoom boost to make it feel "closer" by default
-      const autoScale = Math.min(Math.max(Math.min(scaleX, scaleY) * 1.1, 0.15), 1.2)
-      
-      scale.set(autoScale)
-      x.set(0)
-      y.set(0)
-      
-      hasAutoFitted.current = chronicle.meta.inscription_id
-      
-      requestAnimationFrame(() => {
-        setTimeout(measurePositions, 100)
+    return () => {
+      observer.disconnect()
+      mutationObserver.disconnect()
+      mediaLifecycleEvents.forEach((eventName) => {
+        treeElement.removeEventListener(eventName, mediaLifecycleHandler, true)
       })
-    }, 400)
-    
-    return () => clearTimeout(timer)
-  }, [chronicle.meta.inscription_id, measurePositions, scale, x, y])
+    }
+  }, [syncTreeLayout])
+
+  // Initial settle window: keep syncing while media and animated nodes finish mounting.
+  useEffect(() => {
+    hasUserInteracted.current = false
+    clearPendingLayoutSync()
+
+    settleTimeoutsRef.current = GENEALOGY_LAYOUT_SETTLE_DELAYS_MS.map((delayMs) =>
+      window.setTimeout(() => {
+        syncTreeLayout(true)
+      }, delayMs)
+    )
+
+    return clearPendingLayoutSync
+  }, [chronicle.meta.inscription_id, clearPendingLayoutSync, syncTreeLayout])
 
   // Handle Zoom
   useEffect(() => {
@@ -253,6 +306,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
+      markUserInteracted()
       const delta = e.deltaY * -0.0012
       const currentScale = scale.get()
       const newScale = Math.min(Math.max(currentScale + delta, 0.1), 3.0)
@@ -261,7 +315,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
     container.addEventListener("wheel", onWheel, { passive: false })
     return () => container.removeEventListener("wheel", onWheel)
-  }, [scale])
+  }, [markUserInteracted, scale])
 
   // Note: We removed the springScale.on("change") listener here because the SVG 
   // is nested within the scaled container. Connections remain stable during zoom.
@@ -315,27 +369,13 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   }, [root.inscription_id]);
 
   const handleDoubleClick = useCallback(() => {
-    if (!containerRef.current || !treeRef.current) return;
-
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const treeWidth = treeRef.current.offsetWidth;
-    const treeHeight = treeRef.current.offsetHeight;
-    
-    const availableWidth = containerRect.width;
-    const availableHeight = containerRect.height;
-    
-    const scaleX = availableWidth / treeWidth;
-    const scaleY = availableHeight / treeHeight;
-    // Add a 10% zoom boost to make it feel "closer" by default
-    const autoScale = Math.min(Math.max(Math.min(scaleX, scaleY) * 1.1, 0.15), 1.2);
-    
-    // Scale is already linked to a spring, so we just set it
-    scale.set(autoScale);
-    
+    markUserInteracted()
+    applyAutoFit()
     // Animate x and y smoothly with elastic physics
-    animate(x, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 });
-    animate(y, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 });
-  }, [scale, x, y]);
+    animate(x, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
+    animate(y, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
+    syncTreeLayout(false)
+  }, [applyAutoFit, markUserInteracted, syncTreeLayout, x, y])
 
   return (
     <div 
@@ -351,6 +391,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         ref={treeRef}
         drag
         dragMomentum={false}
+        onDragStart={markUserInteracted}
         style={{ x, y, scale: springScale }}
       >
         {/* SVG Connections Layer */}
@@ -386,7 +427,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
         {/* Great-Grandparents Row */}
         <div className="genealogy-row ancestors" id="great-grandparents-row">
-          {greatGrandparents.slice(0, 9).map((ggp) => (
+          {greatGrandparents.slice(0, GENEALOGY_VISIBLE_LIMITS.greatGrandparents).map((ggp) => (
             <GenealogyNode 
               key={ggp.inscription_id}
               id={`node-${ggp.inscription_id}`}
@@ -396,12 +437,12 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               onTap={() => setSelectedNode(ggp)}
             />
           ))}
-          {greatGrandparents.length > 9 && renderMoreCard(greatGrandparents.length - 9, false)}
+          {greatGrandparents.length > GENEALOGY_VISIBLE_LIMITS.greatGrandparents && renderMoreCard(greatGrandparents.length - GENEALOGY_VISIBLE_LIMITS.greatGrandparents, false)}
         </div>
 
         {/* Grandparents Row */}
         <div className="genealogy-row ancestors" id="grandparents-row">
-          {grandparents.slice(0, 9).map((gp) => (
+          {grandparents.slice(0, GENEALOGY_VISIBLE_LIMITS.grandparents).map((gp) => (
             <GenealogyNode 
               key={gp.inscription_id}
               id={`node-${gp.inscription_id}`}
@@ -411,12 +452,12 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               onTap={() => setSelectedNode(gp)}
             />
           ))}
-          {grandparents.length > 9 && renderMoreCard(grandparents.length - 9, false)}
+          {grandparents.length > GENEALOGY_VISIBLE_LIMITS.grandparents && renderMoreCard(grandparents.length - GENEALOGY_VISIBLE_LIMITS.grandparents, false)}
         </div>
 
         {/* Parents Row */}
         <div className="genealogy-row parents" id="parents-row">
-          {parents.slice(0, 9).map((p) => (
+          {parents.slice(0, GENEALOGY_VISIBLE_LIMITS.parents).map((p) => (
             <GenealogyNode 
               key={p.inscription_id}
               id={`node-${p.inscription_id}`}
@@ -426,7 +467,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               onTap={() => setSelectedNode(p)}
             />
           ))}
-          {parents.length > 9 && renderMoreCard(parents.length - 9, false)}
+          {parents.length > GENEALOGY_VISIBLE_LIMITS.parents && renderMoreCard(parents.length - GENEALOGY_VISIBLE_LIMITS.parents, false)}
         </div>
 
         {/* Root Node Row */}
@@ -443,7 +484,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         {/* Children Row */}
         <div className="genealogy-row children" id="children-row">
           <div className="children-grid">
-            {children.slice(0, 9).map((child) => (
+            {children.slice(0, GENEALOGY_VISIBLE_LIMITS.children).map((child) => (
               <GenealogyNode 
                 key={child.inscription_id}
                 id={`node-${child.inscription_id}`}
@@ -452,14 +493,14 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                 onTap={() => setSelectedNode(child)}
               />
             ))}
-            {totalChildren > 9 && renderMoreCard(totalChildren - 9, true)}
+            {totalChildren > GENEALOGY_VISIBLE_LIMITS.children && renderMoreCard(totalChildren - GENEALOGY_VISIBLE_LIMITS.children, true)}
           </div>
         </div>
 
         {/* Grandchildren Row */}
         <div className="genealogy-row grandchildren" id="grandchildren-row">
           <div className="children-grid">
-            {grandchildren.slice(0, 9).map((grandchild) => (
+            {grandchildren.slice(0, GENEALOGY_VISIBLE_LIMITS.grandchildren).map((grandchild) => (
               <GenealogyNode
                 key={grandchild.inscription_id}
                 id={`node-${grandchild.inscription_id}`}
@@ -468,7 +509,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                 onTap={() => setSelectedNode(grandchild)}
               />
             ))}
-            {totalGrandchildren > 9 && renderMoreCard(totalGrandchildren - 9, true)}
+            {totalGrandchildren > GENEALOGY_VISIBLE_LIMITS.grandchildren && renderMoreCard(totalGrandchildren - GENEALOGY_VISIBLE_LIMITS.grandchildren, true)}
           </div>
         </div>
       </motion.div>

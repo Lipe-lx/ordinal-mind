@@ -1,5 +1,13 @@
 import type { RelatedInscriptionSummary } from "./types"
 
+export const GENEALOGY_VISIBLE_LIMITS = {
+  greatGrandparents: 9,
+  grandparents: 9,
+  parents: 9,
+  children: 14,
+  grandchildren: 13,
+} as const
+
 export type GenealogyLevelId =
   | "ggp"
   | "gp"
@@ -35,17 +43,14 @@ export function buildGenealogyLevels(args: {
   root: RelatedInscriptionSummary
   children: RelatedInscriptionSummary[]
   grandchildren: RelatedInscriptionSummary[]
-  maxVisiblePerLevel?: number
 }): GenealogyLevel[] {
-  const maxVisiblePerLevel = args.maxVisiblePerLevel ?? 9
-
   return [
-    { id: "ggp", items: args.greatGrandparents.slice(0, maxVisiblePerLevel) },
-    { id: "gp", items: args.grandparents.slice(0, maxVisiblePerLevel) },
-    { id: "p", items: args.parents.slice(0, maxVisiblePerLevel) },
+    { id: "ggp", items: args.greatGrandparents.slice(0, GENEALOGY_VISIBLE_LIMITS.greatGrandparents) },
+    { id: "gp", items: args.grandparents.slice(0, GENEALOGY_VISIBLE_LIMITS.grandparents) },
+    { id: "p", items: args.parents.slice(0, GENEALOGY_VISIBLE_LIMITS.parents) },
     { id: "root", items: [args.root] },
-    { id: "child", items: args.children.slice(0, maxVisiblePerLevel) },
-    { id: "grandchild", items: args.grandchildren.slice(0, maxVisiblePerLevel) },
+    { id: "child", items: args.children.slice(0, GENEALOGY_VISIBLE_LIMITS.children) },
+    { id: "grandchild", items: args.grandchildren.slice(0, GENEALOGY_VISIBLE_LIMITS.grandchildren) },
   ]
 }
 

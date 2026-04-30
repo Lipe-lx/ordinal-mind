@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildGenealogyConnections,
   buildGenealogyLevels,
+  GENEALOGY_VISIBLE_LIMITS,
   getGenealogyNodeDomId,
 } from "../../src/app/lib/genealogy"
 import type { RelatedInscriptionSummary } from "../../src/app/lib/types"
@@ -87,5 +88,27 @@ describe("genealogy helpers", () => {
         connection.endId === getGenealogyNodeDomId("grandchild-1i0", root.inscription_id)
       )
     ).toBe(false)
+  })
+
+  it("shows 14 children and 13 grandchildren before collapsing into the more card", () => {
+    const root = makeSummary("rooti0", 7)
+    const children = Array.from({ length: 20 }, (_, index) =>
+      makeSummary(`child-${index}i0`, index + 10)
+    )
+    const grandchildren = Array.from({ length: 18 }, (_, index) =>
+      makeSummary(`grandchild-${index}i0`, index + 100, [`child-${index % 3}i0`])
+    )
+
+    const levels = buildGenealogyLevels({
+      greatGrandparents: [],
+      grandparents: [],
+      parents: [],
+      root,
+      children,
+      grandchildren,
+    })
+
+    expect(levels.find((level) => level.id === "child")?.items).toHaveLength(GENEALOGY_VISIBLE_LIMITS.children)
+    expect(levels.find((level) => level.id === "grandchild")?.items).toHaveLength(GENEALOGY_VISIBLE_LIMITS.grandchildren)
   })
 })
