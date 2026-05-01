@@ -146,10 +146,11 @@ export function buildTimeline(
       metadata: {
         from: t.from_address,
         to: t.to_address,
+        payment_address: t.payment_address,
         sale_price_sats: t.is_sale ? t.value : undefined,
         postage_sats: t.postage_value,
         is_sale: t.is_sale,
-        is_heuristic: t.is_sale, // signals price was detected by on-chain heuristic
+        is_heuristic: t.is_heuristic,
         inputs: t.input_count,
         outputs: t.output_count,
       },

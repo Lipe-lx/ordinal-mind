@@ -50,10 +50,12 @@ export interface EnrichedTransfer {
   from_address: string
   to_address: string
   value?: number              // real sale price (sats) — undefined if simple transfer
+  payment_address?: string    // address that received the payment (may differ from from_address)
   postage_value?: number      // inscription UTXO value (postage, NOT price)
   confirmed_at: string | null
   block_height: number
   is_sale: boolean            // heuristic: multi-party inputs detected
+  is_heuristic: boolean       // true if price was detected via index mapping or search
   input_count: number
   output_count: number
 }
@@ -151,25 +153,23 @@ export const fetchMempool = {
  * - Seller signs with SIGHASH_SINGLE|ANYONECANPAY
  * - Seller's input contains the inscription
  * - Buyer adds funding inputs from different addresses
- * - Payment output goes to seller's address
+ * - Payment output goes to seller's chosen index (usually matches their input index)
  *
- * We detect this by checking if inputs come from multiple distinct addresses.
- * If multi-party: likely a sale → extract payment to seller.
- * If single-party: simple transfer.
+ * We detect this by:
+ * 1. Checking if inputs come from multiple distinct addresses (multi-party).
+ * 2. Looking at the output at the SAME index as the inscription input.
+ * 3. If that output is NOT where the inscription landed, it's likely the payment.
  *
- * Note: This heuristic is ~90% accurate. Edge cases include:
- * - UTXO consolidations from same owner with multiple addresses
- * - OTC peer-to-peer sales without standard PSBT structure
- * - Non-standard marketplace transaction formats
+ * Fallback: searching for other outputs going to the seller's input address.
  */
-function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, inscriptionVout: number): EnrichedTransfer {
+export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, inscriptionVout: number): EnrichedTransfer {
   const sellerPrevout = tx.vin[inscriptionVinIndex]?.prevout
-  const sellerAddress = sellerPrevout?.scriptpubkey_address ?? "?"
+  const sellerInputAddress = sellerPrevout?.scriptpubkey_address ?? "?"
 
   const buyerAddress = tx.vout[inscriptionVout]?.scriptpubkey_address ?? "?"
   const postageValue = tx.vout[inscriptionVout]?.value ?? 0
 
-  // Multi-party detection: different addresses in inputs = probable PSBT sale
+  // Multi-party detection: different addresses in inputs = probable marketplace/PSBT sale
   const inputAddresses = new Set(
     tx.vin
       .map(v => v.prevout?.scriptpubkey_address)
@@ -177,33 +177,57 @@ function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, inscription
   )
   const isMultiParty = inputAddresses.size > 1
 
-  // Extract real sale price: sum of outputs going to the seller
-  // (excluding the inscription output which is postage going to buyer)
   let salePrice = 0
+  let paymentAddress = sellerInputAddress
+  let isHeuristic = false
+
   if (isMultiParty) {
-    for (let i = 0; i < tx.vout.length; i++) {
-      if (i === inscriptionVout) continue // skip inscription output
-      if (tx.vout[i].scriptpubkey_address === sellerAddress) {
-        salePrice += tx.vout[i].value
+    // A. Marketplace Heuristic: SIGHASH_SINGLE index mapping
+    // In a standard PSBT sale, Output N receives payment for Input N.
+    const potentialPaymentOutput = tx.vout[inscriptionVinIndex]
+    
+    // If the output at the same index is NOT where the inscription landed, it's the payment.
+    if (potentialPaymentOutput && inscriptionVout !== inscriptionVinIndex) {
+      salePrice = potentialPaymentOutput.value
+      paymentAddress = potentialPaymentOutput.scriptpubkey_address ?? sellerInputAddress
+      isHeuristic = true
+    }
+
+    // B. Legacy Fallback: Search for any output going back to the seller's input address
+    // (Excluding the inscription output itself)
+    if (salePrice === 0) {
+      for (let i = 0; i < tx.vout.length; i++) {
+        if (i === inscriptionVout) continue 
+        if (tx.vout[i].scriptpubkey_address === sellerInputAddress) {
+          salePrice += tx.vout[i].value
+          isHeuristic = true
+        }
       }
     }
   }
 
+  // Final validation: price must be significant to be considered a sale (avoid fee noise)
+  const MIN_SALE_PRICE = 10000 
+  const confirmedSale = isMultiParty && salePrice >= MIN_SALE_PRICE
+
   return {
     tx_id: tx.txid,
-    from_address: sellerAddress,
+    from_address: sellerInputAddress,
     to_address: buyerAddress,
-    value: salePrice > 0 ? salePrice : undefined,
+    value: confirmedSale ? salePrice : undefined,
+    payment_address: confirmedSale ? paymentAddress : undefined,
     postage_value: postageValue,
     confirmed_at: tx.status.block_time
       ? new Date(tx.status.block_time * 1000).toISOString()
       : null,
     block_height: tx.status.block_height ?? 0,
-    is_sale: isMultiParty && salePrice > 0,
+    is_sale: confirmedSale,
+    is_heuristic: isHeuristic,
     input_count: tx.vin.length,
     output_count: tx.vout.length,
   }
 }
+
 
 export function findInscriptionOutputLocation(
   tx: MempoolTx,
