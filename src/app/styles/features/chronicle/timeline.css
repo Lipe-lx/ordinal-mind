@@ -199,33 +199,12 @@
 
 .timeline-node[data-type="genesis"]::before { background: var(--color-genesis); border-color: var(--color-genesis); }
 .timeline-node[data-type="transfer"]::before { background: var(--color-transfer); border-color: var(--color-transfer); }
-.timeline-node[data-type="transfer_chain"]::before { background: var(--color-transfer); border-color: var(--color-transfer); }
 .timeline-node[data-type="sale"]::before { background: var(--color-sale); border-color: var(--color-sale); }
 .timeline-node[data-type="social_mention"]::before { background: var(--color-x-mention); border-color: var(--color-x-mention); }
 .timeline-node[data-type="collection_link"]::before { background: var(--color-collection); border-color: var(--color-collection); }
 .timeline-node[data-type="recursive_ref"]::before { background: var(--color-recursive); border-color: var(--color-recursive); }
 .timeline-node[data-type="sat_context"]::before { background: var(--color-sat); border-color: var(--color-sat); }
 .timeline-node[data-type="trait_context"]::before { background: var(--color-market); border-color: var(--color-market); }
-
-.timeline-node[data-type="transfer_chain"] {
-  background: rgba(59, 130, 246, 0.05);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.timeline-node-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: var(--space-sm);
-  padding: 1px 8px;
-  font-size: 0.688rem;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  border-radius: var(--radius-full);
-  background: var(--bg-surface);
-  color: var(--color-transfer);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  vertical-align: middle;
-}
 
 .timeline-node-header {
   display: flex;

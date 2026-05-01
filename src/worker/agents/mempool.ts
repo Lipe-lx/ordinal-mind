@@ -97,7 +97,7 @@ export const fetchMempool = {
     genesisVout: number,
     options: TraceForwardOptions = {}
   ): Promise<EnrichedTransfer[]> {
-    const { limit = 200, delayMs = 150, onProgress } = options
+    const { limit = 30, delayMs = 150, onProgress } = options
     const transfers: EnrichedTransfer[] = []
     let currentTxid = genesisTxid
     let currentVout = genesisVout

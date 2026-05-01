@@ -10,7 +10,6 @@ interface Props {
 const EVENT_ICONS: Record<string, string> = {
   genesis: "⛏️",
   transfer: "↗️",
-  transfer_chain: "📦",
   sale: "💰",
   social_mention: "✦",
   collection_link: "📂",
@@ -22,7 +21,6 @@ const EVENT_ICONS: Record<string, string> = {
 const EVENT_LABELS: Record<string, string> = {
   genesis: "Genesis",
   transfer: "Transfer",
-  transfer_chain: "Distribution Chain",
   sale: "Sale",
   social_mention: "Social Mention",
   collection_link: "Collection",
@@ -106,11 +104,6 @@ export function TemporalTree({ events, collectionSlug }: Props) {
 
             <p className="timeline-node-desc">
               {linkifyBrands(event.description, collectionSlug)}
-              {event.event_type === "transfer_chain" && typeof event.metadata?.count === "number" && (
-                <span className="timeline-node-badge">
-                  {event.metadata.count} steps
-                </span>
-              )}
               {event.event_type === "social_mention" && scope && (
                 <span
                   className="timeline-node-heuristic"
