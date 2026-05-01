@@ -30,6 +30,7 @@ export interface GenealogyConnection {
 export interface GenealogyDescendantColumn {
   child: RelatedInscriptionSummary
   grandchildren: RelatedInscriptionSummary[]
+  hiddenGrandchildrenCount: number
 }
 
 export function getGenealogyNodeDomId(
@@ -139,18 +140,23 @@ export function buildGenealogyConnections(
 
 export function buildGenealogyDescendantColumns(
   children: RelatedInscriptionSummary[],
-  grandchildren: RelatedInscriptionSummary[]
+  grandchildren: RelatedInscriptionSummary[],
+  maxVisibleGrandchildren: number = GENEALOGY_VISIBLE_LIMITS.grandchildren
 ): {
   columns: GenealogyDescendantColumn[]
   unassignedGrandchildren: RelatedInscriptionSummary[]
+  hiddenUnassignedGrandchildrenCount: number
 } {
   const columns = children.map((child) => ({
     child,
     grandchildren: [] as RelatedInscriptionSummary[],
+    hiddenGrandchildrenCount: 0,
   }))
 
   const childColumnById = new Map(columns.map((column) => [column.child.inscription_id, column]))
   const unassignedGrandchildren: RelatedInscriptionSummary[] = []
+  let hiddenUnassignedGrandchildrenCount = 0
+  let remainingVisibleGrandchildren = maxVisibleGrandchildren
 
   for (const grandchild of grandchildren) {
     const relatedToIds = grandchild.related_to_ids ?? []
@@ -158,16 +164,27 @@ export function buildGenealogyDescendantColumns(
       .map((id) => childColumnById.get(id))
       .find((column): column is GenealogyDescendantColumn => Boolean(column))
 
-    if (anchorColumn) {
-      anchorColumn.grandchildren.push(grandchild)
+    if (remainingVisibleGrandchildren > 0) {
+      if (anchorColumn) {
+        anchorColumn.grandchildren.push(grandchild)
+      } else {
+        unassignedGrandchildren.push(grandchild)
+      }
+      remainingVisibleGrandchildren -= 1
       continue
     }
 
-    unassignedGrandchildren.push(grandchild)
+    if (anchorColumn) {
+      anchorColumn.hiddenGrandchildrenCount += 1
+      continue
+    }
+
+    hiddenUnassignedGrandchildrenCount += 1
   }
 
   return {
     columns,
     unassignedGrandchildren,
+    hiddenUnassignedGrandchildrenCount,
   }
 }

@@ -128,6 +128,27 @@ describe("genealogy helpers", () => {
     expect(result.columns).toHaveLength(2)
     expect(result.columns[0]?.grandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-1i0"])
     expect(result.columns[1]?.grandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-2i0"])
+    expect(result.columns[0]?.hiddenGrandchildrenCount).toBe(0)
+    expect(result.columns[1]?.hiddenGrandchildrenCount).toBe(0)
     expect(result.unassignedGrandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-3i0"])
+    expect(result.hiddenUnassignedGrandchildrenCount).toBe(0)
+  })
+
+  it("keeps hidden grandchild overflow anchored to the correct child column", () => {
+    const childOne = makeSummary("child-1i0", 8)
+    const childTwo = makeSummary("child-2i0", 9)
+    const grandchildren = [
+      makeSummary("grandchild-1i0", 10, ["child-1i0"]),
+      makeSummary("grandchild-2i0", 11, ["child-2i0"]),
+      makeSummary("grandchild-3i0", 12, ["child-1i0"]),
+      makeSummary("grandchild-4i0", 13, ["child-1i0"]),
+    ]
+
+    const result = buildGenealogyDescendantColumns([childOne, childTwo], grandchildren, 2)
+
+    expect(result.columns[0]?.grandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-1i0"])
+    expect(result.columns[1]?.grandchildren.map((item) => item.inscription_id)).toEqual(["grandchild-2i0"])
+    expect(result.columns[0]?.hiddenGrandchildrenCount).toBe(2)
+    expect(result.columns[1]?.hiddenGrandchildrenCount).toBe(0)
   })
 })

@@ -153,26 +153,42 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const grandchildren = useMemo(() => protocol.grandchildren?.items ?? [], [protocol.grandchildren?.items])
   const totalChildren = protocol.children?.total_count ?? 0
   const totalGrandchildren = protocol.grandchildren?.total_count ?? 0
+  const visibleChildren = useMemo(
+    () => children.slice(0, GENEALOGY_VISIBLE_LIMITS.children),
+    [children]
+  )
+  const descendantColumns = useMemo(
+    () => buildGenealogyDescendantColumns(visibleChildren, grandchildren, GENEALOGY_VISIBLE_LIMITS.grandchildren),
+    [visibleChildren, grandchildren]
+  )
+  const renderedGrandchildren = useMemo(
+    () => [
+      ...descendantColumns.columns.flatMap((column) => column.grandchildren),
+      ...descendantColumns.unassignedGrandchildren,
+    ],
+    [descendantColumns]
+  )
+  const hiddenGrandchildrenCount = useMemo(
+    () =>
+      descendantColumns.columns.reduce((sum, column) => sum + column.hiddenGrandchildrenCount, 0)
+      + descendantColumns.hiddenUnassignedGrandchildrenCount,
+    [descendantColumns]
+  )
 
   const levels = useMemo(() => buildGenealogyLevels({
     greatGrandparents,
     grandparents,
     parents,
     root,
-    children,
-    grandchildren,
-  }), [greatGrandparents, grandparents, parents, root, children, grandchildren])
+    children: visibleChildren,
+    grandchildren: renderedGrandchildren,
+  }), [greatGrandparents, grandparents, parents, root, visibleChildren, renderedGrandchildren])
 
   const connections = useMemo(
     () => buildGenealogyConnections(levels, root.inscription_id),
     [levels, root.inscription_id]
   )
-  const visibleChildren = levels.find((level) => level.id === "child")?.items ?? []
-  const visibleGrandchildren = levels.find((level) => level.id === "grandchild")?.items ?? []
-  const descendantColumns = useMemo(
-    () => buildGenealogyDescendantColumns(visibleChildren, visibleGrandchildren),
-    [visibleChildren, visibleGrandchildren]
-  )
+  const visibleGrandchildren = renderedGrandchildren
 
   const isMeasuring = useRef(false)
   /**
@@ -522,7 +538,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
         {viewMode === "tree" ? (
           <div className="genealogy-row descendants" id="descendants-row">
-            {descendantColumns.columns.map(({ child, grandchildren: groupedGrandchildren }) => (
+            {descendantColumns.columns.map(({ child, grandchildren: groupedGrandchildren, hiddenGrandchildrenCount: columnHiddenGrandchildrenCount }) => (
               <div key={child.inscription_id} className="descendant-column">
                 <GenealogyNode
                   id={`node-${child.inscription_id}`}
@@ -537,9 +553,12 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                       id={`node-${grandchild.inscription_id}`}
                       inscription={grandchild}
                       compact
-                      onTap={() => setSelectedNode(grandchild)}
-                    />
+                    onTap={() => setSelectedNode(grandchild)}
+                  />
                   ))}
+                  {columnHiddenGrandchildrenCount > 0
+                    ? renderMoreCard(columnHiddenGrandchildrenCount, true)
+                    : null}
                 </div>
               </div>
             ))}
@@ -555,17 +574,15 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                       onTap={() => setSelectedNode(grandchild)}
                     />
                   ))}
+                  {descendantColumns.hiddenUnassignedGrandchildrenCount > 0
+                    ? renderMoreCard(descendantColumns.hiddenUnassignedGrandchildrenCount, true)
+                    : null}
                 </div>
               </div>
             )}
             {totalChildren > GENEALOGY_VISIBLE_LIMITS.children && (
               <div className="descendant-column descendant-column--overflow">
                 {renderMoreCard(totalChildren - GENEALOGY_VISIBLE_LIMITS.children, true)}
-              </div>
-            )}
-            {totalGrandchildren > GENEALOGY_VISIBLE_LIMITS.grandchildren && (
-              <div className="descendant-column descendant-column--overflow">
-                {renderMoreCard(totalGrandchildren - GENEALOGY_VISIBLE_LIMITS.grandchildren, true)}
               </div>
             )}
           </div>
@@ -597,7 +614,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                     onTap={() => setSelectedNode(grandchild)}
                   />
                 ))}
-                {totalGrandchildren > GENEALOGY_VISIBLE_LIMITS.grandchildren && renderMoreCard(totalGrandchildren - GENEALOGY_VISIBLE_LIMITS.grandchildren, true)}
+                {hiddenGrandchildrenCount > 0 && renderMoreCard(hiddenGrandchildrenCount, true)}
               </div>
             </div>
           </>
