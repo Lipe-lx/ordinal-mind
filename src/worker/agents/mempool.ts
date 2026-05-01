@@ -218,8 +218,10 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
     }
   }
 
-  // Final validation: price must be significant to be considered a sale (avoid fee noise)
-  const MIN_SALE_PRICE = 10000 
+  // 3. Final validation: price must be significant to be considered a sale.
+  // We use 1000 sats as a threshold to distinguish between the item's postage 
+  // (usually 546 or 1000 sats) and a real marketplace payment.
+  const MIN_SALE_PRICE = 1000 
   const confirmedSale = isMultiParty && maxGain >= MIN_SALE_PRICE
 
   return {
