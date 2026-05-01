@@ -149,18 +149,20 @@ export const fetchMempool = {
  * Analyzes a transaction to determine if it's a sale or simple transfer,
  * and extracts the real sale price when applicable.
  *
- * Sale detection heuristic (PSBT marketplace pattern):
- * - Seller signs with SIGHASH_SINGLE|ANYONECANPAY
- * - Seller's input contains the inscription
- * - Buyer adds funding inputs from different addresses
- * - Payment output goes to seller's chosen index (usually matches their input index)
- *
- * We detect this by:
- * 1. Checking if inputs come from multiple distinct addresses (multi-party).
- * 2. Looking at the output at the SAME index as the inscription input.
- * 3. If that output is NOT where the inscription landed, it's likely the payment.
- *
- * Fallback: searching for other outputs going to the seller's input address.
+ * Net Gain Heuristic (Universal Marketplace Pattern):
+ * In any marketplace sale (PSBT, Swap, Padding Circular), the seller ends up with 
+ * a significantly higher total value across their outputs than they provided in inputs.
+ * 
+ * Logic:
+ * 1. Sum all inputs and outputs per unique address in the transaction.
+ * 2. Calculate the Net Gain (Total Output - Total Input) for each address.
+ * 3. The price is the highest Net Gain found (excluding the buyer who received the item).
+ * 
+ * This covers:
+ * - SIGHASH_SINGLE (Index mapping)
+ * - Symmetric Swaps (Crossed inputs/outputs)
+ * - Circular Padding (Seller provides dust input from payment address)
+ * - Multi-output payments (Price + Royalty + Fee)
  */
 export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, inscriptionVout: number): EnrichedTransfer {
   const sellerPrevout = tx.vin[inscriptionVinIndex]?.prevout
@@ -177,44 +179,54 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
   )
   const isMultiParty = inputAddresses.size > 1
 
-  let salePrice = 0
+  const addressStats = new Map<string, { input: number; output: number }>()
+
+  // 1. Calculate totals per address
+  for (const vin of tx.vin) {
+    const addr = vin.prevout?.scriptpubkey_address
+    if (addr) {
+      const stats = addressStats.get(addr) || { input: 0, output: 0 }
+      stats.input += vin.prevout?.value ?? 0
+      addressStats.set(addr, stats)
+    }
+  }
+
+  for (let i = 0; i < tx.vout.length; i++) {
+    const vout = tx.vout[i]
+    const addr = vout.scriptpubkey_address
+    if (addr) {
+      const stats = addressStats.get(addr) || { input: 0, output: 0 }
+      stats.output += vout.value
+      addressStats.set(addr, stats)
+    }
+  }
+
+  // 2. Identify highest net gain
+  let maxGain = 0
   let paymentAddress = sellerInputAddress
   let isHeuristic = false
 
-  if (isMultiParty) {
-    // A. Marketplace Heuristic: SIGHASH_SINGLE index mapping
-    // In a standard PSBT sale, Output N receives payment for Input N.
-    const potentialPaymentOutput = tx.vout[inscriptionVinIndex]
-    
-    // If the output at the same index is NOT where the inscription landed, it's the payment.
-    if (potentialPaymentOutput && inscriptionVout !== inscriptionVinIndex) {
-      salePrice = potentialPaymentOutput.value
-      paymentAddress = potentialPaymentOutput.scriptpubkey_address ?? sellerInputAddress
-      isHeuristic = true
-    }
+  for (const [addr, stats] of addressStats.entries()) {
+    // Skip the buyer address that received the inscription (it has a gain of postage, but we want the price)
+    if (addr === buyerAddress) continue
 
-    // B. Legacy Fallback: Search for any output going back to the seller's input address
-    // (Excluding the inscription output itself)
-    if (salePrice === 0) {
-      for (let i = 0; i < tx.vout.length; i++) {
-        if (i === inscriptionVout) continue 
-        if (tx.vout[i].scriptpubkey_address === sellerInputAddress) {
-          salePrice += tx.vout[i].value
-          isHeuristic = true
-        }
-      }
+    const gain = stats.output - stats.input
+    if (gain > maxGain) {
+      maxGain = gain
+      paymentAddress = addr
+      isHeuristic = true
     }
   }
 
   // Final validation: price must be significant to be considered a sale (avoid fee noise)
   const MIN_SALE_PRICE = 10000 
-  const confirmedSale = isMultiParty && salePrice >= MIN_SALE_PRICE
+  const confirmedSale = isMultiParty && maxGain >= MIN_SALE_PRICE
 
   return {
     tx_id: tx.txid,
     from_address: sellerInputAddress,
     to_address: buyerAddress,
-    value: confirmedSale ? salePrice : undefined,
+    value: confirmedSale ? maxGain : undefined,
     payment_address: confirmedSale ? paymentAddress : undefined,
     postage_value: postageValue,
     confirmed_at: tx.status.block_time
@@ -227,6 +239,7 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
     output_count: tx.vout.length,
   }
 }
+
 
 
 export function findInscriptionOutputLocation(
