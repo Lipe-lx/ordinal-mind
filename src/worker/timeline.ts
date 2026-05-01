@@ -127,35 +127,92 @@ export function buildTimeline(
   }
 
   // Transfers and sales — using forward-tracked data with real price detection
-  for (const t of transfers) {
-    events.push({
-      id: makeEventId(
-        t.is_sale ? "sale" : "transfer",
-        t.confirmed_at ?? new Date(0).toISOString(),
-        t.block_height,
-        t.tx_id,
-        `${t.from_address}->${t.to_address}:${t.is_sale ? "sale" : "transfer"}:${t.value ?? 0}`
-      ),
-      timestamp: t.confirmed_at ?? new Date(0).toISOString(),
-      block_height: t.block_height,
-      event_type: t.is_sale ? "sale" : "transfer",
-      source: { type: "onchain", ref: t.tx_id },
-      description: t.is_sale
-        ? `Sold for ${t.value ? (t.value / 1e8).toFixed(8) : "—"} BTC · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`
-        : `Transferred · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`,
-      metadata: {
-        from: t.from_address,
-        to: t.to_address,
-        payment_address: t.payment_address,
-        sale_price_sats: t.is_sale ? t.value : undefined,
-        postage_sats: t.postage_value,
-        is_sale: t.is_sale,
-        is_heuristic: t.is_heuristic,
-        inputs: t.input_count,
-        outputs: t.output_count,
-      },
-    })
+  // Smart Grouping: consecutive simple transfers (non-sales) are collapsed into a 'transfer_chain'
+  let i = 0
+  while (i < transfers.length) {
+    const t = transfers[i]
+
+    if (t.is_sale) {
+      // Sales are ALWAYS individual events
+      events.push({
+        id: makeEventId("sale", t.confirmed_at ?? new Date(0).toISOString(), t.block_height, t.tx_id, `sale:${t.tx_id}`),
+        timestamp: t.confirmed_at ?? new Date(0).toISOString(),
+        block_height: t.block_height,
+        event_type: "sale",
+        source: { type: "onchain", ref: t.tx_id },
+        description: `Sold for ${t.value ? (t.value / 1e8).toFixed(8) : "—"} BTC · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`,
+        metadata: {
+          from: t.from_address,
+          to: t.to_address,
+          payment_address: t.payment_address,
+          sale_price_sats: t.value,
+          postage_sats: t.postage_value,
+          is_sale: true,
+          is_heuristic: t.is_heuristic,
+          inputs: t.input_count,
+          outputs: t.output_count,
+        },
+      })
+      i++
+    } else {
+      // Potentially group consecutive simple transfers
+      let groupEnd = i
+      while (groupEnd + 1 < transfers.length && !transfers[groupEnd + 1].is_sale) {
+        groupEnd++
+      }
+
+      const groupSize = (groupEnd - i) + 1
+
+      if (groupSize >= 4) {
+        // Significant chain found (e.g. distribution/airdrop)
+        const first = transfers[i]
+        const last = transfers[groupEnd]
+        events.push({
+          id: makeEventId("transfer_chain", first.confirmed_at ?? new Date(0).toISOString(), first.block_height, first.tx_id, `chain:${groupSize}:${first.tx_id}`),
+          timestamp: first.confirmed_at ?? new Date(0).toISOString(),
+          block_height: first.block_height,
+          event_type: "transfer_chain",
+          source: { type: "onchain", ref: last.tx_id }, // Refers to the final tx in the chain
+          description: `Distribution Chain · ${groupSize} transfers · ${truncAddr(first.from_address)} → ${truncAddr(last.to_address)}`,
+          metadata: {
+            count: groupSize,
+            first_tx: first.tx_id,
+            last_tx: last.tx_id,
+            start_address: first.from_address,
+            end_address: last.to_address,
+            transfers: transfers.slice(i, groupEnd + 1).map(tr => ({
+              tx_id: tr.tx_id,
+              from: tr.from_address,
+              to: tr.to_address,
+              time: tr.confirmed_at
+            }))
+          },
+        })
+        i = groupEnd + 1
+      } else {
+        // Too small to group, add individually
+        events.push({
+          id: makeEventId("transfer", t.confirmed_at ?? new Date(0).toISOString(), t.block_height, t.tx_id, `transfer:${t.tx_id}`),
+          timestamp: t.confirmed_at ?? new Date(0).toISOString(),
+          block_height: t.block_height,
+          event_type: "transfer",
+          source: { type: "onchain", ref: t.tx_id },
+          description: `Transferred · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`,
+          metadata: {
+            from: t.from_address,
+            to: t.to_address,
+            postage_sats: t.postage_value,
+            is_sale: false,
+            is_heuristic: false,
+            inputs: t.input_count,
+            outputs: t.output_count,
+          },
+        })
+        i++
+      }
+    }
   }
+
 
   // Social mentions
   for (const mention of socialMentions) {

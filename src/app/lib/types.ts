@@ -9,6 +9,7 @@ export type EventType =
   | "recursive_ref"   // references another inscription
   | "sat_context"     // sat rarity data
   | "trait_context"   // trait-based rarity data from CBOR + market overlays
+  | "transfer_chain"  // grouped sequence of simple transfers (e.g. airdrop distribution)
 
 export type SatRarity =
   | "common"
