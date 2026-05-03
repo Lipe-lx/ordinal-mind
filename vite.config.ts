@@ -4,7 +4,23 @@ import { cloudflare } from "@cloudflare/vite-plugin"
 import path from "node:path"
 
 export default defineConfig({
-  plugins: [react(), cloudflare()],
+  plugins: [
+    react(),
+    cloudflare(),
+    {
+      name: "api-bypass-spa",
+      enforce: "pre",
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          // Prevent Vite SPA fallback from intercepting direct browser navigations to /api/
+          if (req.url?.startsWith("/api/")) {
+            req.headers.accept = "application/json"
+          }
+          next()
+        })
+      },
+    },
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

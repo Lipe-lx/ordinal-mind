@@ -73,6 +73,10 @@ async function handleDiscordInit(request: Request, env: Env): Promise<Response> 
     codeChallenge,
   })
 
+  if (request.headers.get("Accept")?.includes("application/json")) {
+    return json({ url: authUrl })
+  }
+
   return redirect(authUrl)
 }
 
@@ -88,6 +92,9 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
 
   // Discord denied access
   if (errorParam) {
+    if (request.headers.get("Accept")?.includes("application/json")) {
+      return json({ error: errorParam }, 400)
+    }
     return redirect(`${url.origin}/?auth_error=${encodeURIComponent(errorParam)}`)
   }
 
@@ -172,10 +179,16 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
 
     // Redirect back to SPA with JWT as query param
     // The useDiscordIdentity hook captures this, stores it, and cleans the URL
+    if (request.headers.get("Accept")?.includes("application/json")) {
+      return json({ token: jwt })
+    }
     return redirect(`${url.origin}/?auth_token=${encodeURIComponent(jwt)}`)
   } catch (err) {
     const message = err instanceof Error ? err.message : "OAuth callback failed."
     console.error("Discord callback error:", err)
+    if (request.headers.get("Accept")?.includes("application/json")) {
+      return json({ error: message }, 500)
+    }
     return redirect(`${url.origin}/?auth_error=${encodeURIComponent(message)}`)
   }
 }
