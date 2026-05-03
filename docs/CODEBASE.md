@@ -21,34 +21,29 @@ This is the current structure and responsibility map of the repository.
 - `pages/Home.tsx`: input/search entry.
 - `pages/AddressPage.tsx`: wallet address explorer and inscription grid.
 - `pages/Chronicle.tsx`: main Chronicle screen; wires Worker stream + chat hook.
-- `components/Layout.tsx`: top-level layout and BYOK modal integration.
+- `pages/WikiPage.tsx`: collection-level wiki view with factual L0 data injection.
+- `pages/DiscordAuthCallback.tsx`: client-side OAuth callback handler to bypass Vite dev-server issues.
+- `components/Layout.tsx`: top-level layout, Discord Connect button, and BYOK modal integration.
 
 ### Main UI components
 
 - `components/ChronicleCard.tsx`: center card with tabs (Narrative / Genealogical Tree), narrative chat and sources.
-- `components/NarrativeChatRenderer.tsx`: transcript, prompt box, actions, chat controls.
+- `components/NarrativeChatRenderer.tsx`: transcript, prompt box, actions, chat controls; includes tier-badge rendering.
 - `components/ChatHistoryModal.tsx`: resume/rename/delete chat sessions.
 - `components/GenealogyTree.tsx`: relation visualization.
 - `components/TemporalTree.tsx`: factual event timeline.
-- `components/ChronicleSidebar.tsx`: inscription preview/metadata side panel.
-- `components/BYOKModal.tsx`: provider/model/API-key and research keys UI.
-- `components/widgets/*`: ownership, collection context, sources, rarity, metadata widgets.
+- `components/BYOKModal.tsx`: provider/model/API-key and research keys UI; includes Discord identity status.
+
+### Identity and Auth (`src/app/lib`)
+
+- `useDiscordIdentity.ts`: React hook for managing OAuth flow, JWT session verification, and Collector Tier calculation.
+- `byok/index.ts`: includes `KeyStore` logic for AES-256-GCM encrypted persistence when authenticated.
 
 ### BYOK and chat engine (`src/app/lib/byok`)
 
 - `index.ts`: provider registry, model lists, adapter factory, key store.
 - `openai.ts`, `anthropic.ts`, `gemini.ts`, `openrouter.ts`: provider adapters with stream + tool-calling loops.
-- `context.ts`: synthesis input preparation and model capability handling.
-- `prompt.ts`: synthesis/chat prompts; QA vs narrative prompt policy.
-- `useChronicleNarrativeChat.ts`: chat orchestration hook (streaming, session state, retry/cancel, auto-turn logic).
-- `chatIntentRouter.ts`: intent routing (rules + semantic matching + fallback).
-- `chatPolicies.ts`: local policy replies + anti-verbosity/anti-repetition guardrails.
-- `chatStorage.ts`: multi-thread workspace persistence per inscription (`localStorage`), migration from v1, rename/delete.
-- `chatTypes.ts`: message/thread/workspace contracts.
-- `toolExecutor.ts`: provider-agnostic research/tool execution loop.
-- `tools.ts`: tool definitions exposed to the model.
-- `streamParser.ts`: SSE parsing for streaming responses.
-- `searchProviders/*`: Brave/Exa/Perplexity/SerpApi/CoinGecko adapters.
+- `useChronicleNarrativeChat.ts`: chat orchestration hook; includes "Builder/QA mode" injection for Wiki contributions.
 
 ### Shared app utilities
 
@@ -58,47 +53,30 @@ This is the current structure and responsibility map of the repository.
 
 ### Styling
 
-- `index.css`: global stylesheet entrypoint; imports the modular CSS tree in cascade-safe order.
-- `styles/base/*`: tokens, reset, glass utility, and shared fade-in animation.
-- `styles/components/*`: reusable primitives such as buttons, inputs, badges, tooltip, modal, and skeleton.
-- `styles/features/chronicle/*`: chronicle shell, card, timeline, navigation, tabs, and genealogy views.
-- `styles/features/narrative/*`: narrative rendering, chat shell, and chat history modal.
-- `styles/widgets/*`: metadata, provenance/collection context, ownership, sources, and rarity widgets.
-- `styles/legacy-responsive.css`: temporary responsive overrides kept separate to avoid regressions during migration.
+- `index.css`: global stylesheet entrypoint; imports the modular CSS tree.
+- `styles/features/wiki/*`: collection wiki and consensus UI styles.
 
 ## Worker (`src/worker`)
 
 ### Entry and routing
 
-- `index.ts`: Worker entrypoint, `/api/chronicle` orchestration, SSE streaming, `/api/wiki/*` delegation.
-- `routes/wiki.ts`: wiki namespace router, page reads, health, ingest, lint, and tool dispatch.
-- `wiki/schema.ts`: centralized D1 schema readiness checks and fail-soft wiki error shaping.
-- `wiki/persistEvents.ts`: immutable raw Chronicle event persistence to D1.
-- `wiki/ingest.ts`: validates BYOK-generated wiki drafts against Layer 0 source event IDs before persistence.
-- `wiki/tools.ts`: D1/FTS-backed wiki tools plus cache-backed timeline and collection fallbacks.
-- `wiki/lint.ts`: client-triggered integrity checks for stale, orphaned, unverified, or broken wiki pages.
+- `index.ts`: Worker entrypoint, `/api/chronicle` orchestration, SSE streaming, auth/wiki delegation.
+- `routes/auth.ts`: Discord OAuth PKCE flow initiation and callback processing.
+- `routes/wiki.ts`: wiki namespace router, contribution handling, and consensus-driven page reads.
 
-### Data agents
+### Wiki & Consensus Engine (`src/worker/wiki`)
 
-- `agents/ordinals.ts`: inscription metadata and CBOR traits from ordinals sources.
-- `agents/mempool.ts`: transfer traversal and on-chain movement context.
-- `agents/unisat.ts`: optional enrichment via UniSat key when configured.
-- `agents/collections.ts`: collection context/provenance and media context.
-- `agents/mentions/*`: collector signals queries and normalization.
-- `agents/webResearch.ts`: public web context discovery.
+- `consolidate.ts`: merges L0 factual data with L1/L2 human contributions based on Tier weights.
+- `completeness.ts`: calculates knowledge gaps for builder mode incentives.
+- `schema.ts`: centralized D1 schema readiness checks.
+- `persistEvents.ts`: immutable raw Chronicle event persistence to D1.
 
-### Orchestration core
+### Auth Engine (`src/worker/auth`)
 
-- `pipeline/phases.ts`: modular execution pipeline (metadata, parallelFetch, dependentFetch, enrichment, output).
-- `pipeline/types.ts`: typed contracts for the orchestration pipeline.
-- `pipeline/defaults.ts`, `pipeline/withRetry.ts`: pipeline utility functions.
-- `resolver.ts`: input normalization.
-- `timeline.ts`: timeline merge/sort/dedupe.
-- `validation.ts`: cross-source validation helpers.
-- `rarity.ts`: rarity/context derivation.
-- `collectionProfiles.ts`: collection profile shaping.
-- `cache.ts`: KV cache access and keying.
-- `db.ts`: validation persistence helper.
+- `discord.ts`: Discord API adapter for profile and guild membership verification.
+- `jwt.ts`: stateless session management via signed tokens.
+- `tiers.ts`: server-side Tier calculation logic.
+- `crypto.ts`: server-side key derivation for client-side encryption.
 
 ## Tests (`tests`)
 

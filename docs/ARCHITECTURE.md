@@ -26,12 +26,17 @@ graph TD
   C --> Chat[Chronicle Narrative Chat]
   Chat --> UI[Timeline + Narrative + Genealogy]
 
-  C -->|POST /api/wiki/tools/*| W
-  W --> Wiki[D1 Chronicle Wiki]
-  Wiki --> D1[(D1 raw events + wiki pages + FTS)]
+  U -->|OAuth PKCE| D[Discord]
+  D -->|code| W
+  W -->|JWT| C
+  C -->|AES-256-GCM Store| LS[localStorage]
+
+  C -->|POST /api/wiki/contribute| W
+  W --> Cons[Consensus Engine]
+  Cons --> D1[(D1: Wiki Pages + Contributions + Stats)]
 ```
 
-## Layer 1: Worker Data Plane (Factual)
+## Layer 0: Worker Data Plane (Factual)
 
 ### Responsibilities
 
@@ -42,87 +47,50 @@ graph TD
 - Compute enrichment (`rarity.ts`, collection context).
 - Cache public results in KV (`cache.ts`).
 
-### API behavior
+## Layer 1: Identity & Authentication Plane
 
-- `GET /api/chronicle?id=...`
-  - standard JSON response with full chronicle object for an inscription
-- `GET /api/chronicle?id=walletaddress&cursor=...&size=...`
-  - JSON response with paginated list of inscriptions for a given taproot address
-- `GET /api/chronicle?id=...&stream=1`
-  - SSE progress and final result for an inscription
-- cache bypass on stream/debug paths
+### Responsibilities
 
-### Invariants
-
-- Timeline must not depend on AI.
-- Events remain source-backed and ordered.
-- Partial upstream failures degrade gracefully rather than collapsing entire response.
+- Handle Discord OAuth2 with PKCE flow (`src/worker/routes/auth.ts`).
+- Issue and verify JWTs signed with `JWT_SECRET`.
+- Map Discord server roles to Collector Tiers (`Genesis`, `OG`, `Community`).
+- Secure client-side LLM key storage using AES-256-GCM derived from JWT.
 
 ## Layer 2: Client BYOK Plane (Narrative Chat)
 
 ### Responsibilities
 
-- Keep provider key in browser session storage.
+- Keep provider key in browser (sessionStorage for guests, encrypted localStorage for members).
 - Build prompt context from factual chronicle + conversation state.
 - Stream model output directly from provider (no server proxy for user key).
 - Execute optional research tools client-side via `toolExecutor`.
 
-### Chat behavior (current)
-
-- Multi-session per inscription:
-  - create/resume/rename/delete sessions
-  - persisted in `localStorage` (`chatStorage.ts`)
-- Intent routing:
-  - `greeting`, `smalltalk_social`, `acknowledgement`, `chronicle_query`, `clarification_request`, `offtopic_safe`
-- Response policy:
-  - QA mode default for follow-up queries
-  - narrative mode only when explicitly requested
-  - initial narrative forced to English-only, with multilingual adaptation in follow-up chat
-  - guardrails for repetition and verbosity
-  - short factoid policy: direct answer + optional one evidence sentence
-- Cross-session memory:
-  - carries user intent from previous sessions
-  - avoids replaying assistant long-form text into fresh session behavior
-
-## Layer 3: Chronicle Wiki Plane
+## Layer 3: Chronicle Wiki & Consensus Plane
 
 ### Routes
 
+- `GET /api/wiki/collection/:slug/consolidated`
+- `POST /api/wiki/contribute`
 - `GET /api/wiki/health`
-- `POST /api/wiki/ingest`
-- `POST /api/wiki/tools/search_wiki`
-- `POST /api/wiki/tools/get_raw_events`
-- `POST /api/wiki/tools/get_timeline`
-- `POST /api/wiki/tools/get_collection_context`
-- `GET /api/wiki/:slug`
 
-### Current scope
+### Consensus Logic
 
-- Layer 0 raw Chronicle events are persisted to D1 after scans using immutable `INSERT OR IGNORE` semantics.
-- Layer 1 wiki pages are generated client-side through BYOK, then validated and persisted by the Worker.
-- D1 FTS powers wiki search with no paid API or server-side LLM calls.
-- `/api/wiki/health` reports local/remote D1 readiness (`ready`, `db_unavailable`, `schema_missing`, `schema_incomplete`).
-- Missing or incomplete wiki schema is fail-soft and must not block Chronicle timeline rendering.
-
-## Caching Model
-
-- KV keying by normalized inscription ID.
-- Immutable-ish fields (genesis metadata) benefit from longer lifetime.
-- More volatile context (market/social transfer activity) is refreshed more aggressively.
-- Streaming requests prioritize freshness and observability over cache hits.
+- **Tiered Weighting**: Contributions from `Genesis` and `OG` tiers have immediate canonical preference.
+- **Dynamic Consolidation**: Wiki pages are built by merging L0 factual data with L1/L2 human-contributed insights.
+- **L0 Injection**: Wiki stats (supply, blocks) are injected dynamically from on-chain metadata into the consolidated view.
 
 ## Security and Privacy Model
 
-- BYOK keys never sent to Worker.
-- Worker stores only public data/cache artifacts.
-- No auth/login/wallet flow required for core functionality.
-- Client-side chat storage stores conversation/session metadata only.
+- **No Server Secrets**: LLM keys are never seen by the server.
+- **Sealed Storage**: Authenticated users have their LLM keys encrypted with AES-256-GCM in `localStorage`. Disconnecting wipes the keys or demotes them back to `sessionStorage`.
+- **Public Data Only**: The Worker only scrapes public, cacheable data.
+- **JWT Identity**: Session state is stateless on the server, carried by signed JWTs.
 
 ## Failure and Degradation Strategy
 
-- If a data source fails: return partial factual chronicle with source diagnostics.
-- If AI/chat fails: timeline and factual widgets remain fully available.
-- If wiki D1 is unavailable, unmigrated, or incomplete: predictable structured error, no impact on Chronicle core route.
+- **Auth Failure**: App falls back to Guest mode (Factual Timeline + ephemeral BYOK).
+- **Consensus Failure**: Wiki shows the most recent "Good" state or falls back to raw L0 stats.
+- **AI Failure**: Timeline and factual widgets remain fully available.
 
 ## Why this architecture
 

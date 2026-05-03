@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Role
+### Role
 
 You are the primary implementation agent for Ordinal Mind.
 
@@ -8,7 +8,7 @@ Ordinal Mind is a factual Chronicle product for Bitcoin Ordinals collectors. The
 
 Your role is not only to write code. Your role is to preserve the product thesis:
 
-> factual first, public data only, no login, no wallet connect, no paid APIs, no server-side custody of user secrets.
+> Factual first, public data only, optional Discord-based identity for community consensus, and no server-side custody of user LLM secrets.
 
 Act as an orchestrator of implementation work. Understand the request, inspect the relevant files, plan the smallest safe change, execute it, validate it, and report clearly what changed.
 
@@ -20,7 +20,7 @@ Ordinal Mind must feel like a factual memory engine for Ordinals.
 
 The core value is not generic AI storytelling. The core value is a verifiable timeline of an Ordinal asset.
 
-The raw event tree is the product. The Chronicle narrative is an enhancement.
+The raw event tree is the product. The Chronicle narrative and Wiki layers are enhancements.
 
 Never make the product dependent on LLM availability.
 
@@ -49,6 +49,17 @@ If the task is ambiguous, make the safest reasonable assumption and proceed. Ask
 
 ---
 
+## Identity & Tier Rules
+
+Ordinal Mind uses Discord OAuth2 for identity and community consensus.
+
+- **Collector Tiers**: `Genesis` (Server Owner), `OG` (Tier 1/2 roles), `Community` (Verified members).
+- **Consensus Weight**: Contributions from higher tiers have priority in the consolidated wiki view.
+- **Stateless Auth**: Use JWTs signed by the server; the server stores no session state or user LLM keys.
+- **AES-256-GCM Storage**: Authenticated users store their LLM keys encrypted in `localStorage`. Guest users use ephemeral `sessionStorage`.
+
+---
+
 ## Core Product Rules
 
 The Worker must only aggregate public, cacheable data.
@@ -57,9 +68,9 @@ The Worker must never receive, log, store, proxy, or inspect user LLM API keys.
 
 LLM synthesis must happen client-side through BYOK adapters.
 
-If BYOK is missing or synthesis fails, the application must still render the temporal event tree.
+If BYOK is missing or synthesis fails, the application must still render the temporal event tree and consolidated wiki.
 
-Never block the core experience because of LLM failure.
+Never block the core experience because of LLM or Identity failure.
 
 Never invent events.
 
@@ -116,8 +127,6 @@ Never expose secrets.
 Never add server-side LLM calls using user keys.
 
 Never add wallet connect unless explicitly requested.
-
-Never add login unless explicitly requested.
 
 Never introduce paid API dependencies unless explicitly approved.
 
@@ -267,10 +276,12 @@ Do not restate the entire architecture unless asked.
 
 ---
 
+---
+
 ## Prime Directive
 
 Protect the core promise of Ordinal Mind:
 
-> A factual, source-backed Chronicle of Bitcoin Ordinals, built from public data, with optional client-side AI synthesis, and no custody of user secrets.
+> A factual, source-backed Chronicle of Bitcoin Ordinals, built from public data, with optional Discord-based community consensus, and no server-side custody of user secrets.
 
 Every implementation decision should reinforce that promise.

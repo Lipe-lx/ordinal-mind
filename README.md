@@ -9,8 +9,8 @@ Ordinal Mind is a verifiable memory engine for Bitcoin Ordinals. It transforms a
 ## ✨ Product Soul
 
 - 🔍 **Factual First**: Timeline events are source-backed, chronologically deterministic, and verifiable.
-- 🛡️ **Public Data Only**: No login, no wallet connect, and no paid APIs required. We only use what's on the open web.
-- 🔑 **BYOK AI (Client-Side)**: Your LLM keys stay in your browser. The server never proxies, logs, or sees your secrets.
+- 🛡️ **Public Data Only**: Core functionality requires no login. Optional Discord Identity enables community consensus and OG contributions.
+- 🔑 **BYOK AI (Client-Side)**: Your LLM keys stay in your browser. Authenticated users benefit from AES-256-GCM encrypted persistence.
 - 📉 **Graceful Degradation**: If AI synthesis fails or is missing, the core factual timeline remains perfectly functional.
 
 ---
@@ -20,9 +20,9 @@ Ordinal Mind is a verifiable memory engine for Bitcoin Ordinals. It transforms a
 - **🌐 Multi-Source Chronicle**: Aggregates data from Ordinals.com, Mempool.space, UniSat, and web discovery.
 - **🌳 Genealogical Tree**: Visualizes the ancestry and provenance of any inscription.
 - **💬 Chronicle Narrative**: Interactive BYOK chat for deep research, intent-aware and QA-optimized.
-- **📚 Wiki Layer (L0-L2)**: Persistent, D1-backed knowledge base that evolves with user research.
+- **📚 Wiki & Consensus (L0-L2)**: Tiered knowledge base (Genesis/OG/Community) where contributors earn identity badges.
+- **🆔 Discord Identity**: Secure PKCE-based OAuth with automated tier calculation based on server membership.
 - **⚡ Real-time Scan**: SSE-powered progress tracking for deep asset resolution.
-- **📊 Collector Widgets**: Specialized views for Rarity, Ownership, Sources, and Market Signals.
 
 ---
 
@@ -62,9 +62,6 @@ npm run dev
 # Run all tests
 npm run test
 
-# Run smoke tests
-npm run test:smoke
-
 # Typecheck
 npm run typecheck
 ```
@@ -76,16 +73,17 @@ npm run typecheck
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/api/chronicle` | `GET` | Resolve inscription metadata and events. |
-| `/api/wiki/:slug` | `GET` | Retrieve a wiki page by its slug. |
-| `/api/wiki/ingest` | `POST` | Ingest new BYOK-generated wiki content. |
-| `/api/wiki/health` | `GET` | Check D1 database health and schema state. |
+| `/api/wiki/collection/:slug/consolidated` | `GET` | Retrieve the consensus-driven wiki for a collection. |
+| `/api/wiki/contribute` | `POST` | Submit a knowledge contribution (requires Discord JWT). |
+| `/api/auth/discord` | `GET` | Initiate Discord OAuth PKCE flow. |
+| `/api/auth/me` | `GET` | Verify session and return identity profile. |
 
 ---
 
 ## 📖 Internal Documentation
 
-- 🗺️ [**ARCHITECTURE.md**](./ARCHITECTURE.md): Runtime flow and data layer.
-- 🗺️ [**CODEBASE.md**](./CODEBASE.md): Detailed file-by-file directory.
+- 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Runtime flow and data layer.
+- 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Detailed file-by-file directory.
 - 🤖 [**AGENTS.md**](./AGENTS.md): Core product rules and implementation constraints.
 
 ---

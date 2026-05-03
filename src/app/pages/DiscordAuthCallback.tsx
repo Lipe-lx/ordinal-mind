@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 
 /**
@@ -13,6 +13,7 @@ export function DiscordAuthCallback() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [status, setStatus] = useState("Connecting to Discord...")
+  const exchangeStarted = useRef(false)
 
   // Derive static error state from URL parameters during render
   const code = searchParams.get("code")
@@ -33,8 +34,12 @@ export function DiscordAuthCallback() {
       return
     }
 
-    // 2. If we already have a static error or missing params, don't proceed with exchange
+    // 2. If we already have a static error or missing params, don't proceed
     if (error || !code || !state) return
+
+    // 3. Prevent double-execution in dev (React.StrictMode)
+    if (exchangeStarted.current) return
+    exchangeStarted.current = true
 
     async function exchange() {
       try {

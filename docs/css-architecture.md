@@ -54,8 +54,10 @@ src/app/
     │   │   ├── content.css
     │   │   ├── chat.css
     │   │   └── history.css
-    │   └── scan/
-    │       └── scan-progress.css
+    │   ├── scan/
+    │   │   └── scan-progress.css
+    │   └── wiki/
+    │       └── wiki.css
     │
     ├── widgets/
     │   ├── meta.css
