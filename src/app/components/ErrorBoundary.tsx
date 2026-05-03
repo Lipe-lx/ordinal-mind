@@ -8,7 +8,15 @@ export function ErrorBoundary() {
   let details: string | null = null
 
   if (isRouteErrorResponse(error)) {
-    title = error.status === 404 ? "Inscription Not Found" : `Error ${error.status}`
+    if (error.status === 404) {
+      title = window.location.pathname.startsWith("/api/") ? "Service Not Found" : "Page Not Found"
+      // If it looks like a chronicle route, use the inscription-specific title
+      if (window.location.pathname.startsWith("/chronicle/")) {
+        title = "Inscription Not Found"
+      }
+    } else {
+      title = `Error ${error.status}`
+    }
     message = error.data ?? error.statusText
   } else if (error instanceof Error) {
     message = error.message

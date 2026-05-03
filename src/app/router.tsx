@@ -43,6 +43,10 @@ export const router = createBrowserRouter([
         lazy: () => import("./pages/WikiPage").then(m => ({ Component: m.WikiPage })),
         errorElement: <ErrorBoundary />,
       },
+      {
+        path: "api/auth/callback",
+        lazy: () => import("./pages/DiscordAuthCallback").then(m => ({ Component: m.DiscordAuthCallback })),
+      },
 
     ],
   },
