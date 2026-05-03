@@ -19,7 +19,7 @@ export function buildSystemPrompt(availableTools: SearchToolDefinition[] = []): 
 Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
 
 Rules:
-- Write in the same language as the user's browser locale if detectable, otherwise default to English.
+- Write in the same language used by the user in their latest messages. If they write in Portuguese, respond in Portuguese. Default to English if unclear.
 - Tone: objective, vivid, and historically aware. Avoid hype copy.
 - Maximum 5 short paragraphs.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
@@ -130,16 +130,18 @@ ${historySection}
 Latest user message:
 ${userMessage}
 
-${buildChatPolicyBlock(mode, intent)}`
+${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT)}`
 }
 
-function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): string {
+function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean): string {
   if (mode === "narrative") {
     return `Response policy:
 - Provide a concise collector-grade Chronicle narrative (max 5 short paragraphs).
+${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generation. You MUST write the final narrative strictly in English, regardless of any past chat history." : "- CRITICAL LANGUAGE RULE: Respond in the exact same language as the user's latest message."}
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
+- CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
 - The text inside the tags must be complete sentences.
@@ -152,7 +154,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent): strin
 
   return `Response policy:
 ${intentSpecific}
-- Answer in the same language as the latest user message.
+${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in English." : "- Answer in the same language as the latest user message."}
+- CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
 - The text inside the tags must be complete sentences.

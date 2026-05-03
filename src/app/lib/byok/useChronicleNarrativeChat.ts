@@ -105,10 +105,23 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       }
 
       const workspace = ensureChatWorkspace(inscriptionId)
-      const snapshot = loadChatThread(inscriptionId, workspace.activeThreadId)
-      setActiveThreadId(workspace.activeThreadId)
+      const currentSnapshot = loadChatThread(inscriptionId, workspace.activeThreadId)
+
+      // Always start fresh if the current active thread already has messages.
+      // This fulfills the requirement of starting a "new chat" on each new section.
+      if (currentSnapshot && currentSnapshot.messages.length > 0) {
+        const newThread = createChatThread(inscriptionId, {
+          activate: true,
+          skipAutoNarrative: false,
+        })
+        setActiveThreadId(newThread.threadId)
+        setMessages([])
+      } else {
+        setActiveThreadId(workspace.activeThreadId)
+        setMessages(truncateMessagesByTurns(currentSnapshot?.messages ?? []))
+      }
+
       setThreadHistory(listChatThreads(inscriptionId))
-      setMessages(truncateMessagesByTurns(snapshot?.messages ?? []))
       setStreamingText("")
       setError(null)
       setResearchLogs([])
