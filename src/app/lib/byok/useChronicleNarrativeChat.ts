@@ -30,7 +30,7 @@ import { classifyIntentWithLlm, shouldUseLlmIntentClassifier } from "./llmIntent
 import { resolveDirectFactAnswer } from "./directFacts"
 import { formatChatAnswerEnvelope, toChatAnswerEnvelope } from "./responseContract"
 import { resolveChatToolPolicy } from "./toolPolicy"
-import { fetchCompleteness, formatCompletenessForPrompt } from "./wikiCompleteness"
+import { fetchConsolidated, formatConsolidatedForPrompt } from "./wikiCompleteness"
 import { parseWikiExtract, hasWikiExtract } from "./wikiExtractor"
 
 export type SynthesisPhase =
@@ -137,8 +137,8 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
 
       const collectionSlug = chronicle?.collection_context.market.match?.collection_slug ?? chronicle?.collection_context.registry.match?.slug
       if (collectionSlug) {
-        fetchCompleteness(collectionSlug).then(map => {
-          if (map) setWikiCompletenessInfo(formatCompletenessForPrompt(map))
+        fetchConsolidated(collectionSlug).then(collection => {
+          if (collection) setWikiCompletenessInfo(formatConsolidatedForPrompt(collection))
         }).catch(() => {})
       }
     }, 0)

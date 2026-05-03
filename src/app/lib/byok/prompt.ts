@@ -140,7 +140,7 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInit
 Wiki Builder Mode:
 - You detected the user has original knowledge about this collection.
 - Your goal is to extract structured information naturally through conversation.
-${wikiCompletenessInfo ? `- Current collection status: ${wikiCompletenessInfo}\n` : ""}
+${wikiCompletenessInfo ? `\nConsolidated Wiki Context:\n${wikiCompletenessInfo}\n` : ""}
 - DO NOT ask questions like a form. Weave questions naturally into the conversation.
 - When the user provides new information, confirm it conversationally.
 - Generate a <wiki_extract> block with the structured data (hidden from user). Format:

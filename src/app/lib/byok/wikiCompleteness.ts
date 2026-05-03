@@ -1,9 +1,11 @@
 // wikiCompleteness.ts — Client-side fetch helper for collection completeness map.
 // Pillar 2 — Chat Wiki Builder
 //
-// Fetches the canonical field completeness for a collection from the Worker.
-// Used by the prompt builder to inject missing fields into Wiki Builder mode.
+// Fetches the consolidated consensus context for a collection from the Worker.
+// Used by the prompt builder to inject missing fields and verified knowledge into Wiki Builder mode.
 // Designed to be called once per chat session (not per turn) to avoid latency.
+
+import type { ConsolidatedCollection } from "../types"
 
 export type CanonicalField =
   | "founder"
@@ -87,6 +89,23 @@ export async function fetchCompleteness(collectionSlug: string): Promise<Complet
   }
 }
 
+export async function fetchConsolidated(collectionSlug: string): Promise<ConsolidatedCollection | null> {
+  if (!collectionSlug) return null
+
+  try {
+    const slug = encodeURIComponent(collectionSlug)
+    const res = await fetch(`/api/wiki/collection/${slug}/consolidated`)
+    if (!res.ok) return null
+
+    const data = (await res.json()) as { ok?: boolean, data: ConsolidatedCollection }
+    if (!data.ok || !data.data) return null
+
+    return data.data
+  } catch {
+    return null
+  }
+}
+
 /**
  * Build a compact summary of missing fields for prompt injection.
  * Example: "founder, launch_date, origin_narrative (6/9 filled)"
@@ -98,4 +117,43 @@ export function formatCompletenessForPrompt(completeness: CompletenessMap): stri
   }
   const missingList = missing_fields.join(", ")
   return `${filled}/${total} fields filled. Missing: ${missingList}.`
+}
+
+/**
+ * Build a structured consolidated context for prompt injection.
+ */
+export function formatConsolidatedForPrompt(collection: ConsolidatedCollection): string {
+  const { completeness, confidence, narrative, gaps } = collection
+  
+  const knownFacts = Object.values(narrative)
+    .filter(f => f.status === "canonical")
+    .map(f => `- ${f.field}: ${f.canonical_value} (source: ${f.resolved_by_tier})`)
+    .join("\n")
+
+  const disputedFacts = Object.values(narrative)
+    .filter(f => f.status === "disputed")
+    .map(f => `- ${f.field}: ${f.contributions.map(c => `"${c.value}"`).join(" vs ")} (all from OG contributors)`)
+    .join("\n")
+
+  const draftFacts = Object.values(narrative)
+    .filter(f => f.status === "draft")
+    .map(f => `- ${f.field}: ${f.contributions[0]?.value} (source: ${f.resolved_by_tier}, unverified draft)`)
+    .join("\n")
+
+  const missingList = gaps.join(", ")
+
+  return `
+Completeness: ${completeness.filled}/${completeness.total} (${Math.round(completeness.score * 100)}%)
+Confidence: ${Math.round(confidence * 100)}%
+
+Known facts (community-verified):
+${knownFacts || "(None verified yet)"}
+
+${disputedFacts ? `Disputed fields:\n${disputedFacts}\n` : ""}
+${draftFacts ? `Draft fields (awaiting OG confirmation):\n${draftFacts}\n` : ""}
+Unknown fields (gaps to be filled):
+${missingList ? `- ${missingList}` : "(None)"}
+
+Use this consolidated context as enriched background. Use consolidated narrative for cultural and historical context.
+`.trim()
 }

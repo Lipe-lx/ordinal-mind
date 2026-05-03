@@ -8,6 +8,8 @@ const FULL_SCHEMA_OBJECTS = [
   "wiki_pages",
   "wiki_log",
   "wiki_fts",
+  "wiki_contributions",
+  "consolidated_cache",
 ]
 
 class FakeD1Database {

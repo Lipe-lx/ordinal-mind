@@ -12,6 +12,8 @@ class FakeD1Database {
     "wiki_pages",
     "wiki_log",
     "wiki_fts",
+    "wiki_contributions",
+    "consolidated_cache",
   ]) {
     this.schemaObjects = new Set(schemaObjects)
   }

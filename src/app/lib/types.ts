@@ -458,3 +458,48 @@ export interface DataValidationResult {
   checks: DataValidationCheck[]
   validated_at: string
 }
+// wiki/consolidateTypes.ts — Pillar 3 Canonical Consensus Types
+
+export type ContributionStatus = "canonical" | "draft" | "disputed"
+
+export interface ConsensusContribution {
+  value: string
+  contributor_id: string | null
+  og_tier: string
+  weight: number
+  created_at: string
+}
+
+export interface ConsolidatedField {
+  field: string
+  canonical_value: string | null
+  status: ContributionStatus
+  contributions: ConsensusContribution[]
+  resolved_by_tier: string
+}
+
+export interface FactualData {
+  supply: number | null
+  first_block: number | null
+  last_mint_block: number | null
+  floor_history: Array<{ block: number; price_btc: number }>
+}
+
+export interface ConsolidatedCollection {
+  collection_slug: string
+  completeness: {
+    filled: number
+    total: number
+    score: number
+  }
+  confidence: number // Weighted average of tier confidence
+  factual: FactualData | null // Provided by the frontend merging with Chronicle
+  narrative: Record<string, ConsolidatedField>
+  sources: Array<{
+    contributor_id: string | null
+    og_tier: string
+    field: string
+    created_at: string
+  }>
+  gaps: string[]
+}

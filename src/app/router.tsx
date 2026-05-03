@@ -37,6 +37,11 @@ export const router = createBrowserRouter([
         },
         errorElement: <ErrorBoundary />,
       },
+      {
+        path: "wiki/:slug",
+        lazy: () => import("./pages/WikiPage").then(m => ({ Component: m.WikiPage })),
+        errorElement: <ErrorBoundary />,
+      },
     ],
   },
 ])

@@ -18,7 +18,7 @@ describe("wikiLifecycle helpers", () => {
     ok: true,
     ready: true,
     status: "ready",
-    present_objects: ["raw_chronicle_events", "wiki_pages", "wiki_log", "wiki_fts"],
+    present_objects: ["raw_chronicle_events", "wiki_pages", "wiki_log", "wiki_fts", "wiki_contributions", "consolidated_cache"],
     missing_objects: [],
     checked_at: "2026-04-28T00:00:00.000Z",
   }
@@ -30,7 +30,7 @@ describe("wikiLifecycle helpers", () => {
     error: "wiki_schema_missing",
     phase: "fail_soft",
     present_objects: [],
-    missing_objects: ["raw_chronicle_events", "wiki_pages", "wiki_log", "wiki_fts"],
+    missing_objects: ["raw_chronicle_events", "wiki_pages", "wiki_log", "wiki_fts", "wiki_contributions", "consolidated_cache"],
     checked_at: "2026-04-28T00:00:00.000Z",
   }
 

@@ -23,6 +23,8 @@ const REQUIRED_WIKI_OBJECTS = [
   "wiki_pages",
   "wiki_log",
   "wiki_fts",
+  "wiki_contributions",
+  "consolidated_cache",
 ] as const
 
 export async function checkWikiSchema(env: Env): Promise<WikiSchemaHealth> {
@@ -46,7 +48,7 @@ export async function checkWikiSchema(env: Env): Promise<WikiSchemaHealth> {
     const rows = await env.DB.prepare(`
       SELECT name
       FROM sqlite_schema
-      WHERE name IN (?, ?, ?, ?)
+      WHERE name IN (?, ?, ?, ?, ?, ?)
     `)
       .bind(...REQUIRED_WIKI_OBJECTS)
       .all<{ name: string }>()

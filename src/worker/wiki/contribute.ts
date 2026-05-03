@@ -192,6 +192,14 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         status,
       )
       .run()
+
+    if (status === "published") {
+      await env.DB.prepare(`
+        DELETE FROM consolidated_cache WHERE collection_slug = ?
+      `)
+        .bind(contribution.collection_slug)
+        .run()
+    }
   } catch (err) {
     console.error("[WikiContribute] D1 insert failed:", err)
     return json({ ok: false, error: "db_write_failed" }, 500)
