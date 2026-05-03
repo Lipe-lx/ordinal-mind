@@ -109,9 +109,14 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
   // Retrieve and consume PKCE verifier
   const pkceKey = `pkce:${state}`
   const pkceRaw = await env.CHRONICLES_KV.get(pkceKey)
+  
   if (!pkceRaw) {
+    console.error(`[Auth] PKCE state NOT FOUND in KV for key: ${pkceKey}`)
     return json({ error: "Invalid or expired OAuth state. Please try connecting again." }, 400)
   }
+  
+  console.log(`[Auth] PKCE state found for key: ${pkceKey}. Proceeding with exchange.`)
+
 
   // Delete PKCE entry immediately (one-time use)
   await env.CHRONICLES_KV.delete(pkceKey)
