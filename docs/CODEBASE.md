@@ -19,6 +19,7 @@ This is the current structure and responsibility map of the repository.
 - `main.tsx`: React bootstrap.
 - `router.tsx`: route definitions.
 - `pages/Home.tsx`: input/search entry.
+- `pages/AddressPage.tsx`: wallet address explorer and inscription grid.
 - `pages/Chronicle.tsx`: main Chronicle screen; wires Worker stream + chat hook.
 - `components/Layout.tsx`: top-level layout and BYOK modal integration.
 
@@ -53,6 +54,7 @@ This is the current structure and responsibility map of the repository.
 
 - `lib/types.ts`: shared DTO/types between frontend and Worker.
 - `lib/brandLinks.tsx`: links known entities in narrative text.
+- `lib/formatters.tsx`: recursive text formatting for UX, glassmorphism aesthetics for addresses, inscriptions, and blocks.
 
 ### Styling
 
@@ -87,6 +89,9 @@ This is the current structure and responsibility map of the repository.
 
 ### Orchestration core
 
+- `pipeline/phases.ts`: modular execution pipeline (metadata, parallelFetch, dependentFetch, enrichment, output).
+- `pipeline/types.ts`: typed contracts for the orchestration pipeline.
+- `pipeline/defaults.ts`, `pipeline/withRetry.ts`: pipeline utility functions.
 - `resolver.ts`: input normalization.
 - `timeline.ts`: timeline merge/sort/dedupe.
 - `validation.ts`: cross-source validation helpers.

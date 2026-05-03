@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { KeyStore, detectProvider, PROVIDERS, MODELS, type Provider, type ByokConfig } from "../lib/byok"
 import type { ResearchKeys } from "../lib/byok/toolExecutor"
+import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 
 interface Props {
   onClose: () => void
@@ -11,7 +12,8 @@ export function BYOKModal({ onClose }: Props) {
   const [config, setConfig] = useState<ByokConfig>(
     KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
   )
-  const [activeTab, setActiveTab] = useState<"llm" | "research">("llm")
+  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity">("llm")
+  const { identity, isLoading: identityLoading, connect, disconnect } = useDiscordIdentity()
 
   function handleProviderChange(e: ChangeEvent<HTMLSelectElement>) {
     const newProvider = e.target.value as Provider
@@ -94,6 +96,15 @@ export function BYOKModal({ onClose }: Props) {
               onClick={() => setActiveTab("research")}
             >
               Research Tools
+            </button>
+            <button 
+              className={`byok-tab-btn ${activeTab === "identity" ? "active" : ""}`}
+              onClick={() => setActiveTab("identity")}
+            >
+              Identity
+              {identity && (
+                <span className={`identity-tier-dot tier-${identity.tier}`} />
+              )}
             </button>
           </div>
 
@@ -210,6 +221,79 @@ export function BYOKModal({ onClose }: Props) {
                       autoComplete="off"
                     />
                   </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence mode="wait">
+              {activeTab === "identity" && (
+                <motion.div
+                  key="identity"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="identity-tab-content"
+                >
+                  {identityLoading ? (
+                    <div className="identity-skeleton">
+                      <div className="skeleton-avatar" />
+                      <div className="skeleton-lines">
+                        <div className="skeleton-line" />
+                        <div className="skeleton-line short" />
+                      </div>
+                    </div>
+                  ) : identity ? (
+                    <div className="identity-connected">
+                      <div className={`identity-avatar-wrap tier-border-${identity.tier}`}>
+                        {identity.avatar ? (
+                          <img
+                            src={identity.avatar}
+                            alt={identity.username}
+                            className="identity-avatar"
+                          />
+                        ) : (
+                          <div className="identity-avatar-placeholder">
+                            {identity.username.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="identity-info">
+                        <span className="identity-username">{identity.username}</span>
+                        <span className={`identity-tier-badge tier-badge-${identity.tier}`}>
+                          {identity.tier.toUpperCase()}
+                        </span>
+                      </div>
+                      <button
+                        className="btn btn-ghost identity-disconnect-btn"
+                        onClick={() => void disconnect()}
+                        id="discord-disconnect-btn"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="identity-disconnected">
+                      <div className="identity-discord-icon">
+                        <svg width="32" height="24" viewBox="0 0 127.14 96.36" fill="currentColor">
+                          <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
+                        </svg>
+                      </div>
+                      <p className="identity-description">
+                        Connect your Discord to unlock OG tier contributions to the Wiki. Your identity is verified but optional — Chronicle and Timeline always work anonymously.
+                      </p>
+                      <button
+                        className="btn identity-connect-btn"
+                        onClick={connect}
+                        id="discord-connect-btn"
+                      >
+                        Connect Discord
+                      </button>
+                      <p className="identity-anon-note">
+                        Without Discord, contributions enter quarantine for manual review.
+                      </p>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

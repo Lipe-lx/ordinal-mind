@@ -10,6 +10,7 @@ import { cacheGet, cachePut } from "./cache"
 import { db } from "./db"
 import { persistRawEvents } from "./wiki/persistEvents"
 import { handleWikiRoute } from "./routes/wiki"
+import { handleAuthRoute } from "./routes/auth"
 import { fetchUnisat } from "./agents/unisat"
 
 import {
@@ -32,6 +33,9 @@ export interface Env {
   ENVIRONMENT: string
   UNISAT_API_KEY?: string
   DB?: D1Database
+  DISCORD_CLIENT_ID?: string
+  DISCORD_CLIENT_SECRET?: string
+  JWT_SECRET?: string
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -132,6 +136,10 @@ async function handleApi(
   url: URL,
   env: Env
 ): Promise<Response> {
+  if (url.pathname.startsWith("/api/auth")) {
+    return handleAuthRoute(request, env)
+  }
+
   if (url.pathname.startsWith("/api/wiki")) {
     return handleWikiRoute(request, env)
   }

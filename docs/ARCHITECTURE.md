@@ -11,15 +11,16 @@ graph TD
   U[User] --> C[React Client]
   C -->|GET /api/chronicle| W[Cloudflare Worker]
   W --> R[Resolver]
-  R --> A[Data Agents]
+  R -->|Address| U2[UniSat: Inscription List]
+  R -->|Inscription ID| A[Data Agents]
   A --> O[ordinals]
   A --> M[mempool]
   A --> K[collections/context]
   A --> S[mentions + research]
-  A --> U2[UniSat optional]
+  A --> U2_2[UniSat: Enrichment optional]
   A --> T[Timeline + Validation + Rarity]
   T --> KV[(Cloudflare KV)]
-  W -->|JSON or SSE| C
+  W -->|JSON (Address List) or SSE (Timeline)| C
 
   C -->|BYOK key in browser| LLM[OpenAI/Anthropic/Gemini/OpenRouter]
   C --> Chat[Chronicle Narrative Chat]
@@ -44,9 +45,11 @@ graph TD
 ### API behavior
 
 - `GET /api/chronicle?id=...`
-  - standard JSON response with full chronicle object
+  - standard JSON response with full chronicle object for an inscription
+- `GET /api/chronicle?id=walletaddress&cursor=...&size=...`
+  - JSON response with paginated list of inscriptions for a given taproot address
 - `GET /api/chronicle?id=...&stream=1`
-  - SSE progress and final result
+  - SSE progress and final result for an inscription
 - cache bypass on stream/debug paths
 
 ### Invariants
@@ -74,6 +77,7 @@ graph TD
 - Response policy:
   - QA mode default for follow-up queries
   - narrative mode only when explicitly requested
+  - initial narrative forced to English-only, with multilingual adaptation in follow-up chat
   - guardrails for repetition and verbosity
   - short factoid policy: direct answer + optional one evidence sentence
 - Cross-session memory:
