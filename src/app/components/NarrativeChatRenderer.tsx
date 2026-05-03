@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
-import { linkifyBrands } from "../lib/brandLinks"
+import { formatChronicleText } from "../lib/formatters"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
@@ -156,7 +156,7 @@ export function NarrativeChatRenderer({
                 <ReactMarkdown
                   components={{
                     p: ({ children }) => (
-                      <p>{enhanceContent(children, collectionSlug)}</p>
+                      <p>{formatChronicleText(children, collectionSlug)}</p>
                     ),
                   }}
                 >
@@ -253,7 +253,7 @@ export function NarrativeChatRenderer({
               <ReactMarkdown
                 components={{
                   p: ({ children }) => (
-                    <p>{enhanceContent(children, collectionSlug)}</p>
+                    <p>{formatChronicleText(children, collectionSlug)}</p>
                   ),
                 }}
               >
@@ -403,7 +403,4 @@ export function NarrativeChatRenderer({
   )
 }
 
-function enhanceContent(children: React.ReactNode, collectionSlug?: string): React.ReactNode {
-  if (typeof children !== "string") return children
-  return linkifyBrands(children, collectionSlug)
-}
+

@@ -1,11 +1,32 @@
 .address-page {
   display: flex;
   flex-direction: column;
+  flex: 1;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
+  padding-right: var(--space-sm);
   padding-bottom: var(--space-3xl);
   gap: var(--space-xl);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.address-page::-webkit-scrollbar {
+  width: 6px;
+}
+
+.address-page::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.address-page::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-full);
+}
+
+.address-page::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .address-header {

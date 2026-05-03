@@ -1,6 +1,6 @@
 import { motion } from "motion/react"
 import type { ChronicleEvent } from "../lib/types"
-import { linkifyBrands } from "../lib/brandLinks"
+import { formatChronicleText as linkifyBrands } from "../lib/formatters"
 
 interface Props {
   events: ChronicleEvent[]

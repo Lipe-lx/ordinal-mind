@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react"
 import { useLoaderData, useNavigate, useLocation, useOutletContext } from "react-router"
 import type { AddressResponse, AddressInscriptionItem } from "../lib/types"
 import type { LayoutOutletContext } from "../components/Layout"
+import { detectMediaKind } from "../lib/media"
+import { NonImageFitPreview } from "../components/NonImageFitPreview"
 
 interface LoaderData {
   address: string
@@ -152,47 +154,66 @@ export function AddressPage() {
 
       <div className="address-list">
         {inscriptions.map((item, index) => {
-          const isImage = item.content_type?.startsWith("image/")
+          const kind = detectMediaKind(item.content_type || "unknown")
           const simpleType = item.content_type?.split(";")[0].split("/")[1] || "unknown"
           
           return (
             <div 
               key={`${item.id}-${index}`} 
               className="address-item fade-in" 
-              style={{ animationDelay: `${(index % 12) * 50}ms` }}
+              style={{ animationDelay: `${(index % 12) * 50}ms`, position: "relative" }}
               onClick={() => navigateToChronicle(item.id)}
             >
               <div className="address-item-preview">
-                {isImage ? (
+                {kind === "image" ? (
                   <img 
                     src={item.content_url} 
                     alt={`Inscription #${item.number}`}
                     loading="lazy"
                     onError={(e) => {
-                      // Fallback if image fails to load
                       e.currentTarget.style.display = 'none';
                       const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                       if (fallback) fallback.style.display = 'flex';
                     }}
                   />
-                ) : null}
+                ) : kind === "video" ? (
+                  <video 
+                    src={item.content_url} 
+                    muted loop playsInline
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                ) : kind === "audio" ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", padding: "8px" }}>
+                    <audio 
+                      src={item.content_url} 
+                      controls 
+                      style={{ width: "100%", height: "30px", opacity: 0.8 }}
+                    />
+                  </div>
+                ) : (
+                  <NonImageFitPreview
+                    kind={kind}
+                    contentType={item.content_type || "unknown"}
+                    contentUrl={item.content_url}
+                    previewUrl={`https://ordinals.com/preview/${item.id}`}
+                    mode="compact"
+                    showMeta={false}
+                  />
+                )}
+                
+                {/* Fallback for failed images */}
                 <div 
                   className="address-item-preview-fallback" 
-                  style={{ display: isImage ? 'none' : 'flex' }}
+                  style={{ display: 'none' }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    {item.content_type?.startsWith("text/") ? (
-                      <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>
-                    ) : item.content_type?.startsWith("audio/") ? (
-                      <><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>
-                    ) : item.content_type?.startsWith("video/") ? (
-                      <><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></>
-                    ) : (
-                      <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="14" r="3"/></>
-                    )}
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="14" r="3"/>
                   </svg>
                   <span style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>.{simpleType}</span>
                 </div>
+
+                {/* Overlay to prevent iframes/videos from swallowing clicks */}
+                <div style={{ position: "absolute", inset: 0, zIndex: 10, cursor: "pointer" }} />
               </div>
               <div className="address-item-footer">
                 <span className="address-item-number">#{item.number}</span>

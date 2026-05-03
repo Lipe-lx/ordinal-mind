@@ -173,6 +173,16 @@
   color: var(--text-primary);
 }
 
+.chat-line.assistant .chat-line-content p:first-child::first-letter {
+  font-size: 2.2rem;
+  font-weight: 800;
+  float: left;
+  line-height: 0.9;
+  margin-right: 0.12em;
+  color: var(--accent-primary) !important;
+  text-shadow: 0 0 15px var(--accent-glow-strong), 0 0 30px var(--accent-glow);
+}
+
 .chat-line.is-streaming .chat-line-content {
   color: var(--text-primary);
 }

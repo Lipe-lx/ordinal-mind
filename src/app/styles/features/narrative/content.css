@@ -140,20 +140,50 @@
 }
 
 .narrative-paragraph:nth-of-type(odd) {
-  color: var(--accent-primary) !important;
+  /* Removed global orange coloring to make highlights visible */
 }
 
 .narrative-paragraph:nth-of-type(even) {
-  color: var(--text-secondary) !important;
+  color: var(--text-secondary);
 }
 
-.narrative-enhanced {
+.enhanced-identifier {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 0.85em;
+  color: var(--text-primary);
+  margin: 0 3px;
+  vertical-align: baseline;
+  transition: all 0.2s ease;
+}
+
+.enhanced-identifier:hover {
+  background: rgba(247, 147, 26, 0.08);
+  border-color: rgba(247, 147, 26, 0.3);
   color: var(--accent-primary);
-  font-weight: 500;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(247, 147, 26, 0.1);
 }
 
-.narrative-paragraph:nth-of-type(odd) .narrative-enhanced {
-  color: var(--text-primary) !important;
+.enhanced-identifier-dim {
+  opacity: 0.4;
+  margin: 0 1px;
+}
+
+/* Chat-specific drop cap handling if needed, though already handled in content.css for Narrative */
+.narrative-content p:first-child::first-letter {
+  font-size: 2.2rem;
+  font-weight: 800;
+  float: left;
+  line-height: 0.9;
+  margin-right: 0.12em;
+  color: var(--accent-primary) !important;
+  text-shadow: 0 0 15px var(--accent-glow-strong), 0 0 30px var(--accent-glow);
 }
 
 .narrative-loading {

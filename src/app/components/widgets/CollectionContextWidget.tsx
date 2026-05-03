@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { PortalTooltip } from "../Tooltip"
 import type { CollectionContext, CollectionPresentationFacet, RelatedInscriptionSummary } from "../../lib/types"
-import { linkifyBrands } from "../../lib/brandLinks"
+import { formatChronicleText as linkifyBrands } from "../../lib/formatters"
 
 interface Props {
   collectionContext: CollectionContext

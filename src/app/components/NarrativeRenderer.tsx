@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown"
 import type { SynthesisPhase } from "../lib/byok/useSynthesize"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
-import { linkifyBrands } from "../lib/brandLinks"
+import { formatChronicleText } from "../lib/formatters"
 
 interface Props {
   /** Final sanitized narrative text (markdown) */
@@ -140,7 +140,7 @@ export function NarrativeRenderer({
               <ReactMarkdown
                 components={{
                   p: ({ children }) => (
-                    <p className="narrative-paragraph">{enhanceContent(children, collectionSlug)}</p>
+                    <p className="narrative-paragraph">{formatChronicleText(children, collectionSlug)}</p>
                   ),
                 }}
               >
@@ -216,7 +216,7 @@ export function NarrativeRenderer({
           components={{
             // Enhanced paragraph rendering
             p: ({ children }) => (
-              <p className="narrative-paragraph">{enhanceContent(children, collectionSlug)}</p>
+              <p className="narrative-paragraph">{formatChronicleText(children, collectionSlug)}</p>
             ),
           }}
         >
@@ -245,31 +245,6 @@ const PHASE_ORDER = Object.keys(PHASE_LABELS)
 
 function isPhaseComplete(phase: string, currentPhase: string): boolean {
   return PHASE_ORDER.indexOf(phase) < PHASE_ORDER.indexOf(currentPhase)
-}
-
-/**
- * Enhance inline content: detect Bitcoin addresses and block heights,
- * wrap them in interactive elements.
- */
-function enhanceContent(children: React.ReactNode, collectionSlug?: string): React.ReactNode {
-  if (typeof children !== "string") return children
-
-  const text = children as string
-
-  // 1. Detect Bitcoin addresses and block heights for special styling
-  const addressRegex = /(bc1[a-z0-9]{8,})/gi
-  const blockRegex = /#(\d{3,}(?:,\d{3})*)/g
-  const needsEnhancement = addressRegex.test(text) || blockRegex.test(text)
-
-  // 2. Apply brand linkification
-  const brandLinked = linkifyBrands(text, collectionSlug)
-  
-  // 3. Wrap in enhanced span if it has on-chain identifiers
-  if (needsEnhancement) {
-    return <span className="narrative-enhanced">{brandLinked}</span>
-  }
-
-  return brandLinked
 }
 
 // --- Sub-components ---
