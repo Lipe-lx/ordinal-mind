@@ -30,6 +30,8 @@ import { classifyIntentWithLlm, shouldUseLlmIntentClassifier } from "./llmIntent
 import { resolveDirectFactAnswer } from "./directFacts"
 import { formatChatAnswerEnvelope, toChatAnswerEnvelope } from "./responseContract"
 import { resolveChatToolPolicy } from "./toolPolicy"
+import { fetchCompleteness, formatCompletenessForPrompt } from "./wikiCompleteness"
+import { parseWikiExtract, hasWikiExtract } from "./wikiExtractor"
 
 export type SynthesisPhase =
   | "idle"
@@ -76,6 +78,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
   const [toolLogs, setToolLogs] = useState<ChatToolLog[]>([])
   const [wikiToolUsageCount, setWikiToolUsageCount] = useState(0)
   const [inputError, setInputError] = useState<string | null>(null)
+  const [wikiCompletenessInfo, setWikiCompletenessInfo] = useState<string>("")
   const wikiLifecycle = useWikiLifecycle(chronicle)
 
   const abortRef = useRef<AbortController | null>(null)
@@ -100,6 +103,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         setToolLogs([])
         setWikiToolUsageCount(0)
         setLastInputMode(null)
+        setWikiCompletenessInfo("")
         autoTurnRef.current = null
         return
       }
@@ -130,10 +134,21 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
       setLastInputMode(null)
       setPhase("idle")
       autoTurnRef.current = null
+
+      const collectionSlug = chronicle?.collection_context.market.match?.collection_slug ?? chronicle?.collection_context.registry.match?.slug
+      if (collectionSlug) {
+        fetchCompleteness(collectionSlug).then(map => {
+          if (map) setWikiCompletenessInfo(formatCompletenessForPrompt(map))
+        }).catch(() => {})
+      }
     }, 0)
 
     return () => window.clearTimeout(timeoutId)
-  }, [inscriptionId])
+  }, [
+    inscriptionId,
+    chronicle?.collection_context.market.match?.collection_slug,
+    chronicle?.collection_context.registry.match?.slug,
+  ])
 
   useEffect(() => {
     if (!inscriptionId || !activeThreadId) return
@@ -396,6 +411,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
           mode,
           intent,
           toolPolicyDecision,
+          wikiCompletenessInfo,
           onChunk: (chunk) => {
             if (firstChunk) {
               setPhase("streaming")
@@ -427,9 +443,41 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         setPhase("sanitizing")
         setLastInputMode(result.inputMode)
 
-        const clean = sanitizeNarrative(result.text)
+        let finalRawText = result.text
+
+        // Extract and remove <wiki_extract> block if present
+        if (hasWikiExtract(finalRawText)) {
+          const extracted = parseWikiExtract(finalRawText)
+          finalRawText = extracted.cleanText
+
+          if (extracted.data) {
+            const jwt = localStorage.getItem("ordinal-mind_discord_jwt")
+            fetch("/api/wiki/contribute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contribution: {
+                  ...extracted.data,
+                  session_id: activeThreadId,
+                  source_excerpt: trimmedPrompt,
+                },
+                jwt: jwt || undefined,
+              }),
+            }).catch(() => {
+              // Fire and forget
+            })
+
+            console.info("[NarrativeChat][WikiContribution]", {
+              at: new Date().toISOString(),
+              field: extracted.data.field,
+              slug: extracted.data.collection_slug,
+            })
+          }
+        }
+
+        const clean = sanitizeNarrative(finalRawText)
         const envelope = toChatAnswerEnvelope({
-          text: clean || result.text,
+          text: clean || finalRawText,
           usedTools: Array.from(usedToolNames),
         })
         const displayText = formatChatAnswerEnvelope(envelope)
@@ -486,7 +534,15 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
         abortRef.current = null
       }
     },
-    [activeThreadId, chronicle, clearTimer, startTimer, wikiLifecycle.status, wikiLifecycle.wikiPage]
+    [
+      activeThreadId,
+      chronicle,
+      clearTimer,
+      startTimer,
+      wikiLifecycle.status,
+      wikiLifecycle.wikiPage,
+      wikiCompletenessInfo,
+    ]
   )
 
   const retryLast = useCallback(async () => {

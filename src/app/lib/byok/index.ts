@@ -41,6 +41,7 @@ export interface LLMAdapter {
     mode: ChatResponseMode
     intent: ChatIntent
     toolPolicyDecision?: ChatToolPolicyDecision
+    wikiCompletenessInfo?: string
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor

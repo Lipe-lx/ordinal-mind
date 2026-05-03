@@ -7,6 +7,7 @@ export type ChatIntent =
   | "chronicle_query"
   | "clarification_request"
   | "offtopic_safe"
+  | "knowledge_contribution"
 
 export type RouterStage = "l0_rules" | "l1_semantic" | "l2_structured_fallback"
 export type ChatResponseMode = "narrative" | "qa"
@@ -55,6 +56,26 @@ const CHRONICLE_HINTS = [
   "genesis", "timeline", "colecao", "coleção", "runestone", "block", "tx", "rarity", "market", "price", "collection",
   "parent", "parents", "pai", "mae", "mãe", "filho", "filha", "child", "children", "ancestral", "ancestrais",
   "genealogia", "genealogy", "mint", "minted", "mintado", "mintada", "cunhado", "cunhada", "cunhou", "bloco",
+  "colecao", "coleção", "fundador", "founder", "criador", "creator", "supply", "launch", "lancamento", "lançamento",
+]
+
+// --- Knowledge Contribution Detection ---
+// Detects when the user has first-person or corrective knowledge about a collection.
+// IMPORTANT: Only triggers when combined with chronicle/ordinals context to avoid
+// false positives on generic first-person statements.
+
+const CONTRIBUTION_PATTERNS = [
+  /\b(eu (estava|vi|participei|lembro|sei|sei que|estava|fiz|criei))\b/u,
+  /\b(i (was|saw|remember|know|witnessed|created|made|did))\b/u,
+  /\b(na verdade|actually|correcting|corrigindo|na real)\b/u,
+  /\b(o fundador|the founder|criador|creator|quem criou|who created|quem fez|who made)\b/u,
+  /\b(o supply|the supply|o total|total supply|quantos ao todo)\b/u,
+]
+
+const FIRST_PERSON_COLLECTION_PATTERNS = [
+  /\b(minha coleção|my collection|eu mint|i minted|eu comprei|i bought|eu vendi|i sold)\b/u,
+  /\b(a gente|nós|we|our community|nossa comunidade|nossa col)\b/u,
+  /\b(quando (lançou|mintou|saiu|estreou)|when (it|we) (launched|minted|dropped))\b/u,
 ]
 
 const NARRATIVE_REQUEST_HINTS = [
@@ -72,6 +93,14 @@ const PROTOTYPES: Record<ChatIntent, string[]> = {
   ],
   clarification_request: ["não entendi", "pode explicar", "detalha melhor", "what do you mean"],
   offtopic_safe: ["como está o tempo hoje", "who won the game", "me conta uma piada", "notícias de hoje"],
+  knowledge_contribution: [
+    "o fundador é o fulano", "essa coleção foi lançada em janeiro",
+    "eu estava lá quando mintou", "the creator is known as",
+    "na verdade o supply é 10000", "actually the mint was free",
+    "eu comprei quando lançou", "a gente criou essa coleção",
+    "quem criou foi o", "o criador da coleção",
+    "i was there when it dropped", "we minted this collection",
+  ],
 }
 
 export function routeChatIntent(input: string, history: ChatMessage[]): ChatIntentDecision {
@@ -147,6 +176,15 @@ function l0Rules(normalized: string): { intent: ChatIntent; confidence: number; 
     if (pattern.test(normalized) && !hasChronicleHint(normalized)) {
       return { intent: "offtopic_safe", confidence: 0.9, reason: `offtopic_pattern:${pattern}` }
     }
+  }
+
+  // knowledge_contribution: requires BOTH a contribution pattern AND a chronicle hint
+  // High confidence threshold (0.87) to avoid false positives.
+  const hasContributionSignal = CONTRIBUTION_PATTERNS.some((p) => p.test(normalized))
+    || FIRST_PERSON_COLLECTION_PATTERNS.some((p) => p.test(normalized))
+
+  if (hasContributionSignal && hasChronicleHint(normalized)) {
+    return { intent: "knowledge_contribution", confidence: 0.87, reason: "contribution_pattern_with_chronicle_hint" }
   }
 
   if (hasChronicleHint(normalized) || normalized.includes("?")) {
@@ -252,6 +290,7 @@ function emptyScores(): Record<ChatIntent, number> {
     chronicle_query: 0,
     clarification_request: 0,
     offtopic_safe: 0,
+    knowledge_contribution: 0,
   }
 }
 

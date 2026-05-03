@@ -93,6 +93,7 @@ export class OpenAIAdapter implements LLMAdapter {
     mode,
     intent,
     toolPolicyDecision,
+    wikiCompletenessInfo,
     onChunk,
     signal,
     toolExecutor,
@@ -103,6 +104,7 @@ export class OpenAIAdapter implements LLMAdapter {
     mode: ChatResponseMode
     intent: ChatIntent
     toolPolicyDecision?: ChatToolPolicyDecision
+    wikiCompletenessInfo?: string
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor
@@ -111,7 +113,7 @@ export class OpenAIAdapter implements LLMAdapter {
       chronicle,
       history,
       userMessage || INITIAL_NARRATIVE_PROMPT,
-      { mode, intent }
+      { mode, intent, wikiCompletenessInfo }
     )
     const enableAttachments = shouldAttachContentForChat({
       chronicle,

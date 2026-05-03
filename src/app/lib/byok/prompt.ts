@@ -112,9 +112,10 @@ export function buildChatTurnPrompt(
   options: {
     mode: ChatResponseMode
     intent: ChatIntent
+    wikiCompletenessInfo?: string
   }
 ): string {
-  const { mode, intent } = options
+  const { mode, intent, wikiCompletenessInfo } = options
   const transcript = history
     .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content}`)
     .join("\n")
@@ -130,10 +131,30 @@ ${historySection}
 Latest user message:
 ${userMessage}
 
-${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT)}`
+${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT, wikiCompletenessInfo)}`
 }
 
-function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean): string {
+function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean, wikiCompletenessInfo?: string): string {
+  if (intent === "knowledge_contribution") {
+    return `Response policy:
+Wiki Builder Mode:
+- You detected the user has original knowledge about this collection.
+- Your goal is to extract structured information naturally through conversation.
+${wikiCompletenessInfo ? `- Current collection status: ${wikiCompletenessInfo}\n` : ""}
+- DO NOT ask questions like a form. Weave questions naturally into the conversation.
+- When the user provides new information, confirm it conversationally.
+- Generate a <wiki_extract> block with the structured data (hidden from user). Format:
+  <wiki_extract>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_extract>
+- Field must be one of: founder, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
+- Always validate: "You're saying X, correct? That's valuable context for this collection's chronicle."
+- If user has no Discord connected, mention gently that contributions enter review.
+- Answer in the same language as the latest user message.
+- CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
+- Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
+- Keep internal <thought> blocks brief and focused on evidence evaluation.
+- The <wiki_extract> block must be OUTSIDE the <final_answer> block, placed at the very end of your response.`
+  }
+
   if (mode === "narrative") {
     return `Response policy:
 - Provide a concise collector-grade Chronicle narrative (max 5 short paragraphs).

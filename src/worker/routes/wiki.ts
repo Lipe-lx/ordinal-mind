@@ -8,6 +8,8 @@ import {
   wikiHealthStatusCode,
 } from "../wiki/schema"
 import { handleWikiTool } from "../wiki/tools"
+import { handleContribute } from "../wiki/contribute"
+import { handleCompleteness } from "../wiki/completeness"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
   try {
@@ -30,9 +32,18 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
       return handleIngest(request, env)
     }
 
+    if (request.method === "POST" && path === "/api/wiki/contribute") {
+      return handleContribute(request, env)
+    }
+
     if (request.method === "POST" && path.startsWith("/api/wiki/tools/")) {
       const toolName = path.replace("/api/wiki/tools/", "")
       return handleWikiTool(toolName, request, env)
+    }
+
+    if (request.method === "GET" && /^\/api\/wiki\/collection\/[^/]+\/completeness$/.test(path)) {
+      const slug = decodeURIComponent(path.replace("/api/wiki/collection/", "").replace("/completeness", ""))
+      return handleCompleteness(slug, env)
     }
 
     if (request.method === "GET" && path.startsWith("/api/wiki/") && !path.startsWith("/api/wiki/tools/")) {

@@ -62,4 +62,25 @@ describe("chat intent router", () => {
     const decision = routeChatIntent("como está o tempo hoje?", history)
     expect(decision.intent).toBe("offtopic_safe")
   })
+
+  it("classifies knowledge_contribution for valid first-person collection statements", () => {
+    const decision = routeChatIntent("eu estava lá quando a coleção mintou", history)
+    expect(decision.intent).toBe("knowledge_contribution")
+  })
+
+  it("classifies knowledge_contribution for founder statements", () => {
+    const decision = routeChatIntent("o fundador dessa coleção é o fulano", history)
+    expect(decision.intent).toBe("knowledge_contribution")
+  })
+
+  it("classifies knowledge_contribution for supply correction", () => {
+    const decision = routeChatIntent("na verdade o supply total é 10000 satoshis", history)
+    expect(decision.intent).toBe("knowledge_contribution")
+  })
+
+  it("does not classify as knowledge_contribution if no chronicle context is present", () => {
+    // "eu comprei um café" has a first-person pattern ("eu comprei") but no chronicle hint
+    const decision = routeChatIntent("eu comprei um café hoje cedo", history)
+    expect(decision.intent).not.toBe("knowledge_contribution")
+  })
 })

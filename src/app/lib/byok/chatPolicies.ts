@@ -48,6 +48,9 @@ export function resolvePolicyResponse(intent: ChatIntent, _input: string): Polic
         handledLocally: true,
         responseText: "I should stay focused on this inscription's Chronicle. I can answer about provenance, current owner, transfers, parent links, or collection context.",
       }
+    case "knowledge_contribution":
+      // Handled by LLM via prompt mode (Wiki Builder Mode)
+      return { handledLocally: false }
     case "chronicle_query":
     default:
       return { handledLocally: false }
