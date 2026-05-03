@@ -28,6 +28,15 @@ export const router = createBrowserRouter([
         loader: chronicleLoader,
         errorElement: <ErrorBoundary />,
       },
+      {
+        path: "address/:address",
+        lazy: () => import("./pages/AddressPage").then(m => ({ Component: m.AddressPage })),
+        loader: async ({ params }) => {
+          if (!params.address) throw new Response("Missing address", { status: 400 })
+          return { address: params.address }
+        },
+        errorElement: <ErrorBoundary />,
+      },
     ],
   },
 ])

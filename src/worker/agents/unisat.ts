@@ -28,6 +28,30 @@ export interface UnisatInscriptionInfo {
   metaprotocol: string | null
 }
 
+export interface UnisatAddressInscription {
+  inscriptionId: string
+  inscriptionNumber: number
+  address: string
+  contentType: string
+  contentLength: number
+  offset: number
+  utxo: {
+    txid: string
+    vout: number
+    satoshi: number
+  }
+}
+
+export interface UnisatAddressInscriptionPage {
+  cursor: number
+  total: number
+  totalConfirmed: number
+  totalUnconfirmed: number
+  totalUnconfirmedSpend: number
+  inscription: UnisatAddressInscription[]
+  utxo: unknown[]
+}
+
 // --- Public API ---
 
 // --- Internal helpers ---
@@ -102,6 +126,17 @@ export const fetchUnisat = {
     if (!apiKey) return null
     return unisatGet<UnisatInscriptionInfo>(
       `/v1/indexer/inscription/info/${id}`,
+      apiKey
+    )
+  },
+
+  /**
+   * Fetch inscriptions owned by a specific address.
+   */
+  async addressInscriptions(address: string, apiKey: string, cursor = 0, size = 48): Promise<UnisatAddressInscriptionPage | null> {
+    if (!apiKey) return null
+    return unisatGet<UnisatAddressInscriptionPage>(
+      `/v1/indexer/address/${address}/inscription-data?cursor=${cursor}&size=${size}`,
       apiKey
     )
   },

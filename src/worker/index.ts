@@ -10,6 +10,7 @@ import { cacheGet, cachePut } from "./cache"
 import { db } from "./db"
 import { persistRawEvents } from "./wiki/persistEvents"
 import { handleWikiRoute } from "./routes/wiki"
+import { fetchUnisat } from "./agents/unisat"
 
 import {
   fetchMetadata,
@@ -149,15 +150,44 @@ async function handleApi(
     try {
       const resolved = await resolveInput(raw)
 
-      // Address → return list of inscription IDs for the client to choose
       if (resolved.type === "address") {
-        return jsonResponse(
-          {
-            error:
-              "Address lookup is temporarily disabled. A decentralized UTXO indexer is required to resolve addresses to inscriptions without paid APIs.",
-          },
-          501
-        )
+        if (!env.UNISAT_API_KEY) {
+          return jsonResponse(
+            {
+              error:
+                "Address lookup requires a UniSat API key. Please configure UNISAT_API_KEY in the worker environment.",
+            },
+            501
+          )
+        }
+
+        const cursor = Number.parseInt(url.searchParams.get("cursor") ?? "0", 10)
+        const size = Number.parseInt(url.searchParams.get("size") ?? "48", 10)
+        
+        const page = await fetchUnisat.addressInscriptions(resolved.value, env.UNISAT_API_KEY, cursor, size)
+        
+        if (!page) {
+           return jsonResponse({
+            type: "address",
+            address: resolved.value,
+            inscriptions: [],
+            total: 0,
+            cursor: 0,
+          })
+        }
+
+        return jsonResponse({
+          type: "address",
+          address: resolved.value,
+          inscriptions: page.inscription.map(i => ({
+            id: i.inscriptionId,
+            number: i.inscriptionNumber,
+            content_type: i.contentType,
+            content_url: `https://ordinals.com/content/${i.inscriptionId}`,
+          })),
+          total: page.total,
+          cursor: page.cursor,
+        })
       }
 
       const id = resolved.value

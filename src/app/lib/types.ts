@@ -367,9 +367,19 @@ export interface CollectorSignals {
 
 
 
+export interface AddressInscriptionItem {
+  id: string
+  number: number
+  content_type: string
+  content_url: string
+}
+
 export interface AddressResponse {
   type: "address"
-  inscriptions: { id: string; number: number; content_url: string }[]
+  address: string
+  inscriptions: AddressInscriptionItem[]
+  total: number
+  cursor: number
 }
 
 export interface ErrorResponse {

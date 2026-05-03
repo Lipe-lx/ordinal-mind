@@ -32,7 +32,11 @@ export function Home() {
 
     setError(null)
     startTransition(() => {
-      navigate(`/chronicle/${encodeURIComponent(trimmed)}${location.search}`)
+      if (TAPROOT_RE.test(trimmed)) {
+        navigate(`/address/${encodeURIComponent(trimmed)}${location.search}`)
+      } else {
+        navigate(`/chronicle/${encodeURIComponent(trimmed)}${location.search}`)
+      }
     })
   }
 
