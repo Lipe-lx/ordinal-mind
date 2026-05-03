@@ -25,21 +25,33 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
   flex-shrink: 0;
+  line-height: 1;
+  transition: all var(--duration-normal) var(--ease-smooth);
+  text-decoration: none;
+}
+
+.layout-logo:hover {
+  text-shadow: 0 0 20px rgba(247, 147, 26, 0.3);
+  transform: translateY(-1px);
 }
 
 .layout-logo-icon {
-  width: 28px;
-  height: 28px;
-  background: var(--accent-primary);
-  border-radius: var(--radius-sm);
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.875rem;
+  flex-shrink: 0;
+  transition: all var(--duration-normal) var(--ease-smooth);
+}
+
+.layout-logo:hover .layout-logo-icon {
+  transform: scale(1.1) rotate(-5deg);
+  filter: drop-shadow(0 0 15px var(--accent-glow-strong)) brightness(1.2);
 }
 
 .layout-header-center {

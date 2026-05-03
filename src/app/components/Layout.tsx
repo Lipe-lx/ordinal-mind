@@ -4,6 +4,7 @@ import { BYOKModal } from "./BYOKModal"
 import { PortalTooltip } from "./Tooltip"
 import { KeyStore } from "../lib/byok"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
+import { LogoIcon } from "./Logo"
 import type { ReactNode } from "react"
 
 export interface LayoutOutletContext {
@@ -38,7 +39,7 @@ export function Layout() {
       <header className="layout-header">
         <div className="layout-header-left">
           <Link to="/" className="layout-logo">
-            <span className="layout-logo-icon">◈</span>
+            <LogoIcon className="layout-logo-icon" />
             Ordinal Mind
           </Link>
         </div>
