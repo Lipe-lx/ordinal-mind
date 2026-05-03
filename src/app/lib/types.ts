@@ -480,13 +480,13 @@ export interface ConsolidatedField {
 
 export interface FactualData {
   supply: number | null
-  first_block: number | null
-  last_mint_block: number | null
-  floor_history: Array<{ block: number; price_btc: number }>
+  first_seen: string | null
+  last_seen: string | null
 }
 
 export interface ConsolidatedCollection {
   collection_slug: string
+  sample_inscription_id: string | null
   completeness: {
     filled: number
     total: number

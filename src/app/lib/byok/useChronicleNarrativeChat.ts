@@ -63,7 +63,12 @@ function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((message) => keepTurnIds.has(message.turnId))
 }
 
-export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
+export interface ChronicleChatOptions {
+  wikiBuilderMode?: boolean
+  targetGap?: string
+}
+
+export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?: ChronicleChatOptions) {
   const inscriptionId = chronicle?.meta.inscription_id ?? null
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -636,12 +641,18 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null) {
     if (autoTurnRef.current === autoTurnKey) return
 
     autoTurnRef.current = autoTurnKey
-    void sendMessage(INITIAL_NARRATIVE_PROMPT, {
+
+    const isBuilder = options?.wikiBuilderMode && options?.targetGap
+    const initialPrompt = isBuilder
+      ? `[SYSTEM] Enter Wiki Builder mode. Introduce yourself briefly and ask the user if they have information about the missing collection field: ${options.targetGap}. Keep it conversational.`
+      : INITIAL_NARRATIVE_PROMPT
+
+    void sendMessage(initialPrompt, {
       silentUserMessage: true,
-      forceMode: "narrative",
-      intentOverride: "chronicle_query",
+      forceMode: isBuilder ? "qa" : "narrative",
+      intentOverride: isBuilder ? "knowledge_contribution" : "chronicle_query",
     })
-  }, [activeThreadId, chronicle, messages, phase, sendMessage])
+  }, [activeThreadId, chronicle, messages, phase, sendMessage, options?.wikiBuilderMode, options?.targetGap])
 
   return {
     messages,

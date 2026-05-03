@@ -139,7 +139,10 @@ export function Chronicle() {
     editMessage,
     retryLast,
     cancel,
-  } = useChronicleNarrativeChat(chronicle)
+  } = useChronicleNarrativeChat(chronicle, { 
+    wikiBuilderMode: new URLSearchParams(location.search).get("builderMode") === "true",
+    targetGap: new URLSearchParams(location.search).get("gap") ?? undefined
+  })
   const navigate = useNavigate()
   const homePath = `/${location.search}`
   const { setHeaderCenter, openBYOK } = useOutletContext<LayoutOutletContext>()

@@ -11,8 +11,14 @@ export function WikiPage() {
   const { setHeaderCenter } = useOutletContext<LayoutOutletContext>()
   
   const [data, setData] = useState<ConsolidatedCollection | null>(null)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [prevSlug, setPrevSlug] = useState(slug)
+
+  if (slug !== prevSlug) {
+    setPrevSlug(slug)
+    setData(null)
+    setError(null)
+  }
 
   useEffect(() => {
     if (!slug) return
@@ -24,24 +30,30 @@ export function WikiPage() {
       </div>
     )
 
-    setLoading(true)
+    let ignore = false
+
     fetch(`/api/wiki/collection/${slug}/consolidated`)
       .then(res => res.json())
       .then(json => {
+        if (ignore) return
         if (!json.ok) throw new Error(json.error || "Failed to load wiki")
         setData(json.data)
-        setLoading(false)
       })
       .catch(err => {
+        if (ignore) return
         console.error(err)
         setError("Could not load collection wiki.")
-        setLoading(false)
       })
 
-    return () => setHeaderCenter(null)
+    return () => {
+      ignore = true
+      setHeaderCenter(null)
+    }
   }, [slug, setHeaderCenter])
 
-  if (loading) {
+  const isLoading = !data && !error
+
+  if (isLoading) {
     return (
       <div className="wiki-page-container fade-in">
         <div className="wiki-loading">
@@ -91,7 +103,32 @@ export function WikiPage() {
           </div>
         </div>
 
-        <div className="wiki-grid">
+        {/* Factual (L0) Stats */}
+        {data.factual && (
+          <div className="wiki-stats-card glass-card" style={{ marginTop: "1rem", borderColor: "var(--accent-secondary)", opacity: 0.9 }}>
+            <div className="wiki-stat-item">
+              <span className="wiki-stat-label">Total Supply</span>
+              <span className="wiki-stat-value">{data.factual.supply ? data.factual.supply.toLocaleString() : "Unknown"}</span>
+              <span className="wiki-stat-subtext">L0 Inscriptions</span>
+            </div>
+            <div className="wiki-stat-item">
+              <span className="wiki-stat-label">First Discovered</span>
+              <span className="wiki-stat-value" style={{ fontSize: "1.2rem", marginTop: "0.5rem" }}>
+                {data.factual.first_seen ? new Date(data.factual.first_seen).toLocaleDateString() : "Unknown"}
+              </span>
+              <span className="wiki-stat-subtext">Genesis event</span>
+            </div>
+            <div className="wiki-stat-item">
+              <span className="wiki-stat-label">Last Mint</span>
+              <span className="wiki-stat-value" style={{ fontSize: "1.2rem", marginTop: "0.5rem" }}>
+                {data.factual.last_seen ? new Date(data.factual.last_seen).toLocaleDateString() : "Unknown"}
+              </span>
+              <span className="wiki-stat-subtext">Latest genesis</span>
+            </div>
+          </div>
+        )}
+
+        <div className="wiki-grid" style={{ marginTop: "2rem" }}>
           {/* Canonical Fields */}
           <div className="wiki-section glass-card">
             <h2 className="wiki-section-title">Verified Narrative</h2>
@@ -136,9 +173,21 @@ export function WikiPage() {
                 <h2 className="wiki-section-title">Missing Context</h2>
                 <div className="wiki-gaps-list">
                   {data.gaps.map(gap => (
-                    <div key={gap} className="wiki-gap-item">
+                    <div key={gap} className="wiki-gap-item" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span className="wiki-gap-name">{formatFieldName(gap)}</span>
-                      {/* TODO: Add 'Contribute' button that opens chat */}
+                      <button 
+                        className="btn btn-ghost" 
+                        style={{ fontSize: "0.8rem", padding: "4px 8px" }}
+                        onClick={() => {
+                          if (data.sample_inscription_id) {
+                            navigate(`/?id=${data.sample_inscription_id}&builderMode=true&gap=${gap}`)
+                          } else {
+                            alert("Cannot open builder: No reference inscription found for this collection.")
+                          }
+                        }}
+                      >
+                        Contribute +
+                      </button>
                     </div>
                   ))}
                 </div>

@@ -6,6 +6,7 @@ import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
 import type { SynthesisPhase } from "../lib/byok/useChronicleNarrativeChat"
 import { ChatHistoryModal } from "./ChatHistoryModal"
+import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 
 interface Props {
   messages: ChatMessage[]
@@ -71,6 +72,7 @@ export function NarrativeChatRenderer({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
   const transcriptRef = useRef<HTMLDivElement | null>(null)
+  const { identity } = useDiscordIdentity()
 
   const isLoading = phase !== "idle" && phase !== "done" && phase !== "error"
   const transcript = useMemo(() => messages, [messages])
@@ -163,7 +165,14 @@ export function NarrativeChatRenderer({
                   {message.content}
                 </ReactMarkdown>
               ) : (
-                <>
+                <div className="chat-user-message-container">
+                  {identity && (
+                    <div className="chat-user-meta" style={{ marginBottom: "0.25rem", textAlign: "right" }}>
+                      <span className={`wiki-tier-badge tier-${identity.tier}`} style={{ fontSize: "0.65rem", padding: "2px 6px" }}>
+                        {identity.tier}
+                      </span>
+                    </div>
+                  )}
                   {editingMessageId === message.id ? (
                     <div className="chat-edit-well">
                       <textarea
@@ -196,7 +205,7 @@ export function NarrativeChatRenderer({
                   ) : (
                     <p>{message.content}</p>
                   )}
-                </>
+                </div>
               )}
             </div>
             {message.role === "user" && editingMessageId !== message.id && (

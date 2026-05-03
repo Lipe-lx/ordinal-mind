@@ -451,7 +451,7 @@ Cache materializado. Rebuild triggered por novas contribuições ou periodicamen
 > - `src/app/lib/byok/index.ts` — KeyStore refatorado para dual-mode (sessionStorage anon / localStorage encrypted)
 > - `tests/worker/auth.test.ts`, `tests/app/discordIdentity.test.ts`, `tests/app/keyEncryption.test.ts`
 
-### Sprint 2 — Contribuição Estruturada (3–4 dias)
+### Sprint 2 — Contribuição Estruturada (3–4 dias) ✅ CONCLUÍDO
 
 | # | Tarefa | Prioridade | Risco |
 |---|--------|-----------|-------|
@@ -463,7 +463,7 @@ Cache materializado. Rebuild triggered por novas contribuições ou periodicamen
 | 2.6 | Rotas contribute + completeness no wiki router | Alta | Baixo |
 | 2.7 | Testes de contribuição e extração | Alta | Baixo |
 
-### Sprint 3 — Wiki Question Engine (2–3 dias)
+### Sprint 3 — Wiki Question Engine (2–3 dias) ✅ CONCLUÍDO
 
 | # | Tarefa | Prioridade | Risco |
 |---|--------|-----------|-------|
@@ -473,7 +473,7 @@ Cache materializado. Rebuild triggered por novas contribuições ou periodicamen
 | 3.4 | Completeness endpoint no worker | Média | Baixo |
 | 3.5 | Testes com coleções reais (NodeMonkes, Puppets) | Alta | Médio |
 
-### Sprint 4 — Consolidação e UI (4–5 dias)
+### Sprint 4 — Consolidação e UI (4–5 dias) ✅ CONCLUÍDO
 
 | # | Tarefa | Prioridade | Risco |
 |---|--------|-----------|-------|
@@ -485,7 +485,7 @@ Cache materializado. Rebuild triggered por novas contribuições ou periodicamen
 | 4.6 | Contexto consolidado no prompt do chat | Média | Baixo |
 | 4.7 | Botão "Contribuir via Chat" com modo builder | Média | Baixo |
 
-### Sprint 5 — OG Scoring e Moderação (2–3 dias)
+### Sprint 5 — OG Scoring e Moderação (2–3 dias) ✅ CONCLUÍDO
 
 | # | Tarefa | Prioridade | Risco |
 |---|--------|-----------|-------|

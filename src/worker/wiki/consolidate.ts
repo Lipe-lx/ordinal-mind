@@ -137,15 +137,29 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
   const score = total > 0 ? filledCount / total : 0
   const averageConfidence = filledCount > 0 ? totalConfidence / filledCount : 0
 
+  const stats = await env.DB.prepare(`
+    SELECT COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen, inscription_id
+    FROM raw_chronicle_events
+    WHERE event_type = 'genesis'
+      AND metadata_json LIKE ?
+  `)
+    .bind(`%${slug}%`)
+    .first<{ count: number; first_seen: string | null; last_seen: string | null; inscription_id: string | null }>()
+
   return {
     collection_slug: slug,
+    sample_inscription_id: stats?.inscription_id ?? null,
     completeness: {
       filled: filledCount,
       total,
       score: Math.round(score * 1000) / 1000,
     },
     confidence: Math.round(averageConfidence * 1000) / 1000,
-    factual: null, // Merged on the frontend
+    factual: stats ? {
+      supply: stats.count > 0 ? stats.count : null,
+      first_seen: stats.first_seen,
+      last_seen: stats.last_seen,
+    } : null,
     narrative,
     sources,
     gaps,
