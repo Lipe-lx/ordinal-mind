@@ -6,21 +6,24 @@
 //   * (everything else)  → env.ASSETS.fetch(request) — SPA static assets
 
 import { resolveInput } from "./resolver"
-import { fetchMempool } from "./agents/mempool"
-import { fetchOrdinals } from "./agents/ordinals"
-import { fetchUnisat } from "./agents/unisat"
-import { buildMediaContext, fetchCollectionContext } from "./agents/collections"
-import { collectSignals } from "./agents/mentions"
-import { fetchLoreContext } from "./agents/webResearch"
-import { buildTimeline } from "./timeline"
 import { cacheGet, cachePut } from "./cache"
-import { buildInscriptionRarity } from "./rarity"
-import { validateAcrossSources, mergeCharms } from "./validation"
 import { db } from "./db"
 import { persistRawEvents } from "./wiki/persistEvents"
-import type { InscriptionMeta, SourceCatalogItem, UnisatEnrichment, WebResearchContext } from "../app/lib/types"
-import type { MentionCollectionResult } from "./agents/mentions/types"
 import { handleWikiRoute } from "./routes/wiki"
+
+import {
+  fetchMetadata,
+  parallelFetch,
+  dependentFetch,
+  enrichment,
+  buildOutput,
+} from "./pipeline/phases"
+import { emptyCollectorSignals } from "./pipeline/defaults"
+import type {
+  ChronicleState,
+  DiagnosticsContext,
+  ProgressCallback,
+} from "./pipeline/types"
 
 export interface Env {
   CHRONICLES_KV: KVNamespace
@@ -36,13 +39,6 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type",
 }
 
-interface DiagnosticsContext {
-  debug: boolean
-  requestId: string
-  route: "standard" | "stream"
-  inscriptionId: string
-}
-
 function newRequestId(): string {
   try {
     return crypto.randomUUID().slice(0, 8)
@@ -51,74 +47,64 @@ function newRequestId(): string {
   }
 }
 
-function diagLog(
-  diagnostics: DiagnosticsContext | undefined,
-  event: string,
-  data: Record<string, unknown> = {}
-): void {
-  if (!diagnostics?.debug) return
-  const payload = {
-    at: new Date().toISOString(),
-    request_id: diagnostics.requestId,
-    inscription_id: diagnostics.inscriptionId,
-    route: diagnostics.route,
-    event,
-    ...data,
-  }
-  console.info(`[ChronicleDiag] ${JSON.stringify(payload)}`)
-}
-
-function summarizeSourceCatalog(
-  sourceCatalog: Array<{ source_type: string; partial: boolean }>
-): { total: number; partial: number; partialBySource: string[] } {
-  const partialBySource = sourceCatalog
-    .filter((entry) => entry.partial)
-    .map((entry) => entry.source_type)
-  return {
-    total: sourceCatalog.length,
-    partial: partialBySource.length,
-    partialBySource,
-  }
-}
-
-function buildMempoolSourceCatalog(options: {
-  meta: InscriptionMeta
-  fetchedAt: string
-  transferFetchOk: boolean
-  transferCount: number
-  genesisTxFetched: boolean
-}): SourceCatalogItem[] {
-  const { meta, fetchedAt, transferFetchOk, transferCount, genesisTxFetched } = options
-  return [
-    {
-      source_type: "mempool_genesis_tx",
-      url_or_ref: `https://mempool.space/api/tx/${meta.genesis_txid}`,
-      trust_level: "bitcoin_indexer",
-      fetched_at: fetchedAt,
-      partial: !genesisTxFetched,
-      detail: genesisTxFetched
-        ? "Genesis transaction fetched from mempool.space"
-        : "Genesis transaction unavailable from mempool.space",
-    },
-    {
-      source_type: "mempool_forward_transfer_trace",
-      url_or_ref: `https://mempool.space/api/tx/${meta.genesis_txid}/outspend/${meta.genesis_vout}`,
-      trust_level: "bitcoin_indexer",
-      fetched_at: fetchedAt,
-      partial: !transferFetchOk,
-      detail: transferFetchOk
-        ? `${transferCount} forward transfer${transferCount !== 1 ? "s" : ""} traced from genesis output`
-        : "Forward transfer trace unavailable from mempool.space",
-    },
-  ]
-}
-
-
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   })
+}
+
+function initState(
+  id: string,
+  env: Env,
+  diagnostics: DiagnosticsContext,
+  lite: boolean,
+  onProgress?: ProgressCallback
+): ChronicleState {
+  return {
+    inscriptionId: id,
+    env: {
+      CHRONICLES_KV: env.CHRONICLES_KV,
+      UNISAT_API_KEY: env.UNISAT_API_KEY,
+      DB: env.DB,
+    },
+    diagnostics,
+    lite,
+    onProgress,
+    meta: null,
+    cborTraits: null,
+    transfers: [],
+    collectionData: null,
+    genesisTxResult: null,
+    genesisTxFetched: false,
+    transfersFetched: false,
+    mentions: [],
+    collectorSignals: emptyCollectorSignals(),
+    mentionSourceCatalog: [],
+    mentionDebugInfo: undefined,
+    webResearch: null,
+    unisatEnrichment: null,
+    rarity: null,
+    validation: null,
+    events: [],
+    sourceCatalog: [],
+    chronicle: null,
+    trace: {
+      request_id: diagnostics.requestId,
+      inscription_id: id,
+      phases: [],
+      total_duration_ms: 0,
+    },
+  }
+}
+
+async function runPipeline(state: ChronicleState): Promise<ChronicleState> {
+  state = await fetchMetadata(state)
+  state = await parallelFetch(state)
+  state = await dependentFetch(state)
+  state = await enrichment(state)
+  state = await buildOutput(state)
+  return state
 }
 
 export default {
@@ -140,7 +126,11 @@ export default {
   },
 }
 
-async function handleApi(request: Request, url: URL, env: Env): Promise<Response> {
+async function handleApi(
+  request: Request,
+  url: URL,
+  env: Env
+): Promise<Response> {
   if (url.pathname.startsWith("/api/wiki")) {
     return handleWikiRoute(request, env)
   }
@@ -161,35 +151,32 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
 
       // Address → return list of inscription IDs for the client to choose
       if (resolved.type === "address") {
-        return jsonResponse({ 
-          error: "Address lookup is temporarily disabled. A decentralized UTXO indexer is required to resolve addresses to inscriptions without paid APIs." 
-        }, 501)
+        return jsonResponse(
+          {
+            error:
+              "Address lookup is temporarily disabled. A decentralized UTXO indexer is required to resolve addresses to inscriptions without paid APIs.",
+          },
+          501
+        )
       }
 
       const id = resolved.value
-      const route: DiagnosticsContext["route"] = useStream ? "stream" : "standard"
+      const route: DiagnosticsContext["route"] = useStream
+        ? "stream"
+        : "standard"
       const diagnostics: DiagnosticsContext = {
         debug,
         requestId: newRequestId(),
         route,
         inscriptionId: id,
       }
-      diagLog(diagnostics, "request_resolved", {
-        input_type: resolved.type,
-        stream: useStream,
-        cache_enabled: !useStream && !debug,
-      })
 
-      // Cache check (only for non-streaming — streaming always scans fresh for progress)
+      // Cache check (only for non-streaming)
       if (!useStream && !debug) {
         const cached = await cacheGet(env.CHRONICLES_KV, id)
         if (cached) {
-          diagLog(diagnostics, "cache_hit", { from_cache: true })
           return jsonResponse({ ...cached, from_cache: true })
         }
-        diagLog(diagnostics, "cache_miss")
-      } else if (!useStream && debug) {
-        diagLog(diagnostics, "cache_bypassed_debug")
       }
 
       // Streaming mode: SSE with progress feedback
@@ -210,372 +197,59 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
   return jsonResponse({ error: "Not found" }, 404)
 }
 
-// --- UniSat enrichment orchestrator (shared by both modes) ---
-
-async function fetchUnisatInfo(
-  id: string,
-  env: Env,
-  diagnostics?: DiagnosticsContext
-): Promise<UnisatEnrichment["inscription_info"] | null> {
-  const apiKey = env.UNISAT_API_KEY
-  if (!apiKey) {
-    diagLog(diagnostics, "unisat_skipped_no_key")
-    return null
-  }
-
-  try {
-    const info = await fetchUnisat.inscription(id, apiKey)
-    if (info) {
-      diagLog(diagnostics, "unisat_loaded", {
-        charms_count: info.charms?.length ?? 0,
-        has_metaprotocol: Boolean(info.metaprotocol),
-      })
-      return {
-        charms: info.charms || [],
-        sat: info.sat || 0,
-        metaprotocol: info.metaprotocol || null,
-        content_length: info.contentLength || 0,
-      }
-    }
-    diagLog(diagnostics, "unisat_empty")
-  } catch (err) {
-    console.error("UniSat info fetch failed:", err)
-    diagLog(diagnostics, "unisat_error", {
-      error: err instanceof Error ? err.message : String(err),
-    })
-  }
-  return null
-}
-
 // --- Standard JSON response (backward compatible) ---
 
 async function handleStandardChronicle(
   id: string,
   env: Env,
-  diagnostics?: DiagnosticsContext,
+  diagnostics: DiagnosticsContext,
   lite?: boolean
 ): Promise<Response> {
-  // 1. Fetch inscription metadata
-  let meta: InscriptionMeta
-  let cborTraits: Record<string, string> | null
+  const state = initState(id, env, diagnostics, !!lite)
   try {
-    const [metaRes, cborRes] = await Promise.all([
-      fetchOrdinals.inscription(id),
-      fetchOrdinals.metadata(id, {
-        debug: diagnostics?.debug,
-        requestId: diagnostics?.requestId,
+    const result = await runPipeline(state)
+    if (!result.chronicle) {
+      return jsonResponse({ error: "Pipeline produced no output" }, 500)
+    }
+
+    // Persist + cache (non-blocking)
+    if (env.DB) {
+      void persistRawEvents(env, id, result.events).then((r) => {
+        if (!r.ok) console.warn(`Raw events persistence skipped: ${r.status}`)
       })
-    ])
-    meta = metaRes
-    cborTraits = cborRes
-    diagLog(diagnostics, "metadata_loaded", {
-      inscription_number: meta.inscription_number,
-      has_cbor_traits: Boolean(cborTraits),
-      cbor_trait_count: cborTraits ? Object.keys(cborTraits).length : 0,
-    })
-  } catch {
+    }
+
+    if (!lite) {
+      try {
+        await cachePut(env.CHRONICLES_KV, id, result.chronicle)
+      } catch (cacheErr) {
+        console.error("Cache write failed:", cacheErr)
+      }
+    }
+
+    // Validation to DB (non-blocking)
+    if (result.validation) {
+      try {
+        await db.putValidation(env.CHRONICLES_KV, {
+          inscription_id: id,
+          ...result.validation,
+        })
+      } catch {
+        // non-blocking
+      }
+    }
+
+    return jsonResponse(result.chronicle)
+  } catch (err) {
+    console.error("Pipeline execution failed:", err)
     return jsonResponse({ error: "Inscription not found" }, 404)
   }
-
-  // 2. Parallel fetch for transfers, collection context, genesis tx, and UniSat.
-  // Collector signals run after collection context so queries can prioritize collection/item labels.
-  const [transfers, collectionContext, genesisTx, unisatInfo] = await Promise.allSettled([
-    lite ? Promise.resolve([]) : fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, { limit: 30 }),
-    fetchCollectionContext(id, meta, {
-      debug: diagnostics?.debug,
-      requestId: diagnostics?.requestId,
-    }),
-    fetchMempool.tx(meta.genesis_txid),
-    fetchUnisatInfo(id, env, diagnostics),
-  ])
-  const collectionData = collectionContext.status === "fulfilled"
-    ? collectionContext.value
-    : {
-        mediaContext: buildMediaContext(meta),
-        collectionContext: {
-          protocol: { parents: null, children: null, grandchildren: null, gallery: null, grandparents: null, greatGrandparents: null },
-          registry: { match: null, issues: [] },
-          market: { match: null, satflow_match: null, ord_net_match: null },
-          profile: null,
-          socials: { official_x_profiles: [] },
-          presentation: { facets: [] },
-        },
-        sourceCatalog: [],
-        collectionName: undefined,
-        mentionSearchHints: {
-          collectionName: undefined,
-          itemName: undefined,
-          officialXUrls: [],
-        },
-      }
-
-  const collectionNameForResearch =
-    collectionData.collectionContext.profile?.name
-    ?? collectionData.collectionContext.presentation.primary_label
-    ?? collectionData.mentionSearchHints.collectionName
-    ?? collectionData.collectionContext.market.match?.collection_name
-
-  const [mentionSignals, webResearchResult] = lite
-    ? [
-        {
-          status: "fulfilled",
-          value: {
-            mentions: [],
-            collectorSignals: {
-              attention_score: 0,
-              sentiment_label: "insufficient_data",
-              confidence: "low",
-              evidence_count: 0,
-              provider_breakdown: { google_trends: 0 },
-              scope_breakdown: { inscription_level: 0, collection_level: 0, mixed: 0, dominant_scope: "none" },
-              top_evidence: [],
-              windows: {
-                current_7d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
-                context_30d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
-              }
-            },
-            sourceCatalog: [],
-            debugInfo: undefined
-          }
-        } as PromiseSettledResult<MentionCollectionResult>,
-        { status: "fulfilled", value: null } as PromiseSettledResult<WebResearchContext | null>
-      ]
-    : await Promise.allSettled([
-        collectSignals({
-          inscriptionId: id,
-          inscriptionNumber: meta.inscription_number,
-          collectionName: collectionNameForResearch,
-          itemName:
-            collectionData.collectionContext.presentation.item_label
-            ?? collectionData.mentionSearchHints.itemName,
-          fullLabel: collectionData.collectionContext.presentation.full_label,
-          officialXUrls: collectionData.mentionSearchHints.officialXUrls,
-          debug: diagnostics?.debug,
-          requestId: diagnostics?.requestId,
-        }),
-        collectionNameForResearch ? fetchLoreContext(collectionNameForResearch) : Promise.resolve(null)
-      ])
-
-  const webResearch = webResearchResult.status === "fulfilled" ? webResearchResult.value : null
-  diagLog(diagnostics, "parallel_fetch_status", {
-    transfers: transfers.status,
-    collector_signals: mentionSignals.status,
-    collection_context: collectionContext.status,
-    genesis_tx: genesisTx.status,
-    unisat: unisatInfo.status,
-  })
-
-  const enrichedTransfers = transfers.status === "fulfilled" ? transfers.value : []
-  const socialMentions = mentionSignals.status === "fulfilled" ? mentionSignals.value.mentions : []
-  const collectorSignals = mentionSignals.status === "fulfilled"
-    ? mentionSignals.value.collectorSignals
-    : {
-        attention_score: 0,
-        sentiment_label: "insufficient_data" as const,
-        confidence: "low" as const,
-        evidence_count: 0,
-        provider_breakdown: { google_trends: 0 },
-        scope_breakdown: {
-          inscription_level: 0,
-          collection_level: 0,
-          mixed: 0,
-          dominant_scope: "none" as const,
-        },
-        top_evidence: [],
-        windows: {
-          current_7d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" as const },
-          context_30d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" as const },
-        },
-      }
-
-  const info = unisatInfo.status === "fulfilled" ? unisatInfo.value : null
-  const marketMatch = collectionData.collectionContext.market?.match
-  const marketRarity = marketMatch?.rarity_overlay
-  const rarity = buildInscriptionRarity(
-    cborTraits,
-    marketRarity
-  )
-  diagLog(diagnostics, "rarity_pipeline_summary", {
-    cbor_trait_count: cborTraits ? Object.keys(cborTraits).length : 0,
-    market_rarity_source: marketRarity?.source ?? null,
-    market_trait_count: marketRarity?.traits.length ?? 0,
-    market_rank: marketRarity?.rank ?? null,
-    market_supply: marketRarity?.supply ?? null,
-    rarity_trait_count: rarity?.traits.length ?? 0,
-    rarity_breakdown_count: rarity?.trait_breakdown.length ?? 0,
-  })
-
-  const unisatEnrichment: UnisatEnrichment = {
-    inscription_info: info,
-    collection_context: null,
-    market_info: { listed: false, price_sats: null, item_name: null },
-    rarity,
-    source_catalog: info ? [{
-      source_type: "unisat_inscription_info",
-      url_or_ref: `https://unisat.io/inscription/${id}`,
-      trust_level: "unisat_indexer",
-      fetched_at: new Date().toISOString(),
-      partial: false,
-    }] : []
-  }
-
-  if (rarity) {
-    if (cborTraits) {
-      unisatEnrichment.source_catalog.push({
-        source_type: "ordinals_cbor_metadata",
-        url_or_ref: `https://ordinals.com/r/metadata/${id}`,
-        trust_level: "official_index",
-        fetched_at: new Date().toISOString(),
-        partial: false,
-      })
-    }
-    if (marketRarity) {
-      const raritySourceRef =
-        marketRarity.source_ref
-        ?? marketMatch.source_ref
-      unisatEnrichment.source_catalog.push({
-        source_type: marketRarity.source === "satflow"
-          ? "satflow_rarity_stats"
-          : "ord_net_rarity_overlay",
-        url_or_ref: raritySourceRef,
-        trust_level: "market_overlay",
-        fetched_at: new Date().toISOString(),
-        partial: false,
-      })
-    }
-  }
-
-  if (collectionData.collectionName && meta.collection) {
-    meta = {
-      ...meta,
-      collection: {
-        ...meta.collection,
-        name: collectionData.collectionName,
-      },
-    }
-  }
-
-  const genesisOwnerAddress = genesisTx.status === "fulfilled"
-    ? genesisTx.value?.vout?.[meta.genesis_vout]?.scriptpubkey_address
-    : enrichedTransfers[0]?.from_address
-  if (genesisOwnerAddress) {
-    meta = {
-      ...meta,
-      genesis_owner_address: genesisOwnerAddress,
-    }
-  }
-
-  // Merge UniSat charms into meta
-  if (unisatEnrichment?.inscription_info?.charms) {
-    meta = {
-      ...meta,
-      charms: mergeCharms(meta.sat_rarity, unisatEnrichment.inscription_info.charms),
-    }
-  }
-
-      // Cross-source validation
-  const validationUnisatInfo = unisatEnrichment?.inscription_info
-    ? {
-        inscriptionId: id,
-        inscriptionNumber: meta.inscription_number,
-        address: meta.owner_address,
-        contentType: meta.content_type,
-        contentLength: unisatEnrichment.inscription_info.content_length,
-        height: meta.genesis_block,
-        timestamp: new Date(meta.genesis_timestamp).getTime() / 1000,
-        sat: unisatEnrichment.inscription_info.sat,
-        genesisTransaction: meta.genesis_txid,
-        offset: 0,
-        charms: unisatEnrichment.inscription_info.charms,
-        metaprotocol: unisatEnrichment.inscription_info.metaprotocol,
-      }
-    : null
-  const validation = validateAcrossSources(meta, validationUnisatInfo)
-
-  // Store validation in DB
-  if (validation) {
-    try {
-      await db.putValidation(env.CHRONICLES_KV, {
-        inscription_id: id,
-        ...validation,
-      })
-    } catch {
-      // non-blocking
-    }
-  }
-
-  // 3. Build timeline (now with UniSat enrichment)
-  const events = buildTimeline(meta, enrichedTransfers, socialMentions, unisatEnrichment ?? undefined)
-
-  // Merge source catalogs
-  const fetchedAt = new Date().toISOString()
-  const mempoolSourceCatalog = buildMempoolSourceCatalog({
-    meta,
-    fetchedAt,
-    transferFetchOk: transfers.status === "fulfilled",
-    transferCount: enrichedTransfers.length,
-    genesisTxFetched: genesisTx.status === "fulfilled" && Boolean(genesisTx.value),
-  })
-  const sourceCatalog = [
-    ...collectionData.sourceCatalog,
-    ...mempoolSourceCatalog,
-    ...(mentionSignals.status === "fulfilled" ? mentionSignals.value.sourceCatalog : []),
-    ...(unisatEnrichment?.source_catalog ?? []),
-  ]
-  const sourceSummary = summarizeSourceCatalog(sourceCatalog)
-  diagLog(diagnostics, "source_catalog_summary", sourceSummary)
-
-  const chronicle = {
-    inscription_id: id,
-    meta,
-    events,
-    collector_signals: collectorSignals,
-    media_context: collectionData.mediaContext,
-    collection_context: collectionData.collectionContext,
-    web_research: webResearch || undefined,
-    source_catalog: sourceCatalog,
-    cached_at: fetchedAt,
-    unisat_enrichment: unisatEnrichment ?? undefined,
-    validation,
-    debug_info: diagnostics?.debug
-      ? mentionSignals.status === "fulfilled"
-        ? mentionSignals.value.debugInfo
-        : undefined
-      : undefined,
-  }
-
-  if (env.DB) {
-    void persistRawEvents(env, id, events).then((result) => {
-      if (result.ok) return
-      console.warn(`Raw events persistence skipped: ${result.status}`)
-      diagLog(diagnostics, "wiki_layer0_persist_error", {
-        status: result.status,
-        error: result.error ?? null,
-      })
-    })
-  }
-
-  // Cache (fire-and-forget) - only for full scans
-  if (!lite) {
-    try {
-      await cachePut(env.CHRONICLES_KV, id, chronicle)
-    } catch (cacheErr) {
-      console.error("Cache write failed:", cacheErr)
-      diagLog(diagnostics, "cache_write_error", {
-        error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
-      })
-    }
-  }
-
-  return jsonResponse(chronicle)
 }
-
-// --- SSE streaming response with progress ---
 
 async function handleStreamingChronicle(
   id: string,
   env: Env,
-  diagnostics?: DiagnosticsContext
+  diagnostics: DiagnosticsContext
 ): Promise<Response> {
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
@@ -583,370 +257,46 @@ async function handleStreamingChronicle(
 
   const sendEvent = async (type: string, data: unknown) => {
     try {
-      await writer.write(encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`))
+      await writer.write(
+        encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)
+      )
     } catch {
       // Writer may be closed if client disconnected
     }
   }
 
-  // Run the pipeline in background, sending progress events
+  const onProgress: ProgressCallback = async (phase, step, description) => {
+    await sendEvent("progress", { phase, step, description })
+  }
+
   const pipeline = (async () => {
     try {
-      // Phase 1: Metadata
-      await sendEvent("progress", {
-        phase: "metadata",
-        step: 1,
-        description: "Fetching inscription data from ordinals.com…",
-      })
+      const state = initState(id, env, diagnostics, false, onProgress)
+      const result = await runPipeline(state)
 
-      let meta: InscriptionMeta
-      let cborTraits: Record<string, string> | null
-      try {
-        const [metaRes, cborRes] = await Promise.all([
-          fetchOrdinals.inscription(id),
-          fetchOrdinals.metadata(id, {
-            debug: diagnostics?.debug,
-            requestId: diagnostics?.requestId,
-          })
-        ])
-        meta = metaRes
-        cborTraits = cborRes
-        diagLog(diagnostics, "stream_metadata_loaded", {
-          inscription_number: meta.inscription_number,
-          has_cbor_traits: Boolean(cborTraits),
-          cbor_trait_count: cborTraits ? Object.keys(cborTraits).length : 0,
-        })
-      } catch {
-        await sendEvent("error", { message: "Inscription not found" })
+      if (!result.chronicle) {
+        await sendEvent("error", { message: "Pipeline produced no output" })
         return
       }
 
-      await sendEvent("progress", {
-        phase: "metadata",
-        step: 2,
-        description: `Found inscription #${meta.inscription_number} · sat #${meta.sat}`,
-      })
-
-      // Phase 2: Forward transfer tracking with progress
-      await sendEvent("progress", {
-        phase: "transfers",
-        step: 0,
-        description: "Starting forward transfer scan via mempool.space…",
-      })
-
-      let transferCount = 0
-      const [transfers, collectionContext, genesisTx] = await Promise.all([
-        fetchMempool.traceForward(meta.genesis_txid, meta.genesis_vout, {
-          limit: 30,
-          delayMs: 150,
-          onProgress: async (step, desc) => {
-            transferCount = step
-            await sendEvent("progress", {
-            phase: "transfers",
-            step,
-              description: desc,
-            })
-          },
-        }),
-        fetchCollectionContext(id, meta, {
-          debug: diagnostics?.debug,
-          requestId: diagnostics?.requestId,
-        }),
-        fetchMempool.tx(meta.genesis_txid),
-      ])
-
-      await sendEvent("progress", {
-        phase: "transfers",
-        step: transferCount,
-        description: `Found ${transfers.length} transfer${transfers.length !== 1 ? "s" : ""} (${transfers.filter(t => t.is_sale).length} sale${transfers.filter(t => t.is_sale).length !== 1 ? "s" : ""})`,
-      })
-
-      // Phase 3: Collector signals
-      await sendEvent("progress", {
-        phase: "mentions",
-        step: 1,
-        description: "Collecting public social signals…",
-      })
-
-      let socialMentions: Awaited<ReturnType<typeof collectSignals>>["mentions"] = []
-      let collectorSignals: Awaited<ReturnType<typeof collectSignals>>["collectorSignals"] = {
-        attention_score: 0,
-        sentiment_label: "insufficient_data",
-        confidence: "low",
-        evidence_count: 0,
-        provider_breakdown: { google_trends: 0 },
-        scope_breakdown: {
-          inscription_level: 0,
-          collection_level: 0,
-          mixed: 0,
-          dominant_scope: "none",
-        },
-        top_evidence: [],
-        windows: {
-          current_7d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
-          context_30d: { evidence_count: 0, provider_count: 0, attention_score: 0, sentiment_label: "insufficient_data" },
-        },
-      }
-      let mentionSourceCatalog: SourceCatalogItem[] = []
-      let mentionDebugInfo: { mention_providers: Record<string, unknown> } | undefined
-      
-      const collectionNameForResearch =
-        collectionContext.collectionContext.profile?.name
-        ?? collectionContext.collectionContext.presentation.primary_label
-        ?? collectionContext.mentionSearchHints.collectionName
-        ?? collectionContext.collectionContext.market.match?.collection_name
-
-      let webResearch: WebResearchContext | null = null
-
-      try {
-        const [signalResult, loreResult] = await Promise.all([
-          collectSignals({
-            inscriptionId: id,
-            inscriptionNumber: meta.inscription_number,
-            collectionName: collectionNameForResearch,
-            itemName:
-              collectionContext.collectionContext.presentation.item_label
-              ?? collectionContext.mentionSearchHints.itemName,
-            fullLabel: collectionContext.collectionContext.presentation.full_label,
-            officialXUrls: collectionContext.mentionSearchHints.officialXUrls,
-            debug: diagnostics?.debug,
-            requestId: diagnostics?.requestId,
-          }),
-          collectionNameForResearch 
-            ? (async () => {
-                await sendEvent("progress", {
-                  phase: "mentions",
-                  step: 2,
-                  description: `Searching lore for ${collectionNameForResearch}…`,
-                })
-                return fetchLoreContext(collectionNameForResearch)
-              })()
-            : Promise.resolve(null)
-        ])
-        
-        socialMentions = signalResult.mentions
-        collectorSignals = signalResult.collectorSignals
-        mentionSourceCatalog = signalResult.sourceCatalog
-        mentionDebugInfo = signalResult.debugInfo as { mention_providers: Record<string, unknown> } | undefined
-        webResearch = loreResult
-
-        if (webResearch && webResearch.results.length > 0) {
-          await sendEvent("progress", {
-            phase: "mentions",
-            step: 3,
-            description: `Extracted lore from ${webResearch.results.length} sources`,
-          })
-        }
-      } catch {
-        // Collector signal or lore failure is non-blocking
-      }
-
-      // Phase 4: UniSat indexer & Rarity Engine
-      await sendEvent("progress", {
-        phase: "unisat",
-        step: 1,
-        description: "Enriching traits and UniSat indexer data…",
-      })
-
-      let unisatInfo: UnisatEnrichment["inscription_info"] | null = null
-      try {
-        unisatInfo = await fetchUnisatInfo(id, env, diagnostics)
-      } catch {
-        // UniSat fetch is non-blocking
-      }
-      
-      const marketMatch = collectionContext.collectionContext.market?.match
-      const marketRarity = marketMatch?.rarity_overlay
-      const rarity = buildInscriptionRarity(
-        cborTraits,
-        marketRarity
-      )
-      diagLog(diagnostics, "stream_rarity_pipeline_summary", {
-        cbor_trait_count: cborTraits ? Object.keys(cborTraits).length : 0,
-        market_rarity_source: marketRarity?.source ?? null,
-        market_trait_count: marketRarity?.traits.length ?? 0,
-        market_rank: marketRarity?.rank ?? null,
-        market_supply: marketRarity?.supply ?? null,
-        rarity_trait_count: rarity?.traits.length ?? 0,
-      })
-      
-      const unisatEnrichment: UnisatEnrichment = {
-        inscription_info: unisatInfo,
-        collection_context: null,
-        market_info: {
-          listed: false,
-          price_sats: null,
-          item_name: null
-        },
-        rarity,
-        source_catalog: unisatInfo ? [{
-          source_type: "unisat_inscription_info",
-          url_or_ref: `https://unisat.io/inscription/${id}`,
-          trust_level: "unisat_indexer",
-          fetched_at: new Date().toISOString(),
-          partial: false,
-        }] : []
-      }
-
-      if (rarity) {
-        if (cborTraits) {
-          unisatEnrichment.source_catalog.push({
-            source_type: "ordinals_cbor_metadata",
-            url_or_ref: `https://ordinals.com/r/metadata/${id}`,
-            trust_level: "official_index",
-            fetched_at: new Date().toISOString(),
-            partial: false,
-          })
-        }
-        if (marketRarity) {
-          const raritySourceRef =
-            marketRarity.source_ref
-            ?? marketMatch.source_ref
-          unisatEnrichment.source_catalog.push({
-            source_type: marketRarity.source === "satflow"
-              ? "satflow_rarity_stats"
-              : "ord_net_rarity_overlay",
-            url_or_ref: raritySourceRef,
-            trust_level: "market_overlay",
-            fetched_at: new Date().toISOString(),
-            partial: false,
-          })
-        }
-      }
-
-      if (rarity?.rarity_rank) {
-        await sendEvent("progress", {
-          phase: "unisat",
-          step: 2,
-          description: `Rarity rank #${rarity.rarity_rank} of ${rarity.total_supply} (top ${rarity.rarity_percentile}%)`,
-        })
-      } else if (rarity?.traits && rarity.traits.length > 0) {
-        await sendEvent("progress", {
-          phase: "unisat",
-          step: 2,
-          description: `Found ${rarity.traits.length} traits`,
-        })
-      } else {
-        await sendEvent("progress", {
-          phase: "unisat",
-          step: 2,
-          description: unisatInfo ? "UniSat indexer data loaded" : "No rarity or indexer data found",
-        })
-      }
-
-      // Phase 5: Build timeline
-      await sendEvent("progress", {
-        phase: "complete",
-        step: 1,
-        description: "Building timeline…",
-      })
-
-      if (collectionContext.collectionName && meta.collection) {
-        meta = {
-          ...meta,
-          collection: {
-            ...meta.collection,
-            name: collectionContext.collectionName,
-          },
-        }
-      }
-
-      const genesisOwnerAddress = genesisTx?.vout?.[meta.genesis_vout]?.scriptpubkey_address
-        ?? transfers[0]?.from_address
-      if (genesisOwnerAddress) {
-        meta = {
-          ...meta,
-          genesis_owner_address: genesisOwnerAddress,
-        }
-      }
-
-      // Merge UniSat charms
-      if (unisatEnrichment?.inscription_info?.charms) {
-        meta = {
-          ...meta,
-          charms: mergeCharms(meta.sat_rarity, unisatEnrichment.inscription_info.charms),
-        }
-      }
-
-      // Cross-source validation
-      const validationUnisatInfo = unisatEnrichment?.inscription_info
-        ? {
-            inscriptionId: id,
-            inscriptionNumber: meta.inscription_number,
-            address: meta.owner_address,
-            contentType: meta.content_type,
-            contentLength: unisatEnrichment.inscription_info.content_length,
-            height: meta.genesis_block,
-            timestamp: new Date(meta.genesis_timestamp).getTime() / 1000,
-            sat: unisatEnrichment.inscription_info.sat,
-            genesisTransaction: meta.genesis_txid,
-            offset: 0,
-            charms: unisatEnrichment.inscription_info.charms,
-            metaprotocol: unisatEnrichment.inscription_info.metaprotocol,
-          }
-        : null
-      const validation = validateAcrossSources(meta, validationUnisatInfo)
-
-      const events = buildTimeline(meta, transfers, socialMentions, unisatEnrichment ?? undefined)
-
-      // Merge source catalogs
-      const fetchedAt = new Date().toISOString()
-      const mempoolSourceCatalog = buildMempoolSourceCatalog({
-        meta,
-        fetchedAt,
-        transferFetchOk: true,
-        transferCount: transfers.length,
-        genesisTxFetched: Boolean(genesisTx),
-      })
-      const sourceCatalog = [
-        ...collectionContext.sourceCatalog,
-        ...mempoolSourceCatalog,
-        ...mentionSourceCatalog,
-        ...(unisatEnrichment?.source_catalog ?? []),
-      ]
-      diagLog(diagnostics, "stream_source_catalog_summary", summarizeSourceCatalog(sourceCatalog))
-
-      const chronicle = {
-        inscription_id: id,
-        meta,
-        events,
-        collector_signals: collectorSignals,
-        media_context: collectionContext.mediaContext,
-        collection_context: collectionContext.collectionContext,
-        web_research: webResearch || undefined,
-        source_catalog: sourceCatalog,
-        cached_at: fetchedAt,
-        unisat_enrichment: unisatEnrichment ?? undefined,
-        validation,
-        debug_info: diagnostics?.debug
-          ? mentionDebugInfo
-          : undefined,
-      }
-
+      // Persist + cache (non-blocking)
       if (env.DB) {
-        void persistRawEvents(env, id, events).then((result) => {
-          if (result.ok) return
-          console.warn(`Raw events persistence skipped (stream): ${result.status}`)
-          diagLog(diagnostics, "wiki_layer0_persist_error_stream", {
-            status: result.status,
-            error: result.error ?? null,
-          })
+        void persistRawEvents(env, id, result.events).then((r) => {
+          if (!r.ok) {
+            console.warn(`Raw events persistence skipped (stream): ${r.status}`)
+          }
         })
       }
 
-      // Cache (fire-and-forget)
       try {
-        await cachePut(env.CHRONICLES_KV, id, chronicle)
+        await cachePut(env.CHRONICLES_KV, id, result.chronicle)
       } catch {
         // Cache failure is non-blocking
       }
 
-      // Send final result
-      await sendEvent("result", chronicle)
+      await sendEvent("result", result.chronicle)
     } catch (err) {
-      diagLog(diagnostics, "stream_pipeline_error", {
-        error: err instanceof Error ? err.message : String(err),
-      })
+      console.error("Streaming pipeline execution failed:", err)
       await sendEvent("error", {
         message: err instanceof Error ? err.message : "Unknown error",
       })
@@ -959,8 +309,7 @@ async function handleStreamingChronicle(
     }
   })()
 
-  // Ensure the pipeline runs to completion even after returning the response
-  // In Cloudflare Workers, use waitUntil if available; otherwise the stream keeps the connection alive
+  // Ensure the pipeline runs to completion
   void pipeline
 
   return new Response(readable, {
