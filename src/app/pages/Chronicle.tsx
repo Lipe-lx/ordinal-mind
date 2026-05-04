@@ -131,6 +131,7 @@ export function Chronicle() {
     lastInputMode,
     wikiStatusLabel,
     wikiStatusError,
+    wikiActivity,
     sendMessage,
     startNewThread,
     resumeThread,
@@ -273,6 +274,7 @@ export function Chronicle() {
           lastInputMode={lastInputMode}
           wikiStatusLabel={wikiStatusLabel}
           wikiStatusError={wikiStatusError}
+          wikiActivity={wikiActivity}
           onSendMessage={sendMessage}
           onNewThread={startNewThread}
           onResumeThread={resumeThread}

@@ -1,0 +1,215 @@
+.wiki-review-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay-strong);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.wiki-review-modal {
+  width: min(900px, calc(100vw - 2rem));
+  max-height: min(82vh, 900px);
+  padding: var(--space-xl);
+  background: var(--bg-modal-elevated);
+  border-color: var(--border-glass-hover);
+  display: grid;
+  gap: var(--space-md);
+}
+
+.wiki-review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+.wiki-review-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.wiki-review-header p {
+  margin: var(--space-xs) 0 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 48rem;
+}
+
+.wiki-review-header-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.wiki-review-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.wiki-review-list {
+  overflow: auto;
+  display: grid;
+  gap: var(--space-sm);
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.wiki-review-card {
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background:
+    radial-gradient(circle at top right, rgba(167, 139, 250, 0.08), transparent 26%),
+    rgba(255, 255, 255, 0.025);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.wiki-review-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+.wiki-review-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.wiki-review-field {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.wiki-review-slug {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+}
+
+.wiki-review-summary {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.wiki-review-age {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.wiki-review-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.wiki-review-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.wiki-review-badge.is-verifiable {
+  border-color: rgba(34, 197, 94, 0.32);
+  color: rgba(134, 239, 172, 0.92);
+}
+
+.wiki-review-badge.is-unverified {
+  border-color: rgba(250, 204, 21, 0.28);
+  color: rgba(253, 224, 71, 0.95);
+}
+
+.wiki-review-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.wiki-review-panel {
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.28);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.wiki-review-panel.is-proposed {
+  border-color: rgba(167, 139, 250, 0.28);
+  background: rgba(167, 139, 250, 0.08);
+}
+
+.wiki-review-panel-label {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.wiki-review-panel p,
+.wiki-review-excerpt p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.wiki-review-excerpt {
+  border-top: 1px dashed var(--border-glass);
+  padding-top: var(--space-sm);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.wiki-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.wiki-review-empty {
+  border: 1px dashed var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 720px) {
+  .wiki-review-modal {
+    padding: var(--space-lg);
+  }
+
+  .wiki-review-header,
+  .wiki-review-card-top {
+    display: grid;
+  }
+
+  .wiki-review-diff {
+    grid-template-columns: 1fr;
+  }
+
+  .wiki-review-actions,
+  .wiki-review-header-actions {
+    justify-content: stretch;
+  }
+}

@@ -5,6 +5,8 @@ import { PortalTooltip } from "./Tooltip"
 import { KeyStore } from "../lib/byok"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { LogoIcon } from "./Logo"
+import { WikiReviewModal } from "./WikiReviewModal"
+import { useWikiReviewQueue } from "../lib/useWikiReviewQueue"
 import type { ReactNode } from "react"
 
 export interface LayoutOutletContext {
@@ -16,11 +18,13 @@ export interface LayoutOutletContext {
 export function Layout() {
   const [showBYOK, setShowBYOK] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
   const byokRef = useRef<HTMLButtonElement>(null)
   const [headerCenter, setHeaderCenterState] = useState<ReactNode>(null)
   const [headerRight, setHeaderRightState] = useState<ReactNode>(null)
   const hasKey = KeyStore.has()
   const { identity, isLoading: identityLoading, connect } = useDiscordIdentity()
+  const reviewQueue = useWikiReviewQueue(identity?.tier === "genesis")
 
   const setHeaderCenter = useCallback((node: ReactNode) => {
     setHeaderCenterState(node)
@@ -56,24 +60,42 @@ export function Layout() {
           <div className="layout-actions">
             {!identityLoading && (
               identity ? (
-                <div 
-                  className={`identity-avatar-wrap tier-border-${identity.tier}`} 
-                  style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                  title={`${identity.username} (${identity.tier})`}
-                  onClick={openBYOK}
-                >
-                  {identity.avatar ? (
-                    <img
-                      src={identity.avatar}
-                      alt={identity.username}
-                      className="identity-avatar"
-                      style={{ width: "100%", height: "100%", borderRadius: "50%" }}
-                    />
-                  ) : (
-                    <div className="identity-avatar-placeholder" style={{ width: "100%", height: "100%", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem" }}>
-                      {identity.username.slice(0, 2).toUpperCase()}
-                    </div>
+                <div className="layout-identity-cluster">
+                  {identity.tier === "genesis" && reviewQueue.pendingCount > 0 && (
+                    <button
+                      type="button"
+                      className="layout-review-trigger"
+                      aria-label={`Open Genesis review inbox (${reviewQueue.pendingCount} pending)`}
+                      title={`Genesis review inbox (${reviewQueue.pendingCount})`}
+                      onClick={() => setShowReviewModal(true)}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
+                        <path d="M10 20a2 2 0 0 0 4 0" />
+                      </svg>
+                      <span className="layout-review-badge">{reviewQueue.pendingCount > 9 ? "9+" : reviewQueue.pendingCount}</span>
+                    </button>
                   )}
+
+                  <div 
+                    className={`identity-avatar-wrap tier-border-${identity.tier}`} 
+                    style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                    title={`${identity.username} (${identity.tier})`}
+                    onClick={openBYOK}
+                  >
+                    {identity.avatar ? (
+                      <img
+                        src={identity.avatar}
+                        alt={identity.username}
+                        className="identity-avatar"
+                        style={{ width: "100%", height: "100%", borderRadius: "50%" }}
+                      />
+                    ) : (
+                      <div className="identity-avatar-placeholder" style={{ width: "100%", height: "100%", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem" }}>
+                        {identity.username.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <button
@@ -146,6 +168,17 @@ export function Layout() {
       </footer>
 
       {showBYOK && <BYOKModal onClose={() => setShowBYOK(false)} />}
+      <WikiReviewModal
+        open={showReviewModal}
+        items={reviewQueue.items}
+        loading={reviewQueue.loading}
+        error={reviewQueue.error}
+        actingId={reviewQueue.actingId}
+        onApprove={reviewQueue.approveReview}
+        onReject={reviewQueue.rejectReview}
+        onRefresh={reviewQueue.refresh}
+        onClose={() => setShowReviewModal(false)}
+      />
     </div>
   )
 }

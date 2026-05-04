@@ -39,6 +39,8 @@
 @import "./styles/features/narrative/content.css";
 @import "./styles/features/narrative/chat.css";
 @import "./styles/features/narrative/history.css";
+@import "./styles/features/wiki/wiki.css";
+@import "./styles/features/wiki/review-inbox.css";
 
 @import "./styles/legacy-responsive.css";
 

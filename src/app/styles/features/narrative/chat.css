@@ -224,6 +224,60 @@
   margin: 0;
 }
 
+.narrative-chat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 var(--chat-side-padding);
+  width: fit-content;
+  max-width: calc(100% - (var(--chat-side-padding) * 2));
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.narrative-chat-status-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.7);
+  flex-shrink: 0;
+}
+
+.narrative-chat-status.is-reading .narrative-chat-status-dot,
+.narrative-chat-status.is-writing .narrative-chat-status-dot {
+  background: rgba(247, 147, 26, 0.9);
+  box-shadow: 0 0 0 0 rgba(247, 147, 26, 0.38);
+  animation: wiki-status-pulse 1.4s ease-in-out infinite;
+}
+
+.narrative-chat-status.is-partial .narrative-chat-status-dot {
+  background: rgba(250, 204, 21, 0.92);
+}
+
+.narrative-chat-status.is-success .narrative-chat-status-dot {
+  background: rgba(34, 197, 94, 0.9);
+}
+
+.narrative-chat-status.is-error .narrative-chat-status-dot {
+  background: rgba(239, 68, 68, 0.92);
+}
+
+@keyframes wiki-status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(247, 147, 26, 0.32);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(247, 147, 26, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(247, 147, 26, 0);
+  }
+}
+
 .narrative-chat-input {
   display: grid;
   gap: var(--space-sm);

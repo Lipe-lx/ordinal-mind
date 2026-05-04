@@ -11,6 +11,7 @@ import { handleWikiTool } from "../wiki/tools"
 import { handleContribute } from "../wiki/contribute"
 import { handleCompleteness } from "../wiki/completeness"
 import { handleConsolidated } from "../wiki/consolidateEndpoint"
+import { handlePendingReviews, handleReviewDecision } from "../wiki/reviews"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
   try {
@@ -35,6 +36,15 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
 
     if (request.method === "POST" && path === "/api/wiki/contribute") {
       return handleContribute(request, env)
+    }
+
+    if (request.method === "GET" && path === "/api/wiki/reviews/pending") {
+      return handlePendingReviews(request, env)
+    }
+
+    if (request.method === "POST" && /^\/api\/wiki\/reviews\/[^/]+$/.test(path)) {
+      const reviewId = decodeURIComponent(path.replace("/api/wiki/reviews/", ""))
+      return handleReviewDecision(request, env, reviewId)
     }
 
     if (request.method === "POST" && path.startsWith("/api/wiki/tools/")) {

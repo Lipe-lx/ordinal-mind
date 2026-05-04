@@ -5,6 +5,7 @@ import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
 import { NarrativeChatRenderer } from "./NarrativeChatRenderer"
 import type { ChronicleResponse, MentionProviderDebug, SocialSignalProvider } from "../lib/types"
 import type { SynthesisPhase } from "../lib/byok/useChronicleNarrativeChat"
+import type { WikiActivityStatus } from "../lib/byok/useChronicleNarrativeChat"
 import type { SynthesisMode } from "../lib/byok/context"
 import { GenealogyTree } from "./GenealogyTree"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
@@ -23,6 +24,7 @@ interface Props {
   lastInputMode: SynthesisMode | null
   wikiStatusLabel: string
   wikiStatusError: string | null
+  wikiActivity: WikiActivityStatus | null
   researchLogs: ResearchLog[]
   onSendMessage: (prompt: string) => Promise<void> | void
   onEditMessage: (messageId: string, content: string) => Promise<void> | void
@@ -49,6 +51,7 @@ export function ChronicleCard({
   lastInputMode,
   wikiStatusLabel,
   wikiStatusError,
+  wikiActivity,
   researchLogs,
   onSendMessage,
   onEditMessage,
@@ -128,6 +131,7 @@ export function ChronicleCard({
             inputMode={lastInputMode}
             wikiStatusLabel={wikiStatusLabel}
             wikiStatusError={wikiStatusError}
+            wikiActivity={wikiActivity}
             researchLogs={researchLogs}
             hasKey={hasKey}
             onSend={onSendMessage}

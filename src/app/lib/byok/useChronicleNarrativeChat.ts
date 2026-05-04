@@ -44,6 +44,13 @@ export type SynthesisPhase =
   | "done"
   | "error"
 
+export type WikiActivityState = "idle" | "reading" | "writing" | "partial" | "success" | "error"
+
+export interface WikiActivityStatus {
+  state: WikiActivityState
+  label: string
+}
+
 interface SendOptions {
   silentUserMessage?: boolean
   forceMode?: ChatResponseMode
@@ -76,6 +83,85 @@ function buildKnowledgeContributionFallback(prompt: string): string {
   })
 }
 
+const WIKI_TOOL_ACTIVITY_LABELS: Record<string, {
+  running: string
+  done: string
+  partial: string
+  error: string
+}> = {
+  search_wiki: {
+    running: "Searching saved wiki context...",
+    done: "Wiki context loaded for this reply.",
+    partial: "Wiki context came back partial.",
+    error: "Wiki context lookup failed.",
+  },
+  get_collection_context: {
+    running: "Loading collection context from the wiki...",
+    done: "Collection context loaded from the wiki.",
+    partial: "Collection context is only partially available.",
+    error: "Collection context could not be loaded.",
+  },
+  get_timeline: {
+    running: "Collecting factual timeline rows...",
+    done: "Timeline rows collected from public records.",
+    partial: "Timeline rows came back partial.",
+    error: "Timeline lookup failed.",
+  },
+  get_raw_events: {
+    running: "Collecting raw public event rows...",
+    done: "Raw public event rows collected.",
+    partial: "Raw event collection is incomplete.",
+    error: "Raw event collection failed.",
+  },
+}
+
+export function resolveWikiToolActivityStatus(log: Pick<ResearchLog, "tool" | "status">): WikiActivityStatus | null {
+  const labels = WIKI_TOOL_ACTIVITY_LABELS[log.tool]
+  if (!labels) return null
+
+  const state: WikiActivityState =
+    log.status === "running"
+      ? "reading"
+      : log.status === "done"
+        ? "success"
+        : log.status === "partial"
+          ? "partial"
+          : "error"
+
+  return {
+    state,
+    label: labels[log.status],
+  }
+}
+
+function formatWikiFieldLabel(field: string): string {
+  return field.replace(/_/g, " ")
+}
+
+export function resolveWikiContributionActivityStatus(params: {
+  phase: "running" | "done" | "error"
+  field: string
+}): WikiActivityStatus {
+  if (params.phase === "running") {
+    return {
+      state: "writing",
+      label: `Saving wiki contribution for ${formatWikiFieldLabel(params.field)}...`,
+    }
+  }
+
+  if (params.phase === "done") {
+    return {
+      state: "success",
+      label: `Wiki contribution for ${formatWikiFieldLabel(params.field)} was recorded for review.`,
+    }
+  }
+
+  return {
+    state: "error",
+    label: `Wiki contribution for ${formatWikiFieldLabel(params.field)} could not be recorded.`,
+  }
+}
+
 export function resolveAssistantDisplayText(params: {
   cleanText: string
   intent: ChatIntent
@@ -93,7 +179,7 @@ async function submitWikiContribution(params: {
   data: NonNullable<ReturnType<typeof parseWikiExtract>["data"]>
   activeThreadId: string | null
   prompt: string
-}): Promise<void> {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const jwt = localStorage.getItem("ordinal-mind_discord_jwt")
   try {
     const response = await fetch("/api/wiki/contribute", {
@@ -118,7 +204,10 @@ async function submitWikiContribution(params: {
         status: response.status,
         body: errorBody,
       })
-      return
+      return {
+        ok: false,
+        error: errorBody || `http_${response.status}`,
+      }
     }
 
     const payload = await response.json().catch(() => ({}))
@@ -129,6 +218,7 @@ async function submitWikiContribution(params: {
       status: payload?.status,
       tier_applied: payload?.tier_applied,
     })
+    return { ok: true }
   } catch (error) {
     console.warn("[NarrativeChat][WikiContributionFailed]", {
       at: new Date().toISOString(),
@@ -136,6 +226,10 @@ async function submitWikiContribution(params: {
       slug: params.data.collection_slug,
       error: error instanceof Error ? error.message : String(error),
     })
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 
@@ -158,6 +252,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
   const [researchLogs, setResearchLogs] = useState<ResearchLog[]>([])
   const [toolLogs, setToolLogs] = useState<ChatToolLog[]>([])
   const [wikiToolUsageCount, setWikiToolUsageCount] = useState(0)
+  const [wikiActivity, setWikiActivity] = useState<WikiActivityStatus | null>(null)
   const [inputError, setInputError] = useState<string | null>(null)
   const [wikiCompletenessInfo, setWikiCompletenessInfo] = useState<string>("")
   const wikiLifecycle = useWikiLifecycle(chronicle)
@@ -183,6 +278,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
         setResearchLogs([])
         setToolLogs([])
         setWikiToolUsageCount(0)
+        setWikiActivity(null)
         setLastInputMode(null)
         setWikiCompletenessInfo("")
         autoTurnRef.current = null
@@ -212,6 +308,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
       setResearchLogs([])
       setToolLogs([])
       setWikiToolUsageCount(0)
+      setWikiActivity(null)
       setLastInputMode(null)
       setPhase("idle")
       autoTurnRef.current = null
@@ -266,6 +363,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
     setStreamingThought("")
     setResearchLogs([])
     setToolLogs([])
+    setWikiActivity(null)
   }, [clearTimer])
 
   const sendMessage = useCallback(
@@ -367,6 +465,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
       }
 
       setInputError(null)
+      setWikiActivity(null)
 
       if (routingActive && !options.silentUserMessage) {
         const localPolicy = resolvePolicyResponse(intent, trimmedPrompt)
@@ -428,6 +527,12 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
       setStreamingThought("")
       setResearchLogs([])
       setToolLogs([])
+      setWikiActivity(wikiLifecycle.wikiPage
+        ? {
+            state: "reading",
+            label: `Using loaded wiki context from ${wikiLifecycle.wikiPage.title}.`,
+          }
+        : null)
       setLastInputMode(null)
       startTimer()
 
@@ -443,6 +548,10 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
 
         const usedToolNames = new Set<string>()
         const toolExecutor = new ToolExecutor(config.researchKeys || {}, (log) => {
+          const wikiToolActivity = resolveWikiToolActivityStatus(log)
+          if (wikiToolActivity) {
+            setWikiActivity(wikiToolActivity)
+          }
           if (log.status !== "running") {
             usedToolNames.add(log.tool)
           }
@@ -534,10 +643,19 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
           extractedWikiData = extracted.data
 
           if (extracted.data) {
+            setWikiActivity(resolveWikiContributionActivityStatus({
+              phase: "running",
+              field: extracted.data.field,
+            }))
             void submitWikiContribution({
               data: extracted.data,
               activeThreadId,
               prompt: trimmedPrompt,
+            }).then((submission) => {
+              setWikiActivity(resolveWikiContributionActivityStatus({
+                phase: submission.ok ? "done" : "error",
+                field: extracted.data?.field ?? "contribution",
+              }))
             })
           }
         }
@@ -637,6 +755,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
     setInputError(null)
     setResearchLogs([])
     setToolLogs([])
+    setWikiActivity(null)
     setPhase("idle")
     setThreadHistory(listChatThreads(chronicle.meta.inscription_id))
   }, [chronicle])
@@ -652,6 +771,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
     setInputError(null)
     setResearchLogs([])
     setToolLogs([])
+    setWikiActivity(null)
     setPhase("idle")
     setThreadHistory(listChatThreads(chronicle.meta.inscription_id))
   }, [chronicle])
@@ -676,6 +796,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
     setInputError(null)
     setResearchLogs([])
     setToolLogs([])
+    setWikiActivity(null)
     setPhase("idle")
     setThreadHistory(listChatThreads(chronicle.meta.inscription_id))
     return true
@@ -740,6 +861,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
     wikiStatusLabel: wikiLifecycle.statusLabel,
     wikiStatusError: wikiLifecycle.lastError,
     wikiToolUsageCount,
+    wikiActivity,
     lastInputMode,
     sendMessage,
     startNewThread,

@@ -127,6 +127,12 @@ const OLD_ACCOUNT = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000) // 2 ye
 const NEW_ACCOUNT = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)       // 30 days ago
 
 describe("Tier Engine — calculateTier", () => {
+  it("returns genesis for built-in genesis reviewer fallback", async () => {
+    const kv = makeKV({})
+    const tier = await calculateTier("747550957432471654", [], NEW_ACCOUNT, kv)
+    expect(tier).toBe("genesis")
+  })
+
   it("returns genesis for whitelisted discord_id", async () => {
     const kv = makeKV({
       og_genesis_whitelist: JSON.stringify(["genesis_user_id"]),

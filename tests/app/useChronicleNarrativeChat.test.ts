@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { resolveAssistantDisplayText } from "../../src/app/lib/byok/useChronicleNarrativeChat"
+import {
+  resolveAssistantDisplayText,
+  resolveWikiContributionActivityStatus,
+  resolveWikiToolActivityStatus,
+} from "../../src/app/lib/byok/useChronicleNarrativeChat"
 
 describe("useChronicleNarrativeChat display fallback", () => {
   it("keeps sanitized text when available", () => {
@@ -44,5 +48,29 @@ describe("useChronicleNarrativeChat display fallback", () => {
     })
 
     expect(result).toBe("")
+  })
+
+  it("describes wiki reads from tool activity", () => {
+    const result = resolveWikiToolActivityStatus({
+      tool: "get_collection_context",
+      status: "running",
+    })
+
+    expect(result).toEqual({
+      state: "reading",
+      label: "Loading collection context from the wiki...",
+    })
+  })
+
+  it("describes wiki writes for extracted contributions", () => {
+    const result = resolveWikiContributionActivityStatus({
+      phase: "done",
+      field: "launch_date",
+    })
+
+    expect(result).toEqual({
+      state: "success",
+      label: "Wiki contribution for launch date was recorded for review.",
+    })
   })
 })

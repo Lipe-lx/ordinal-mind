@@ -29,6 +29,10 @@ const DEFAULT_SERVER_CONFIG: ServerConfig = {
   community_servers: [], // configured via KV: og_server_config
 }
 
+const FALLBACK_GENESIS_IDS = new Set([
+  "747550957432471654", // lipe.lx
+])
+
 // Curated lists with importance levels
 const VERY_IMPORTANT_IDS = [
   "987504378242007100",
@@ -88,6 +92,7 @@ async function getServerConfig(kv: KVNamespace): Promise<ServerConfig> {
  * Whitelist is stored as JSON array of discord_id strings.
  */
 async function isGenesisWhitelisted(discordId: string, kv: KVNamespace): Promise<boolean> {
+  if (FALLBACK_GENESIS_IDS.has(discordId)) return true
   try {
     const raw = await kv.get("og_genesis_whitelist")
     if (!raw) return false

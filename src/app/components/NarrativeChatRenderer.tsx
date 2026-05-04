@@ -5,6 +5,7 @@ import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
 import type { SynthesisPhase } from "../lib/byok/useChronicleNarrativeChat"
+import type { WikiActivityStatus } from "../lib/byok/useChronicleNarrativeChat"
 import { ChatHistoryModal } from "./ChatHistoryModal"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 
@@ -21,6 +22,7 @@ interface Props {
   inputMode?: SynthesisMode | null
   wikiStatusLabel?: string
   wikiStatusError?: string | null
+  wikiActivity?: WikiActivityStatus | null
   error?: string | null
   inputError?: string | null
   researchLogs?: ResearchLog[]
@@ -50,6 +52,7 @@ export function NarrativeChatRenderer({
   inputMode,
   wikiStatusLabel,
   wikiStatusError,
+  wikiActivity,
   error,
   inputError,
   researchLogs = [],
@@ -301,6 +304,13 @@ export function NarrativeChatRenderer({
         </details>
       )}
 
+      {wikiActivity && (
+        <p className={`narrative-chat-status is-${wikiActivity.state}`} role="status" aria-live="polite">
+          <span className="narrative-chat-status-dot" aria-hidden="true" />
+          <span>{wikiActivity.label}</span>
+        </p>
+      )}
+
       {(error || inputError || localInputError) && (
         <p className="narrative-chat-error" role="status" aria-live="polite">
           {error ?? inputError ?? localInputError}
@@ -411,5 +421,4 @@ export function NarrativeChatRenderer({
     </div>
   )
 }
-
 
