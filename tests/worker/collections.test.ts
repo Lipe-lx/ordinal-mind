@@ -264,9 +264,9 @@ describe("ord.net market overlay parsing", () => {
         supply: 3333,
         source_ref: "https://ord.net/inscription/11337510",
         traits: [
-          { key: "Clothes", value: "Starry Blue Robe", tokenCount: 252 },
-          { key: "Eyes", value: "Wide Open", tokenCount: 338 },
-          { key: "Head", value: "Starry Blue Wizard Hat", tokenCount: 255 },
+          { key: "Clothes", value: "Starry Blue Robe", tokenCount: 252, percentage: 7.6 },
+          { key: "Eyes", value: "Wide Open", tokenCount: 338, percentage: 10.1 },
+          { key: "Head", value: "Starry Blue Wizard Hat", tokenCount: 255, percentage: 7.7 },
         ],
       },
     })
@@ -429,8 +429,8 @@ describe("Satflow inscription overlay parsing", () => {
           "rarityRank":0,
           "totalSupply":5159,
           "attributes":[
-            {"key":"Attributes","value":"None","count":5159},
-            {"key":"Background","value":"Dark Grey","count":800}
+            {"key":"Attributes","value":"None","count":5159,"percentage":100},
+            {"key":"Background","value":"Dark Grey","count":800,"percentage":15.5}
           ]
         }
       </script>
@@ -445,8 +445,8 @@ describe("Satflow inscription overlay parsing", () => {
         rank: 0,
         supply: 5159,
         traits: [
-          { key: "Attributes", value: "None", tokenCount: 5159 },
-          { key: "Background", value: "Dark Grey", tokenCount: 800 },
+          { key: "Attributes", value: "None", tokenCount: 5159, percentage: 100 },
+          { key: "Background", value: "Dark Grey", tokenCount: 800, percentage: 15.5 },
         ],
       },
     })
@@ -464,9 +464,9 @@ describe("Satflow inscription overlay parsing", () => {
             {"key":"Eyes","value":"Wide Open"}
           ],
           "attributes":[
-            {"key":"Type","value":"Ape","tokenCount":436},
-            {"key":"Eyes","value":"Wide Open","tokenCount":338},
-            {"key":"Weapon","value":"Dagger","tokenCount":266}
+            {"key":"Type","value":"Ape","tokenCount":436,"percentage":13.08},
+            {"key":"Eyes","value":"Wide Open","tokenCount":338,"percentage":10.14},
+            {"key":"Weapon","value":"Dagger","tokenCount":266,"percentage":7.98}
           ],
           "attributes":[
             {"key":"Type","value":"Ape","count":436}
@@ -481,9 +481,9 @@ describe("Satflow inscription overlay parsing", () => {
         source: "satflow",
         source_ref: "https://www.satflow.com/ordinal/wizard",
         traits: [
-          { key: "Type", value: "Ape", tokenCount: 436 },
-          { key: "Eyes", value: "Wide Open", tokenCount: 338 },
-          { key: "Weapon", value: "Dagger", tokenCount: 266 },
+          { key: "Type", value: "Ape", tokenCount: 436, percentage: 13.08 },
+          { key: "Eyes", value: "Wide Open", tokenCount: 338, percentage: 10.14 },
+          { key: "Weapon", value: "Dagger", tokenCount: 266, percentage: 7.98 },
         ],
       },
     })

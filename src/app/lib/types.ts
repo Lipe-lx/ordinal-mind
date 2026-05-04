@@ -189,7 +189,7 @@ export interface MarketRarityOverlay {
   rank: number
   supply?: number
   source_ref?: string
-  traits: Array<{ key: string, value: string, tokenCount: number }>
+  traits: Array<{ key: string, value: string, tokenCount: number, percentage?: number }>
 }
 
 export interface CollectionDescriptionEvidence {

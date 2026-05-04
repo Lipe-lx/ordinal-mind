@@ -200,6 +200,37 @@ const chronicle: Chronicle = {
       ],
     },
   },
+  unisat_enrichment: {
+    inscription_info: null,
+    collection_context: null,
+    market_info: { listed: false, price_sats: null, item_name: null },
+    rarity: {
+      rarity_score: null,
+      rarity_rank: 27,
+      rarity_percentile: 0.81,
+      total_supply: 3333,
+      traits: [
+        { trait_type: "Background", value: "Concatenation" },
+        { trait_type: "Body", value: "Purple Haze" },
+      ],
+      trait_breakdown: [
+        {
+          trait_type: "Background",
+          value: "Concatenation",
+          frequency: 141,
+          frequency_pct: 4.23,
+        },
+        {
+          trait_type: "Body",
+          value: "Purple Haze",
+          frequency: 103,
+          frequency_pct: 3.09,
+        },
+      ],
+      computed_at: "2026-04-25T00:00:00.000Z",
+    },
+    source_catalog: [],
+  },
   source_catalog: [
     {
       source_type: "protocol_inscription",
@@ -225,12 +256,16 @@ describe("buildSynthesisContext", () => {
     expect(context).toContain("Identity:")
     expect(context).toContain("Gallery sample:")
     expect(context).toContain("Collector focus:")
+    expect(context).toContain("Trait rarity:")
     expect(context).toContain("Trusted collection descriptions:")
     expect(context).toContain("Collection profile:")
     expect(context).toContain("Curated collection match:")
     expect(context).toContain("Market overlay:")
     expect(context).toContain("Preferred source: Satflow inscription page (https://www.satflow.com/ordinal/rooti0)")
     expect(context).toContain("Alternate source: ord.net parent inscription page (https://ord.net/inscription/101)")
+    expect(context).toContain("Rarity rank: #27")
+    expect(context).toContain("Background: Concatenation (count 141 · freq 4%)")
+    expect(context).toContain("Body: Purple Haze (count 103 · freq 3%)")
     expect(context).toContain("Official X accounts: https://x.com/quantumcats")
     expect(context).toContain("Quantum Cats")
     expect(context).toContain("Primary lens")

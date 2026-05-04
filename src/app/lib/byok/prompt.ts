@@ -2,7 +2,7 @@
 // System prompt contains role + constraints (never seen by end user).
 // User prompt contains only the inscription data.
 
-import type { Chronicle, ChronicleEvent, ProtocolRelationSet, RelatedInscriptionSummary } from "../types"
+import type { Chronicle, ChronicleEvent, InscriptionRarity, ProtocolRelationSet, RelatedInscriptionSummary } from "../types"
 import type { ChatMessage } from "./chatTypes"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 
@@ -201,7 +201,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in E
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {
-  const { meta, events, media_context, collection_context, source_catalog } = chronicle
+  const { meta, events, media_context, collection_context, source_catalog, unisat_enrichment } = chronicle
 
   const collectionName = collection_context.presentation.full_label || collection_context.presentation.primary_label
   const collectionSlug = collection_context.market.match?.collection_slug ?? collection_context.registry.match?.slug
@@ -238,6 +238,7 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
         : "Fallback reason: none",
     ]),
     buildSection("Collector focus", buildCollectorFocus(chronicle)),
+    buildSection("Trait rarity", buildTraitRaritySection(unisat_enrichment?.rarity)),
     buildSection("Trusted collection descriptions", buildTrustedCollectionDescriptionSection(chronicle)),
     buildSection("Collection profile", buildCollectionProfileSection(chronicle)),
     buildSection("On-chain facts", buildTimelineSummary(events)),
@@ -374,6 +375,34 @@ function buildCollectionProfileSection(chronicle: Chronicle): string[] {
   if (profile.market_stats) {
     lines.push("Market stats from public collection page:")
     lines.push(...formatMarketStats(profile.market_stats))
+  }
+
+  return lines
+}
+
+function buildTraitRaritySection(rarity: InscriptionRarity | null | undefined): string[] {
+  if (!rarity) return ["No trait rarity breakdown found."]
+
+  const lines = [
+    `Trait count: ${rarity.traits.length}`,
+    rarity.rarity_rank != null ? `Rarity rank: #${rarity.rarity_rank}` : "Rarity rank: unavailable",
+    rarity.total_supply != null ? `Total supply: ${rarity.total_supply.toLocaleString("en-US")}` : "Total supply: unavailable",
+    rarity.rarity_percentile != null ? `Percentile: top ${rarity.rarity_percentile}%` : "Percentile: unavailable",
+  ]
+
+  if (rarity.trait_breakdown.length === 0) {
+    lines.push("No trait frequency rows found.")
+    return lines
+  }
+
+  lines.push("Traits & Attributes breakdown:")
+  for (const trait of rarity.trait_breakdown.slice(0, 12)) {
+    const details = [
+      trait.frequency != null ? `count ${trait.frequency.toLocaleString("en-US")}` : null,
+      trait.frequency_pct != null ? `freq ${formatTraitFrequencyPct(trait.frequency_pct)}` : null,
+    ].filter((value): value is string => Boolean(value))
+
+    lines.push(`- ${trait.trait_type}: ${trait.value}${details.length > 0 ? ` (${details.join(" · ")})` : ""}`)
   }
 
   return lines
@@ -540,6 +569,10 @@ function formatCollectionDescriptionSource(
 
 function normalizeComparableText(value: string): string {
   return value.replace(/\s+/g, " ").trim()
+}
+
+function formatTraitFrequencyPct(value: number): string {
+  return value < 1 ? `${value.toFixed(2)}%` : `${Math.round(value)}%`
 }
 
 function buildSection(title: string, lines: string[]): string {

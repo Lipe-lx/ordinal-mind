@@ -71,9 +71,14 @@ export function buildInscriptionRarity(
     
     let pct: number | undefined = undefined
     let contribution: number | undefined = undefined
-    
-    if (count !== undefined && supply !== undefined && supply > 0) {
+
+    if (marketMatch?.percentage !== undefined) {
+      pct = marketMatch.percentage
+    } else if (count !== undefined && supply !== undefined && supply > 0) {
       pct = (count / supply) * 100
+    }
+
+    if (count !== undefined && supply !== undefined && supply > 0) {
       contribution = supply / count
     }
 

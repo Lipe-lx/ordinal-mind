@@ -1711,6 +1711,7 @@ function extractSatflowRarity(
             : typeof candidate.count === "number"
               ? candidate.count
               : null
+        const percentage = parseOptionalPercentage(candidate.percentage)
 
         if (!key || value === undefined || value === null) return null
 
@@ -1718,9 +1719,10 @@ function extractSatflowRarity(
           key,
           value: String(value),
           tokenCount: tokenCount ?? 0,
+          ...(percentage !== undefined ? { percentage } : {}),
         }
       })
-      .filter((trait): trait is { key: string; value: string; tokenCount: number } => Boolean(trait))
+      .filter((trait): trait is { key: string; value: string; tokenCount: number; percentage?: number } => trait !== null)
 
     const explicitSupply = extractMetricInteger(html, ["totalSupply"])
     const supplyFromAttributes = traits.find(
@@ -1780,6 +1782,17 @@ function scoreSatflowAttributeArray(candidate: unknown[]): number {
   }
 
   return countedTraits * 100 + populatedTraits
+}
+
+function parseOptionalPercentage(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(/%$/g, "")
+    if (!normalized) return undefined
+    const parsed = Number.parseFloat(normalized)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return undefined
 }
 
 function extractSatflowCollectionSlug(html: string, collectionName: string): string | null {
@@ -1961,12 +1974,18 @@ function extractOrdNetVerifiedGalleryTraits(
   const arrayLiteral = extractBalancedJsonArray(html, openBracket)
   if (!arrayLiteral) return undefined
 
-  const traits: Array<{ key: string; value: string; tokenCount: number }> = []
-  for (const match of arrayLiteral.matchAll(/type:"([^"]+)",value:"([^"]+)",count:(\d+)/g)) {
-    const [, key, value, countRaw] = match
+  const traits: Array<{ key: string; value: string; tokenCount: number; percentage?: number }> = []
+  for (const match of arrayLiteral.matchAll(/type:"([^"]+)",value:"([^"]+)",count:(\d+)(?:,percentage:([0-9.]+))?/g)) {
+    const [, key, value, countRaw, percentageRaw] = match
     const tokenCount = Number.parseInt(countRaw, 10)
     if (!key || !value || Number.isNaN(tokenCount)) continue
-    traits.push({ key, value, tokenCount })
+    const percentage = percentageRaw ? Number.parseFloat(percentageRaw) : undefined
+    traits.push({
+      key,
+      value,
+      tokenCount,
+      percentage: percentage !== undefined && Number.isFinite(percentage) ? percentage : undefined,
+    })
   }
 
   if (traits.length === 0) return undefined
