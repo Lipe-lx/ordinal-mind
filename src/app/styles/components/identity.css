@@ -3,17 +3,18 @@
 /* Tier dot in tab button */
 .identity-tier-dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   margin-left: 6px;
   vertical-align: middle;
+  box-shadow: 0 0 0 2px rgba(10, 10, 15, 0.7);
 }
 
-.identity-tier-dot.tier-anon      { background: var(--text-tertiary); }
-.identity-tier-dot.tier-community  { background: #5865F2; }
-.identity-tier-dot.tier-og        { background: #F5A623; }
-.identity-tier-dot.tier-genesis   { background: linear-gradient(135deg, #a78bfa, #818cf8); }
+.identity-tier-dot.tier-anon      { background: linear-gradient(135deg, rgba(148, 163, 184, 0.9), rgba(100, 116, 139, 0.9)); }
+.identity-tier-dot.tier-community { background: radial-gradient(circle at 30% 30%, #93c5fd, #3b82f6 70%); box-shadow: 0 0 10px rgba(59, 130, 246, 0.35), 0 0 0 2px rgba(10, 10, 15, 0.7); }
+.identity-tier-dot.tier-og        { background: radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 70%); box-shadow: 0 0 12px rgba(245, 158, 11, 0.4), 0 0 0 2px rgba(10, 10, 15, 0.7); }
+.identity-tier-dot.tier-genesis   { background: radial-gradient(circle at 30% 30%, #f4ff9a, #d1e94c 58%, #8fb51e 100%); box-shadow: 0 0 14px rgba(209, 233, 76, 0.55), 0 0 0 2px rgba(10, 10, 15, 0.7); }
 
 /* Tab content wrapper */
 .identity-tab-content {
@@ -94,21 +95,106 @@
   background-clip: padding-box;
   position: relative;
   flex-shrink: 0;
-  transition: box-shadow 0.2s;
+  overflow: visible;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
+}
+
+.identity-avatar-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.identity-avatar-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0) 42%);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.identity-avatar-wrap:hover {
+  transform: translateY(-1px) scale(1.02);
 }
 
 /* Tier-colored border via box-shadow */
-.identity-avatar-wrap.tier-border-anon      { box-shadow: 0 0 0 2.5px var(--text-tertiary); }
-.identity-avatar-wrap.tier-border-community { box-shadow: 0 0 0 2.5px #5865F2; }
-.identity-avatar-wrap.tier-border-og        { box-shadow: 0 0 0 2.5px #F5A623, 0 0 12px rgba(245,166,35,0.3); }
-.identity-avatar-wrap.tier-border-genesis   {
-  box-shadow: 0 0 0 2.5px #a78bfa, 0 0 16px rgba(167,139,250,0.4);
-  animation: genesis-pulse 3s ease-in-out infinite;
+.identity-avatar-wrap.tier-border-anon {
+  box-shadow:
+    0 0 0 2.5px rgba(100, 116, 139, 0.9),
+    0 8px 20px rgba(15, 23, 42, 0.18);
 }
 
-@keyframes genesis-pulse {
-  0%, 100% { box-shadow: 0 0 0 2.5px #a78bfa, 0 0 12px rgba(167,139,250,0.3); }
-  50%       { box-shadow: 0 0 0 2.5px #818cf8, 0 0 20px rgba(129,140,248,0.5); }
+.identity-avatar-wrap.tier-border-community {
+  box-shadow:
+    0 0 0 2.5px #3b82f6,
+    0 0 0 5px rgba(59, 130, 246, 0.12),
+    0 10px 24px rgba(37, 99, 235, 0.18),
+    0 0 18px rgba(59, 130, 246, 0.22);
+}
+
+.identity-avatar-wrap.tier-border-community::before {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(96, 165, 250, 0.22), rgba(59, 130, 246, 0) 72%);
+}
+
+.identity-avatar-wrap.tier-border-og {
+  box-shadow:
+    0 0 0 2.5px #f59e0b,
+    0 0 0 5px rgba(245, 158, 11, 0.12),
+    0 12px 28px rgba(180, 83, 9, 0.18),
+    0 0 20px rgba(245, 158, 11, 0.32);
+}
+
+.identity-avatar-wrap.tier-border-og::before {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.28), rgba(245, 158, 11, 0) 74%);
+}
+
+.identity-avatar-wrap.tier-border-genesis   {
+  box-shadow:
+    0 0 0 2.5px rgba(209, 233, 76, 0.98),
+    0 0 0 5px rgba(209, 233, 76, 0.2),
+    0 14px 34px rgba(101, 163, 13, 0.2),
+    0 0 28px rgba(209, 233, 76, 0.42),
+    0 0 46px rgba(190, 242, 100, 0.22);
+  animation: identity-genesis-pulse 3s ease-in-out infinite;
+}
+
+.identity-avatar-wrap.tier-border-genesis::before {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(236, 255, 132, 0.34), rgba(209, 233, 76, 0.16) 40%, rgba(209, 233, 76, 0) 72%);
+  animation: identity-genesis-halo 3s ease-in-out infinite;
+}
+
+@keyframes identity-genesis-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2.5px rgba(209, 233, 76, 0.94),
+      0 0 0 5px rgba(209, 233, 76, 0.16),
+      0 14px 34px rgba(101, 163, 13, 0.18),
+      0 0 26px rgba(209, 233, 76, 0.38),
+      0 0 40px rgba(190, 242, 100, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2.5px rgba(236, 255, 132, 0.98),
+      0 0 0 6px rgba(209, 233, 76, 0.18),
+      0 16px 38px rgba(77, 124, 15, 0.24),
+      0 0 34px rgba(209, 233, 76, 0.5),
+      0 0 54px rgba(234, 255, 140, 0.28);
+  }
+}
+
+@keyframes identity-genesis-halo {
+  0%, 100% { transform: scale(0.96); opacity: 0.82; }
+  50% { transform: scale(1.04); opacity: 1; }
 }
 
 .identity-avatar {
@@ -148,33 +234,49 @@
 
 /* Tier badges */
 .identity-tier-badge {
-  display: inline-block;
-  padding: 0.15rem 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.22rem 0.72rem;
   border-radius: 999px;
   font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .identity-tier-badge.tier-badge-anon {
-  background: rgba(var(--text-tertiary-rgb, 100,100,100), 0.15);
-  color: var(--text-tertiary);
+  background: linear-gradient(135deg, rgba(71, 85, 105, 0.22), rgba(51, 65, 85, 0.16));
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.2);
 }
 
 .identity-tier-badge.tier-badge-community {
-  background: rgba(88, 101, 242, 0.15);
-  color: #818cf8;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.12));
+  color: #bfdbfe;
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 12px rgba(59, 130, 246, 0.12);
 }
 
 .identity-tier-badge.tier-badge-og {
-  background: rgba(245, 166, 35, 0.15);
-  color: #F5A623;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.24), rgba(217, 119, 6, 0.14));
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(245, 158, 11, 0.14);
 }
 
 .identity-tier-badge.tier-badge-genesis {
-  background: rgba(167, 139, 250, 0.15);
-  color: #c4b5fd;
+  background: linear-gradient(135deg, rgba(236, 255, 132, 0.24), rgba(209, 233, 76, 0.2), rgba(132, 204, 22, 0.16));
+  color: #f7ffd1;
+  border-color: rgba(209, 233, 76, 0.36);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 0 16px rgba(209, 233, 76, 0.18),
+    0 0 22px rgba(163, 230, 53, 0.1);
 }
 
 .identity-disconnect-btn {

@@ -95,11 +95,11 @@
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  border: 1px solid rgba(167, 139, 250, 0.34);
+  border: 1px solid rgba(209, 233, 76, 0.34);
   background:
-    radial-gradient(circle at top right, rgba(167, 139, 250, 0.22), transparent 45%),
+    radial-gradient(circle at top right, rgba(236, 255, 132, 0.22), transparent 45%),
     rgba(255, 255, 255, 0.035);
-  color: rgba(237, 233, 254, 0.95);
+  color: rgba(247, 255, 209, 0.95);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -108,8 +108,8 @@
 
 .layout-review-trigger:hover {
   transform: translateY(-1px);
-  border-color: rgba(196, 181, 253, 0.58);
-  box-shadow: 0 0 18px rgba(167, 139, 250, 0.22);
+  border-color: rgba(236, 255, 132, 0.58);
+  box-shadow: 0 0 18px rgba(209, 233, 76, 0.22);
 }
 
 .layout-review-trigger svg {
