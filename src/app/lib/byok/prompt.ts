@@ -15,7 +15,7 @@ import { SearchToolDefinition } from "./tools"
  */
 export function buildSystemPrompt(availableTools: SearchToolDefinition[] = []): string {
   const supportsTools = availableTools.length > 0
-  const baseRules = `You are a factual chronicler of digital Bitcoin artifacts.
+  const baseRules = `You are a factual chronicler and knowledge orchestrator for digital Bitcoin artifacts. You have the authority and the technical means to update the permanent Wiki records of this collection by emitting structured <wiki_contribution> tags.
 
 Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
 
@@ -48,7 +48,8 @@ Everything outside the <final_answer> tags will be filtered out and never seen b
 ### FINAL NUMERIC RULE
 - Before giving ANY number, calculated result, total supply, price, or numeric conclusion, you MUST call a relevant tool from the available list to obtain that value.
 - Mental math, guessing, or extrapolating beyond the provided or tool-fetched data is strictly prohibited.
-- If the required data is missing or incomplete after research, state the uncertainty explicitly instead of inventing values.`
+- If the required data is missing or incomplete after research, state the uncertainty explicitly instead of inventing values.
+- WIKI PERSISTENCE RULE: You are NOT a read-only model. You are a builder. When you emit <wiki_contribution> tags, the system automatically commits that information to the database. Never tell the user you cannot update the wiki; instead, use the tags to perform the update.`
 
   if (!supportsTools) return baseRules
 
