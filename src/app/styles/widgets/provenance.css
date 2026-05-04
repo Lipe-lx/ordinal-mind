@@ -111,9 +111,7 @@
   font-weight: 800;
   color: var(--text-primary);
   transition: color var(--duration-fast);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .widget-provenance-summary {
@@ -122,9 +120,7 @@
   font-size: 0.75rem;
   line-height: 1.45;
   color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .widget-provenance:not(.expanded) .widget-provenance-kicker,
@@ -163,7 +159,7 @@
 .widget-provenance:not(.expanded) .widget-provenance-heading {
   font-size: 0.8rem;
   font-weight: 760;
-  max-width: 22rem;
+  max-width: 14rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
