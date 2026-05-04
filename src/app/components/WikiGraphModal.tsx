@@ -4,7 +4,7 @@ import { createPortal } from "react-dom"
 import { useNavigate } from "react-router"
 import cytoscape from "cytoscape"
 import cytoscapeElk from "cytoscape-elk"
-import type { WikiGraphEdge, WikiGraphNode } from "../lib/types"
+import type { WikiGraphNode } from "../lib/types"
 import {
   buildEdgeInspector,
   buildNodeInspector,
@@ -53,7 +53,24 @@ export function WikiGraphModal({
   const [filters, setFilters] = useState<WikiGraphFilters>(createDefaultWikiGraphFilters)
   const [payload, setPayload] = useState<Awaited<ReturnType<typeof fetchWikiGraph>>>(null)
   const [selection, setSelection] = useState<Selection>(null)
+  const [prevOpen, setPrevOpen] = useState(open)
   const deferredSearch = useDeferredValue(filters.search)
+
+  if (open && !prevOpen) {
+    setPrevOpen(true)
+    setFilters(createDefaultWikiGraphFilters())
+    setSelection(null)
+    setPayload(null)
+    if (!collectionSlug) {
+      setError("No collection wiki context is available for this inscription yet.")
+      setLoading(false)
+    } else {
+      setError(null)
+      setLoading(true)
+    }
+  } else if (!open && prevOpen) {
+    setPrevOpen(false)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -93,19 +110,9 @@ export function WikiGraphModal({
   }, [open, onClose])
 
   useEffect(() => {
-    if (!open) return
-    setFilters(createDefaultWikiGraphFilters())
-    setSelection(null)
-
-    if (!collectionSlug) {
-      setPayload(null)
-      setError("No collection wiki context is available for this inscription yet.")
-      return
-    }
+    if (!open || !collectionSlug) return
 
     let cancelled = false
-    setLoading(true)
-    setError(null)
 
     void fetchWikiGraph(collectionSlug, { focus: focusSlug }).then((result) => {
       if (cancelled) return
@@ -146,18 +153,6 @@ export function WikiGraphModal({
     return filteredPayload.nodes[0] ?? null
   }, [filteredPayload])
 
-  useEffect(() => {
-    if (!selection || !filteredPayload) return
-
-    if (selection.type === "node") {
-      const exists = filteredPayload.nodes.some((node) => node.id === selection.id)
-      if (!exists) setSelection(null)
-      return
-    }
-
-    const exists = filteredPayload.edges.some((edge) => edge.id === selection.id)
-    if (!exists) setSelection(null)
-  }, [filteredPayload, selection])
 
   useEffect(() => {
     const container = containerRef.current
@@ -530,9 +525,10 @@ function buildGraphLayout(): cytoscape.LayoutOptions {
     elk: {
       algorithm: "layered",
       "elk.direction": "RIGHT",
-      "elk.spacing.nodeNode": 28,
-      "elk.layered.spacing.nodeNodeBetweenLayers": 56,
-      "elk.layered.spacing.edgeNodeBetweenLayers": 38,
+      "elk.padding": "[top=32,left=32,bottom=32,right=32]",
+      "elk.spacing.nodeNode": 40,
+      "elk.layered.spacing.nodeNodeBetweenLayers": 64,
+      "elk.layered.spacing.edgeNodeBetweenLayers": 42,
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.layered.nodePlacement.bk.edgeStraightening": "IMPROVE_STRAIGHTNESS",
     },
@@ -559,19 +555,24 @@ function buildGraphStylesheet(): cytoscape.StylesheetJson {
         "text-outline-width": 2,
         "shape": "round-rectangle",
         "padding": "10",
+      },
+    },
+    {
+      selector: "node:childless",
+      style: {
         "width": "label",
         "height": "label",
       },
     },
     {
-      selector: "node[parent]",
+      selector: ":parent",
       style: {
+        "background-opacity": 0.12,
+        "border-width": 1,
+        "border-style": "dashed",
+        "padding": "24",
         "text-valign": "top",
-        "text-halign": "center",
-        "padding-top": "28",
-        "padding-left": "14",
-        "padding-right": "14",
-        "padding-bottom": "14",
+        "text-margin-y": -10,
       },
     },
     {
@@ -581,7 +582,6 @@ function buildGraphStylesheet(): cytoscape.StylesheetJson {
         "border-color": "rgba(247,147,26,0.48)",
         "font-size": 14,
         "font-weight": 700,
-        "shape": "round-rectangle",
       },
     },
     {
