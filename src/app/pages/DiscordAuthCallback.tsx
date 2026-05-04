@@ -30,7 +30,7 @@ export function DiscordAuthCallback() {
 
     // 1. Handle OAuth error redirect (side effect)
     if (oauthError) {
-      navigate(`/?auth_error=${encodeURIComponent(oauthError)}`, { replace: true })
+      window.location.replace(`/?auth_error=${encodeURIComponent(oauthError)}`)
       return
     }
 
@@ -68,11 +68,12 @@ export function DiscordAuthCallback() {
 
         if (res.ok && data.token) {
           console.log("[AuthCallback] Exchange successful, redirecting home.")
-          navigate(`/?auth_token=${encodeURIComponent(data.token)}`, { replace: true })
+          // Use a full-page redirect so the app shell remounts and captures the JWT deterministically.
+          window.location.replace(`/?auth_token=${encodeURIComponent(data.token)}`)
         } else {
           const msg = data.error || "Failed to exchange authorization code."
           console.warn("[AuthCallback] Exchange failed:", msg)
-          navigate(`/?auth_error=${encodeURIComponent(msg)}`, { replace: true })
+          window.location.replace(`/?auth_error=${encodeURIComponent(msg)}`)
         }
       } catch (err) {
         clearTimeout(timeoutId)

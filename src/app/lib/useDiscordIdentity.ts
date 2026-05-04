@@ -7,6 +7,7 @@
 //   - On disconnect: KeyStore.demoteToSessionStorage() moves keys back to sessionStorage
 
 import { useState, useEffect, useCallback } from "react"
+import { useLocation } from "react-router"
 import { decodeJWTPayload } from "./byok/jwtClient"
 import type { OGTier } from "./byok/jwtClient"
 
@@ -20,6 +21,12 @@ export interface DiscordIdentity {
 const JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
 const AUTH_TOKEN_PARAM = "auth_token"
 const AUTH_ERROR_PARAM = "auth_error"
+const AUTH_SYNC_EVENT = "ordinal-mind:auth-sync"
+
+function broadcastAuthSync(): void {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(AUTH_SYNC_EVENT))
+}
 
 function readStoredJWT(): string | null {
   try {
@@ -33,12 +40,14 @@ function storeJWT(token: string): void {
   try {
     localStorage.setItem(JWT_STORAGE_KEY, token)
   } catch { /* noop */ }
+  broadcastAuthSync()
 }
 
 function clearJWT(): void {
   try {
     localStorage.removeItem(JWT_STORAGE_KEY)
   } catch { /* noop */ }
+  broadcastAuthSync()
 }
 
 function isJWTExpired(token: string): boolean {
@@ -99,9 +108,31 @@ async function validateWithServer(token: string): Promise<DiscordIdentity | null
 }
 
 export function useDiscordIdentity() {
+  const location = useLocation()
   const [identity, setIdentity] = useState<DiscordIdentity | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [syncTick, setSyncTick] = useState(0)
+
+  useEffect(() => {
+    function handleAuthSync() {
+      setSyncTick((value) => value + 1)
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === null || event.key === JWT_STORAGE_KEY) {
+        handleAuthSync()
+      }
+    }
+
+    window.addEventListener(AUTH_SYNC_EVENT, handleAuthSync)
+    window.addEventListener("storage", handleStorage)
+
+    return () => {
+      window.removeEventListener(AUTH_SYNC_EVENT, handleAuthSync)
+      window.removeEventListener("storage", handleStorage)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -114,9 +145,12 @@ export function useDiscordIdentity() {
 
       if (urlError) {
         setAuthError(urlError)
+        setIdentity(null)
         setIsLoading(false)
         return
       }
+
+      setAuthError(null)
 
       let token: string | null = urlToken
 
@@ -136,6 +170,7 @@ export function useDiscordIdentity() {
       }
 
       if (!token) {
+        if (!cancelled) setIdentity(null)
         if (!cancelled) setIsLoading(false)
         return
       }
@@ -143,6 +178,7 @@ export function useDiscordIdentity() {
       // 3. Client-side expiry check (fast path — avoids network if clearly expired)
       if (isJWTExpired(token)) {
         clearJWT()
+        if (!cancelled) setIdentity(null)
         if (!cancelled) setIsLoading(false)
         return
       }
@@ -168,7 +204,7 @@ export function useDiscordIdentity() {
 
     void init()
     return () => { cancelled = true }
-  }, [])
+  }, [location.search, syncTick])
 
   /**
    * Redirect to Discord OAuth flow.

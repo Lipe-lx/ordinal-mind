@@ -12,10 +12,10 @@ export default defineConfig({
       enforce: "pre",
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          // Prevent Vite SPA fallback from intercepting direct browser navigations to /api/
-          // EXCEPTION: /api/auth/callback must allow standard browser navigation (Accept: text/html)
-          // so the Worker can perform a 302 Redirect back to the SPA.
-          if (req.url?.startsWith("/api/") && !req.url.startsWith("/api/auth/callback")) {
+          // Prevent Vite SPA fallback from intercepting /api/ routes during local dev.
+          // Auth routes decide between JSON vs redirect inside the Worker using Sec-Fetch-Dest,
+          // so even /api/auth/callback can safely be forced through the Worker.
+          if (req.url?.startsWith("/api/")) {
             req.headers.accept = "application/json"
           }
           next()
