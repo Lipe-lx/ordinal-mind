@@ -65,6 +65,11 @@ export function ChronicleCard({
 }: Props) {
   const hasKey = KeyStore.has()
   const config = KeyStore.get()
+  const collectionSlug =
+    chronicle.collection_context.market.ord_net_match?.collection_slug
+    ?? chronicle.collection_context.market.satflow_match?.collection_slug
+    ?? chronicle.collection_context.market.match?.collection_slug
+    ?? chronicle.collection_context.registry.match?.slug
 
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
@@ -143,7 +148,8 @@ export function ChronicleCard({
             onRetry={onRetryMessage}
             onCancel={onCancel}
             onOpenBYOK={onOpenBYOK}
-            collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
+            collectionSlug={collectionSlug}
+            inscriptionWikiSlug={`inscription:${chronicle.meta.inscription_id}`}
           />
         </div>
         <div className="chronicle-layout-panel is-genealogy">

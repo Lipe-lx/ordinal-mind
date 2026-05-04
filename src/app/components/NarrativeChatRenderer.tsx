@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { formatChronicleText } from "../lib/formatters"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
@@ -8,6 +8,10 @@ import type { SynthesisPhase } from "../lib/byok/useChronicleNarrativeChat"
 import type { WikiActivityStatus } from "../lib/byok/useChronicleNarrativeChat"
 import { ChatHistoryModal } from "./ChatHistoryModal"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
+
+const LazyWikiGraphModal = lazy(() =>
+  import("./WikiGraphModal").then((module) => ({ default: module.WikiGraphModal }))
+)
 
 interface Props {
   messages: ChatMessage[]
@@ -28,6 +32,7 @@ interface Props {
   researchLogs?: ResearchLog[]
   hasKey: boolean
   collectionSlug?: string
+  inscriptionWikiSlug?: string
   onSend: (prompt: string) => Promise<void> | void
   onEdit: (messageId: string, content: string) => Promise<void> | void
   onNewThread: () => void
@@ -58,6 +63,7 @@ export function NarrativeChatRenderer({
   researchLogs = [],
   hasKey,
   collectionSlug,
+  inscriptionWikiSlug,
   onSend,
   onEdit,
   onNewThread,
@@ -74,6 +80,7 @@ export function NarrativeChatRenderer({
   const [localInputError, setLocalInputError] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
+  const [showWikiGraph, setShowWikiGraph] = useState(false)
   const transcriptRef = useRef<HTMLDivElement | null>(null)
   const { identity } = useDiscordIdentity()
 
@@ -116,6 +123,18 @@ export function NarrativeChatRenderer({
 
   return (
     <div className="narrative-chat-shell">
+      {showWikiGraph && (
+        <Suspense fallback={null}>
+          <LazyWikiGraphModal
+            open={showWikiGraph}
+            collectionSlug={collectionSlug}
+            focusSlug={inscriptionWikiSlug}
+            wikiStatusLabel={wikiStatusLabel}
+            onClose={() => setShowWikiGraph(false)}
+          />
+        </Suspense>
+      )}
+
       <ChatHistoryModal
         open={showHistory}
         activeThreadId={activeThreadId}
@@ -347,7 +366,17 @@ export function NarrativeChatRenderer({
           <div className="narrative-chat-meta">
             {providerName && modelName && <span className="model-badge">{providerName} · {modelName}</span>}
             {inputMode && inputMode !== "text-only" && <span>attachments + context</span>}
-            {wikiStatusLabel && <span>{wikiStatusLabel}</span>}
+            {(wikiStatusLabel || collectionSlug) && (
+              <button
+                type="button"
+                className="narrative-chat-meta-badge narrative-chat-meta-badge-wiki"
+                onClick={() => setShowWikiGraph(true)}
+                title="Open collection wiki atlas"
+              >
+                <span className="narrative-chat-meta-dot" aria-hidden="true" />
+                <span>{wikiStatusLabel || "Wiki atlas"}</span>
+              </button>
+            )}
             {elapsed >= 10 && <span>{elapsed}s</span>}
           </div>
           <div className="narrative-chat-actions">
@@ -421,4 +450,3 @@ export function NarrativeChatRenderer({
     </div>
   )
 }
-

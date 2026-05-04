@@ -202,6 +202,34 @@
   background: var(--bg-glass);
 }
 
+.narrative-chat-meta .narrative-chat-meta-badge {
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font: inherit;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.narrative-chat-meta .narrative-chat-meta-badge:hover {
+  border-color: rgba(247, 147, 26, 0.3);
+  color: var(--text-primary);
+  background: rgba(247, 147, 26, 0.08);
+}
+
+.narrative-chat-meta-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(247, 147, 26, 0.88);
+  box-shadow: 0 0 12px rgba(247, 147, 26, 0.32);
+}
+
 .narrative-chat-meta .model-badge {
   color: rgba(248, 250, 252, 0.88);
 }

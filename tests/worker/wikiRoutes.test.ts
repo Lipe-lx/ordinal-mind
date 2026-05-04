@@ -15,6 +15,7 @@ const FULL_SCHEMA_OBJECTS = [
 class FakeD1Database {
   rawEvents: Row[] = []
   wikiPages: Row[] = []
+  wikiContributions: Row[] = []
   wikiLog: Row[] = []
   schemaObjects: Set<string>
   failViewCountUpdate = false
@@ -87,6 +88,59 @@ class FakeD1Statement {
       const slug = String(this.params[0] ?? "")
       const page = this.db.wikiPages.find((item) => String(item.slug) === slug)
       return page ? [page] : []
+    }
+
+    if (sql.startsWith("select slug, entity_type, title, summary, sections_json") && sql.includes("from wiki_pages")) {
+      return this.db.wikiPages.map((page) => ({
+        slug: page.slug,
+        entity_type: page.entity_type,
+        title: page.title,
+        summary: page.summary,
+        sections_json: page.sections_json,
+        cross_refs_json: page.cross_refs_json,
+        source_event_ids_json: page.source_event_ids_json,
+        generated_at: page.generated_at,
+        byok_provider: page.byok_provider,
+        unverified_count: page.unverified_count,
+        view_count: page.view_count,
+        updated_at: page.updated_at,
+      }))
+    }
+
+    if (sql.includes("select id, field, value, contributor_id, og_tier, created_at") && sql.includes("from wiki_contributions")) {
+      const slug = String(this.params[0] ?? "")
+      return this.db.wikiContributions
+        .filter((item) => String(item.collection_slug) === slug)
+        .filter((item) => String(item.status) === "published")
+        .map((item) => ({
+          id: item.id,
+          field: item.field,
+          value: item.value,
+          contributor_id: item.contributor_id,
+          og_tier: item.og_tier,
+          created_at: item.created_at,
+        }))
+    }
+
+    if (sql.includes("from wiki_contributions") && sql.includes("where collection_slug = ?")) {
+      const slug = String(this.params[0] ?? "")
+      return this.db.wikiContributions
+        .filter((item) => String(item.collection_slug) === slug)
+        .filter((item) => {
+          const status = String(item.status)
+          return status === "published" || status === "quarantine"
+        })
+        .map((item) => ({
+          id: item.id,
+          field: item.field,
+          value: item.value,
+          confidence: item.confidence,
+          verifiable: item.verifiable,
+          contributor_id: item.contributor_id,
+          og_tier: item.og_tier,
+          status: item.status,
+          created_at: item.created_at,
+        }))
     }
 
     if (sql.includes("select wp.slug, wp.title") && sql.includes("from wiki_pages wp") && sql.includes("not exists")) {
@@ -182,7 +236,25 @@ class FakeD1Statement {
         count: rows.length,
         first_seen: timestamps[0] ?? null,
         last_seen: timestamps[timestamps.length - 1] ?? null,
+        inscription_id: rows[0]?.inscription_id ?? null,
       }]
+    }
+
+    if (sql.includes("from raw_chronicle_events") && sql.includes("where id in")) {
+      const ids = this.params.map((item) => String(item))
+      return this.db.rawEvents
+        .filter((event) => ids.includes(String(event.id)))
+        .map((event) => ({
+          id: event.id,
+          inscription_id: event.inscription_id,
+          event_type: event.event_type,
+          timestamp: event.timestamp,
+          block_height: event.block_height,
+          source_type: event.source_type,
+          source_ref: event.source_ref,
+          description: event.description,
+          metadata_json: event.metadata_json,
+        }))
     }
 
     if (sql.includes("select slug, title, unverified_count") && sql.includes("from wiki_pages") && sql.includes("where unverified_count > 0")) {
@@ -408,6 +480,63 @@ function seedDb(): FakeD1Database {
     updated_at: "2026-04-01T00:00:00.000Z",
   })
 
+  db.wikiPages.push({
+    slug: "inscription:abc123i0",
+    entity_type: "inscription",
+    title: "Frog #7",
+    summary: "Early frog chronicle.",
+    sections_json: JSON.stringify([{ heading: "Overview", body: "Body", source_event_ids: ["ev_genesis_1"] }]),
+    cross_refs_json: JSON.stringify(["collection:bitcoin-frogs", "artist:pepemint", "inscription:def456i0"]),
+    source_event_ids_json: JSON.stringify(["ev_genesis_1"]),
+    generated_at: "2026-04-10T00:00:00.000Z",
+    byok_provider: "openai",
+    unverified_count: 0,
+    view_count: 0,
+    updated_at: "2026-04-10T00:00:00.000Z",
+  })
+
+  db.wikiPages.push({
+    slug: "inscription:def456i0",
+    entity_type: "inscription",
+    title: "Frog #8",
+    summary: "Second frog chronicle.",
+    sections_json: JSON.stringify([{ heading: "Overview", body: "Body", source_event_ids: ["ev_genesis_1"] }]),
+    cross_refs_json: JSON.stringify(["collection:bitcoin-frogs"]),
+    source_event_ids_json: JSON.stringify(["ev_genesis_1"]),
+    generated_at: "2026-04-11T00:00:00.000Z",
+    byok_provider: "openai",
+    unverified_count: 1,
+    view_count: 0,
+    updated_at: "2026-04-11T00:00:00.000Z",
+  })
+
+  db.wikiContributions.push(
+    {
+      id: "wc_1",
+      collection_slug: "bitcoin-frogs",
+      field: "founder",
+      value: "PepeMint",
+      confidence: "stated_by_user",
+      verifiable: 1,
+      contributor_id: "u1",
+      og_tier: "og",
+      status: "published",
+      created_at: "2026-04-12T00:00:00.000Z",
+    },
+    {
+      id: "wc_2",
+      collection_slug: "bitcoin-frogs",
+      field: "community_culture",
+      value: "Frogs became a collector meme.",
+      confidence: "stated_by_user",
+      verifiable: 0,
+      contributor_id: "u2",
+      og_tier: "community",
+      status: "quarantine",
+      created_at: "2026-04-13T00:00:00.000Z",
+    }
+  )
+
   return db
 }
 
@@ -614,6 +743,31 @@ describe("wiki routes backend", () => {
     const lintBody = await lintRes.json() as Record<string, unknown>
     const summary = lintBody.summary as Record<string, unknown>
     expect(Number(summary.total)).toBeGreaterThan(0)
+  })
+
+  it("returns a collection graph payload with focus, claims, linked pages, and partial refs", async () => {
+    const env = createEnv({ withDb: true, db: seedDb() })
+
+    const res = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/collection/bitcoin-frogs/graph?focus=inscription:abc123i0"), env)
+    expect(res.status).toBe(200)
+
+    const body = await res.json() as Record<string, unknown>
+    expect(body.ok).toBe(true)
+
+    const data = body.data as Record<string, unknown>
+    expect(data.collection_slug).toBe("bitcoin-frogs")
+    expect(data.focus_node_id).toBe("inscription:abc123i0")
+
+    const nodes = data.nodes as Array<Record<string, unknown>>
+    const edges = data.edges as Array<Record<string, unknown>>
+    const warnings = data.warnings as string[]
+
+    expect(nodes.some((node) => node.id === "collection:bitcoin-frogs" && node.kind === "collection")).toBe(true)
+    expect(nodes.some((node) => node.id === "inscription:abc123i0" && node.kind === "wiki_page")).toBe(true)
+    expect(nodes.some((node) => String(node.id).startsWith("claim:bitcoin-frogs:wc_1"))).toBe(true)
+    expect(nodes.some((node) => node.id === "external:artist:pepemint" && node.kind === "external_ref")).toBe(true)
+    expect(edges.some((edge) => edge.kind === "cites_event" && edge.target === "ev_genesis_1")).toBe(true)
+    expect(warnings.some((warning) => warning.includes("could not be resolved"))).toBe(true)
   })
 
   it("returns structured 404 when page is missing and DB is available", async () => {

@@ -503,3 +503,68 @@ export interface ConsolidatedCollection {
   }>
   gaps: string[]
 }
+
+export type WikiGraphNodeKind =
+  | "collection"
+  | "field"
+  | "claim"
+  | "wiki_page"
+  | "source_event"
+  | "external_ref"
+
+export type WikiGraphEdgeKind =
+  | "has_field"
+  | "has_claim"
+  | "belongs_to_collection"
+  | "cites_event"
+  | "links_to"
+
+export type WikiGraphStatus =
+  | "canonical"
+  | "draft"
+  | "disputed"
+  | "supporting"
+  | "partial"
+  | "neutral"
+
+export interface WikiGraphNode {
+  id: string
+  kind: WikiGraphNodeKind
+  label: string
+  status: WikiGraphStatus
+  parent_id?: string | null
+  href?: string | null
+  description?: string | null
+  metadata: Record<string, unknown>
+}
+
+export interface WikiGraphEdge {
+  id: string
+  kind: WikiGraphEdgeKind
+  source: string
+  target: string
+  status: WikiGraphStatus
+  label?: string | null
+  metadata: Record<string, unknown>
+}
+
+export interface WikiGraphCounts {
+  nodes: number
+  edges: number
+  fields: number
+  claims: number
+  wiki_pages: number
+  source_events: number
+  external_refs: number
+}
+
+export interface WikiGraphPayload {
+  collection_slug: string
+  focus_node_id: string | null
+  nodes: WikiGraphNode[]
+  edges: WikiGraphEdge[]
+  counts: WikiGraphCounts
+  warnings: string[]
+  generated_at: string
+  partial: boolean
+}

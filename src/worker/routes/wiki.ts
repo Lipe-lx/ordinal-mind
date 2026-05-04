@@ -11,6 +11,7 @@ import { handleWikiTool } from "../wiki/tools"
 import { handleContribute } from "../wiki/contribute"
 import { handleCompleteness } from "../wiki/completeness"
 import { handleConsolidated } from "../wiki/consolidateEndpoint"
+import { handleCollectionGraph } from "../wiki/graph"
 import { handlePendingReviews, handleReviewDecision } from "../wiki/reviews"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
@@ -60,6 +61,12 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
     if (request.method === "GET" && /^\/api\/wiki\/collection\/[^/]+\/consolidated$/.test(path)) {
       const slug = decodeURIComponent(path.replace("/api/wiki/collection/", "").replace("/consolidated", ""))
       return handleConsolidated(slug, env)
+    }
+
+    if (request.method === "GET" && /^\/api\/wiki\/collection\/[^/]+\/graph$/.test(path)) {
+      const slug = decodeURIComponent(path.replace("/api/wiki/collection/", "").replace("/graph", ""))
+      const focus = url.searchParams.get("focus")
+      return handleCollectionGraph(slug, env, { focus })
     }
 
     if (request.method === "GET" && path.startsWith("/api/wiki/") && !path.startsWith("/api/wiki/tools/")) {
