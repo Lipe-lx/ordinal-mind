@@ -4,6 +4,8 @@ import { createPortal } from "react-dom"
 import { useNavigate } from "react-router"
 import cytoscape from "cytoscape"
 import cytoscapeElk from "cytoscape-elk"
+import cytoscapeFcose from "cytoscape-fcose"
+import cytoscapeCola from "cytoscape-cola"
 import type { WikiGraphNode } from "../lib/types"
 import {
   createDefaultWikiGraphFilters,
@@ -19,6 +21,19 @@ import {
 import "../styles/features/wiki/wiki-graph.css"
 
 cytoscape.use(cytoscapeElk)
+cytoscape.use(cytoscapeFcose)
+cytoscape.use(cytoscapeCola)
+
+interface ColaLayoutOptions extends cytoscape.ShapedLayoutOptions {
+  name: "cola"
+  refresh?: number
+  maxSimulationTime?: number
+  ungrabifyWhileSimulating?: boolean
+  nodeSpacing?: (node: cytoscape.NodeSingular) => number
+  edgeLength?: number | ((edge: cytoscape.EdgeSingular) => number)
+  infinite?: boolean
+  alphaTest?: number
+}
 
 interface Props {
   open: boolean
@@ -134,11 +149,11 @@ export function WikiGraphModal({
     const cy = cytoscape({
       container,
       elements: toCytoscapeElements(filteredPayload),
-      layout: buildGraphLayout(),
+      layout: buildGraphLayout(filters.viewMode, true),
       wheelSensitivity: 0.8,
       minZoom: 0.1,
       maxZoom: 18.0,
-      style: buildGraphStylesheet(),
+      style: buildGraphStylesheet(filters.viewMode),
     })
 
     const clearHover = () => {
@@ -180,6 +195,21 @@ export function WikiGraphModal({
       if (target) navigate(target)
     })
 
+    if (filters.viewMode === "neural") {
+      let layout: cytoscape.Layouts | null = null
+
+      cy.on("grab", "node", () => {
+        layout = cy.makeLayout(buildGraphLayout("neural", false))
+        layout.run()
+      })
+
+      cy.on("free", "node", () => {
+        if (layout) {
+          layout.stop()
+        }
+      })
+    }
+
     cy.on("dbltap", (event) => {
       if (event.target === cy) {
         fitGraph()
@@ -202,9 +232,6 @@ export function WikiGraphModal({
     }
 
     cy.one("layoutstop", fitGraph)
-    requestAnimationFrame(() => {
-      fitGraph()
-    })
 
     cyRef.current = cy
 
@@ -212,7 +239,7 @@ export function WikiGraphModal({
       cy.destroy()
       cyRef.current = null
     }
-  }, [filteredPayload, navigate])
+  }, [filteredPayload, filters.viewMode, navigate])
 
   const visibleWarnings = filteredPayload?.warnings.slice(0, 2) ?? []
 
@@ -263,6 +290,24 @@ export function WikiGraphModal({
                   placeholder="Search"
                 />
               </label>
+
+              <div className="wiki-graph-view-toggle">
+                <button
+                  type="button"
+                  className={`view-toggle-item ${filters.viewMode === "neural" ? "is-active" : ""}`}
+                  onClick={() => setFilters((current) => ({ ...current, viewMode: "neural" }))}
+                >
+                  Neural
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-item ${filters.viewMode === "tree" ? "is-active" : ""}`}
+                  onClick={() => setFilters((current) => ({ ...current, viewMode: "tree" }))}
+                >
+                  Tree
+                </button>
+                <div className={`view-toggle-slider mode-${filters.viewMode}`} />
+              </div>
 
               <div className="wiki-graph-filter-group">
                 <div className="wiki-graph-chip-row">
@@ -332,7 +377,7 @@ export function WikiGraphModal({
                   onClick={() => {
                     const cy = cyRef.current
                     if (!cy) return
-                    cy.layout(buildGraphLayout()).run()
+                    cy.layout(buildGraphLayout(filters.viewMode)).run()
                   }}
                 >
                   Reset Layout
@@ -417,7 +462,27 @@ function resolveNavigationTarget(node: WikiGraphNode): string | null {
 }
 
 
-function buildGraphLayout(): cytoscape.LayoutOptions {
+function buildGraphLayout(mode: "tree" | "neural", randomize = false): cytoscape.LayoutOptions {
+  if (mode === "neural") {
+    return {
+      name: "cola",
+      animate: true,
+      refresh: 1,
+      maxSimulationTime: 4000,
+      ungrabifyWhileSimulating: false,
+      fit: randomize,
+      padding: 100,
+      randomize,
+      nodeSpacing: (node: cytoscape.NodeSingular) => {
+        const kind = node.data("kind")
+        return kind === "collection" ? 50 : 15
+      },
+      edgeLength: 70,
+      infinite: false,
+      alphaTest: 0.04,
+    } as ColaLayoutOptions
+  }
+
   return {
     name: "elk",
     fit: true,
@@ -437,7 +502,9 @@ function buildGraphLayout(): cytoscape.LayoutOptions {
   } as cytoscape.LayoutOptions
 }
 
-function buildGraphStylesheet(): cytoscape.StylesheetJson {
+function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson {
+  const isNeural = mode === "neural"
+
   return [
     {
       selector: "node",
@@ -445,30 +512,60 @@ function buildGraphStylesheet(): cytoscape.StylesheetJson {
         "background-color": "#334155",
         "border-width": 1.5,
         "border-color": "rgba(255,255,255,0.16)",
-        "label": "data(label)",
+        "label": isNeural ? "" : "data(label)",
         "text-wrap": "wrap",
         "text-max-width": "160",
-        "font-size": 11,
-        "font-family": "\"Space Grotesk\", sans-serif",
+        "font-size": isNeural ? 12 : 11,
+        "font-family": "\"Outfit\", \"Space Grotesk\", sans-serif",
         "color": "#f8fafc",
         "text-valign": "center",
         "text-halign": "center",
-        "text-outline-color": "rgba(10,10,15,0.85)",
-        "text-outline-width": 2,
-        "shape": "round-rectangle",
-        "padding": "10",
-        "width": "label",
-        "height": "label",
+        "text-outline-color": "rgba(10,10,15,0.9)",
+        "text-outline-width": 2.5,
+        "shape": isNeural ? "ellipse" : "round-rectangle",
+        "padding": isNeural ? "0px" : "10px",
+        "width": isNeural ? 14 : "label",
+        "height": isNeural ? 14 : "label",
+        "transition-property": "background-color, border-color, border-width, width, height, opacity, shadow-blur",
+        "transition-duration": 250,
       },
+    },
+    {
+      selector: "node:selected",
+      style: {
+        "border-color": "#f7931a",
+        "border-width": 3,
+        "label": "data(label)",
+        "width": isNeural ? 24 : "label",
+        "height": isNeural ? 24 : "label",
+        "shadow-blur": 15,
+        "shadow-color": "rgba(247, 147, 26, 0.45)",
+        "shadow-opacity": 0.8,
+        "z-index": 100,
+      } as cytoscape.Css.Node,
+    },
+    {
+      selector: "node.is-highlighted",
+      style: {
+        "label": "data(label)",
+        "width": isNeural ? 20 : "label",
+        "height": isNeural ? 20 : "label",
+        "shadow-blur": 10,
+        "shadow-color": "rgba(255, 255, 255, 0.25)",
+      } as cytoscape.Css.Node,
     },
     {
       selector: "node.kind-collection",
       style: {
         "background-color": "#f7931a",
-        "border-color": "rgba(247,147,26,0.48)",
-        "font-size": 14,
-        "font-weight": 700,
-      },
+        "border-color": "rgba(255,255,255,0.4)",
+        "font-size": 16,
+        "font-weight": 800,
+        "width": isNeural ? 36 : "label",
+        "height": isNeural ? 36 : "label",
+        "shadow-blur": 20,
+        "shadow-color": "rgba(247, 147, 26, 0.4)",
+      } as cytoscape.Css.Node,
     },
     {
       selector: "node.kind-field",
@@ -540,19 +637,32 @@ function buildGraphStylesheet(): cytoscape.StylesheetJson {
     {
       selector: "edge",
       style: {
-        "curve-style": "taxi",
+        "curve-style": isNeural ? "bezier" : "taxi",
         "taxi-direction": "rightward",
-        "line-color": "rgba(148, 163, 184, 0.34)",
-        "target-arrow-color": "rgba(148, 163, 184, 0.42)",
+        "line-color": isNeural ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.34)",
+        "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.28)" : "rgba(148, 163, 184, 0.42)",
         "target-arrow-shape": "triangle",
-        "arrow-scale": 0.8,
-        "width": 1.4,
+        "arrow-scale": isNeural ? 0.6 : 0.8,
+        "width": isNeural ? 1.2 : 1.4,
         "font-size": 9,
         "color": "#cbd5e1",
-        "label": "data(label)",
+        "label": isNeural ? "" : "data(label)",
         "text-background-opacity": 1,
         "text-background-color": "rgba(10,10,15,0.82)",
         "text-background-padding": "2",
+        "transition-property": "line-color, width, opacity, target-arrow-color",
+        "transition-duration": 250,
+      },
+    },
+    {
+      selector: "edge.is-highlighted",
+      style: {
+        "line-color": "#f7931a",
+        "target-arrow-color": "#f7931a",
+        "width": 2.5,
+        "opacity": 1,
+        "label": "data(label)",
+        "z-index": 50,
       },
     },
     {

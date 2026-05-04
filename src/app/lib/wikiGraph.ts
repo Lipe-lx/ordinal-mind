@@ -28,6 +28,7 @@ export interface WikiGraphFilters {
   search: string
   nodeKinds: WikiGraphNodeKind[]
   statuses: WikiGraphStatus[]
+  viewMode: "tree" | "neural"
 }
 
 export interface CytoscapeElementDefinition {
@@ -54,6 +55,7 @@ export function createDefaultWikiGraphFilters(): WikiGraphFilters {
     search: "",
     nodeKinds: [...WIKI_GRAPH_NODE_KINDS],
     statuses: [...WIKI_GRAPH_STATUSES],
+    viewMode: "neural",
   }
 }
 

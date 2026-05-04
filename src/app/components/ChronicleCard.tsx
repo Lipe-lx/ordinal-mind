@@ -116,25 +116,39 @@ export function ChronicleCard({
         )}
 
         {/* Tab Switcher / Expansion Toggles */}
-        <div className="chronicle-tabs">
-          <button 
-            className={`chronicle-tab ${layoutMode === "narrative" ? "active is-expanded" : ""}`}
-            onClick={() => toggleExpand("narrative")}
-          >
-            <span>Chronicle Narrative</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-right">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-          <button 
-            className={`chronicle-tab ${layoutMode === "genealogy" ? "active is-expanded" : ""}`}
-            onClick={() => toggleExpand("genealogy")}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-left">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            <span>Genealogical Tree</span>
-          </button>
+        <div className="chronicle-tabs-header">
+          {(collectionSlug || wikiStatusLabel) && (
+            <button
+              type="button"
+              className="chronicle-wiki-trigger"
+              onClick={() => setShowWikiGraph(true)}
+              title="Open collection wiki atlas"
+            >
+              <span className="wiki-status-dot" aria-hidden="true" />
+              <span className="wiki-trigger-label">{wikiStatusLabel || "Wiki Atlas"}</span>
+            </button>
+          )}
+
+          <div className="chronicle-tabs">
+            <button 
+              className={`chronicle-tab ${layoutMode === "narrative" ? "active is-expanded" : ""}`}
+              onClick={() => toggleExpand("narrative")}
+            >
+              <span>Chronicle Narrative</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-right">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+            <button 
+              className={`chronicle-tab ${layoutMode === "genealogy" ? "active is-expanded" : ""}`}
+              onClick={() => toggleExpand("genealogy")}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-left">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              <span>Genealogical Tree</span>
+            </button>
+          </div>
         </div>
 
         <div className={`chronicle-layout-wrapper layout-mode-${layoutMode}`}>

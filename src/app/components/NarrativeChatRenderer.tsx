@@ -51,7 +51,6 @@ export function NarrativeChatRenderer({
   providerName,
   modelName,
   inputMode,
-  wikiStatusLabel,
   wikiStatusError,
   wikiActivity,
   error,
@@ -68,7 +67,6 @@ export function NarrativeChatRenderer({
   onRetry,
   onCancel,
   onOpenBYOK,
-  onOpenWikiGraph,
 }: Props) {
   const [prompt, setPrompt] = useState("")
   const [showLogs, setShowLogs] = useState(false)
@@ -349,17 +347,6 @@ export function NarrativeChatRenderer({
           <div className="narrative-chat-meta">
             {providerName && modelName && <span className="model-badge">{providerName} · {modelName}</span>}
             {inputMode && inputMode !== "text-only" && <span>attachments + context</span>}
-            {(wikiStatusLabel || collectionSlug) && (
-              <button
-                type="button"
-                className="narrative-chat-meta-badge narrative-chat-meta-badge-wiki"
-                onClick={onOpenWikiGraph}
-                title="Open collection wiki atlas"
-              >
-                <span className="narrative-chat-meta-dot" aria-hidden="true" />
-                <span>{wikiStatusLabel || "Wiki atlas"}</span>
-              </button>
-            )}
             {elapsed >= 10 && <span>{elapsed}s</span>}
           </div>
           <div className="narrative-chat-actions">

@@ -85,9 +85,70 @@
 
 .wiki-graph-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) 1fr 1fr auto;
+  grid-template-columns: minmax(180px, 0.9fr) auto 1fr 1fr auto;
   gap: 0.6rem;
   align-items: center;
+}
+
+.wiki-graph-view-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  background: rgba(15, 20, 35, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  margin: 0 0.6rem;
+  min-width: 150px;
+  overflow: hidden;
+}
+
+.view-toggle-item {
+  position: relative;
+  flex: 1;
+  z-index: 2;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-smooth);
+  background: none;
+  border: none;
+  outline: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.view-toggle-item.is-active {
+  color: #fff;
+}
+
+.view-toggle-slider {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+  z-index: 1;
+}
+
+.view-toggle-slider.mode-neural {
+  transform: translateX(0);
+  background: rgba(247, 147, 26, 0.25);
+  border-color: rgba(247, 147, 26, 0.5);
+  box-shadow: 0 0 15px rgba(247, 147, 26, 0.2);
+}
+
+.view-toggle-slider.mode-tree {
+  transform: translateX(100%);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .wiki-graph-search,
@@ -118,26 +179,29 @@
   transition: all var(--duration-fast) var(--ease-smooth);
 }
 
-.wiki-graph-chip:hover,
 .wiki-graph-chip.is-active {
-  border-color: rgba(247, 147, 26, 0.32);
-  color: var(--text-primary);
-  background: rgba(247, 147, 26, 0.1);
+  border-color: rgba(247, 147, 26, 0.6);
+  color: #fff;
+  background: rgba(247, 147, 26, 0.2);
+  box-shadow: 0 0 12px rgba(247, 147, 26, 0.2);
 }
 
 .wiki-graph-chip.status-draft.is-active {
-  background: rgba(96, 165, 250, 0.12);
-  border-color: rgba(96, 165, 250, 0.32);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.2);
 }
 
 .wiki-graph-chip.status-disputed.is-active {
-  background: rgba(251, 191, 36, 0.12);
-  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.2);
 }
 
 .wiki-graph-chip.status-partial.is-active {
-  background: rgba(244, 114, 182, 0.12);
-  border-color: rgba(244, 114, 182, 0.32);
+  background: rgba(244, 114, 182, 0.2);
+  border-color: rgba(244, 114, 182, 0.6);
+  box-shadow: 0 0 12px rgba(244, 114, 182, 0.2);
 }
 
 .wiki-graph-tool-actions {
@@ -161,8 +225,10 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   background:
+    radial-gradient(circle at center, rgba(247, 147, 26, 0.03), transparent 70%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015)),
     rgba(8, 11, 18, 0.86);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.2);
 }
 
 .wiki-graph-canvas-panel {
@@ -184,14 +250,20 @@
   color: var(--text-secondary);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  padding: 0.22rem 0.48rem;
+  padding: 0.22rem 0.6rem;
   background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(4px);
 }
 
 .wiki-graph-canvas {
   min-height: 0;
   width: 100%;
   height: 100%;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center center;
 }
 
 .wiki-graph-inline-warnings {
@@ -319,7 +391,11 @@
 
 @media (max-width: 1180px) {
   .wiki-graph-toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .wiki-graph-view-mode {
+    border-right: none;
   }
 
   .wiki-graph-tool-actions {
