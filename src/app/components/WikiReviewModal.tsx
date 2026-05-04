@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { WikiReviewItem } from "../lib/useWikiReviewQueue"
 
@@ -56,6 +56,12 @@ export function WikiReviewModal({
 }: Props) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  const sortedItems = useMemo(
+    () => items.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
+    [items]
+  )
 
   useEffect(() => {
     if (!open) return
@@ -64,6 +70,18 @@ export function WikiReviewModal({
       if (event.key === "Escape") {
         event.preventDefault()
         onClose()
+        return
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault()
+        setActiveIndex((prev) => Math.max(0, prev - 1))
+        return
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault()
+        setActiveIndex((prev) => Math.min(sortedItems.length - 1, prev + 1))
         return
       }
 
@@ -92,12 +110,19 @@ export function WikiReviewModal({
     window.addEventListener("keydown", onKeyDown)
     closeButtonRef.current?.focus()
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [open, onClose])
+  }, [open, onClose, sortedItems.length])
 
-  const sortedItems = useMemo(
-    () => items.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
-    [items]
-  )
+  useEffect(() => {
+    if (!open) return
+    setActiveIndex((prev) => {
+      if (sortedItems.length === 0) return 0
+      return Math.min(prev, sortedItems.length - 1)
+    })
+  }, [open, sortedItems.length])
+
+  const activeItem = sortedItems[activeIndex] ?? null
+  const canGoPrev = activeIndex > 0
+  const canGoNext = activeIndex < sortedItems.length - 1
 
   return (
     <AnimatePresence>
@@ -131,6 +156,35 @@ export function WikiReviewModal({
                 </p>
               </div>
               <div className="wiki-review-header-actions">
+                {sortedItems.length > 1 && (
+                  <div className="wiki-review-nav" aria-label="Review navigation">
+                    <button
+                      type="button"
+                      className="wiki-review-nav-btn"
+                      onClick={() => setActiveIndex((prev) => Math.max(0, prev - 1))}
+                      disabled={!canGoPrev}
+                      aria-label="Previous review"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m15 18-6-6 6-6" />
+                      </svg>
+                    </button>
+                    <span className="wiki-review-nav-count">
+                      {activeIndex + 1} / {sortedItems.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="wiki-review-nav-btn"
+                      onClick={() => setActiveIndex((prev) => Math.min(sortedItems.length - 1, prev + 1))}
+                      disabled={!canGoNext}
+                      aria-label="Next review"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onRefresh()}>
                   Refresh
                 </button>
@@ -157,46 +211,53 @@ export function WikiReviewModal({
                 <div className="wiki-review-empty">No pending Genesis reviews right now.</div>
               )}
 
-              {sortedItems.map((item) => {
-                const isActing = actingId === item.id
-                return (
-                  <article key={item.id} className="wiki-review-card" role="listitem">
+              {activeItem && (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.article
+                    key={activeItem.id}
+                    className="wiki-review-card"
+                    role="listitem"
+                    initial={{ opacity: 0, x: 18 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -18 }}
+                    transition={{ duration: 0.16 }}
+                  >
                     <div className="wiki-review-card-top">
                       <div>
                         <div className="wiki-review-field-row">
-                          <span className="wiki-review-field">{formatFieldName(item.field)}</span>
-                          <span className="wiki-review-slug">{item.collection_slug}</span>
+                          <span className="wiki-review-field">{formatFieldName(activeItem.field)}</span>
+                          <span className="wiki-review-slug">{activeItem.collection_slug}</span>
                         </div>
-                        <p className="wiki-review-summary">{buildContributionSummary(item)}</p>
+                        <p className="wiki-review-summary">{buildContributionSummary(activeItem)}</p>
                       </div>
-                      <span className="wiki-review-age">{formatRelativeTimestamp(item.created_at)}</span>
+                      <span className="wiki-review-age">{formatRelativeTimestamp(activeItem.created_at)}</span>
                     </div>
 
                     <div className="wiki-review-badges">
-                      <span className={`wiki-tier-badge tier-${item.contributor_tier}`}>{item.contributor_tier}</span>
-                      <span className="wiki-review-badge">{contributorLabel(item)}</span>
-                      <span className="wiki-review-badge">{item.confidence}</span>
-                      <span className={`wiki-review-badge ${item.verifiable ? "is-verifiable" : "is-unverified"}`}>
-                        {item.verifiable ? "publicly verifiable" : "community claim"}
+                      <span className={`wiki-tier-badge tier-${activeItem.contributor_tier}`}>{activeItem.contributor_tier}</span>
+                      <span className="wiki-review-badge">{contributorLabel(activeItem)}</span>
+                      <span className="wiki-review-badge">{activeItem.confidence}</span>
+                      <span className={`wiki-review-badge ${activeItem.verifiable ? "is-verifiable" : "is-unverified"}`}>
+                        {activeItem.verifiable ? "publicly verifiable" : "community claim"}
                       </span>
                     </div>
 
                     <div className="wiki-review-diff">
                       <div className="wiki-review-panel">
                         <span className="wiki-review-panel-label">Current wiki</span>
-                        <p>{item.current_value || "No published value yet."}</p>
-                        {item.current_tier && <span className={`wiki-tier-badge tier-${item.current_tier}`}>{item.current_tier}</span>}
+                        <p>{activeItem.current_value || "No published value yet."}</p>
+                        {activeItem.current_tier && <span className={`wiki-tier-badge tier-${activeItem.current_tier}`}>{activeItem.current_tier}</span>}
                       </div>
                       <div className="wiki-review-panel is-proposed">
                         <span className="wiki-review-panel-label">Proposed update</span>
-                        <p>{item.proposed_value}</p>
+                        <p>{activeItem.proposed_value}</p>
                       </div>
                     </div>
 
-                    {item.source_excerpt && (
+                    {activeItem.source_excerpt && (
                       <div className="wiki-review-excerpt">
                         <span className="wiki-review-panel-label">Chat excerpt</span>
-                        <p>{item.source_excerpt}</p>
+                        <p>{activeItem.source_excerpt}</p>
                       </div>
                     )}
 
@@ -204,23 +265,23 @@ export function WikiReviewModal({
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
-                        onClick={() => void onReject(item.id)}
-                        disabled={isActing}
+                        onClick={() => void onReject(activeItem.id)}
+                        disabled={actingId === activeItem.id}
                       >
                         Reject
                       </button>
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        onClick={() => void onApprove(item.id)}
-                        disabled={isActing}
+                        onClick={() => void onApprove(activeItem.id)}
+                        disabled={actingId === activeItem.id}
                       >
-                        {isActing ? "Saving..." : "Approve"}
+                        {actingId === activeItem.id ? "Saving..." : "Approve"}
                       </button>
                     </div>
-                  </article>
-                )
-              })}
+                  </motion.article>
+                </AnimatePresence>
+              )}
             </div>
           </motion.div>
         </motion.div>

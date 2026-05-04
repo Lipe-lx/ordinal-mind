@@ -16,7 +16,9 @@
   background: var(--bg-modal-elevated);
   border-color: var(--border-glass-hover);
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--space-md);
+  overflow: hidden;
 }
 
 .wiki-review-header {
@@ -42,6 +44,59 @@
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.wiki-review-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-right: 0.15rem;
+}
+
+.wiki-review-nav-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(237, 233, 254, 0.95);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.wiki-review-nav-btn svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wiki-review-nav-btn:hover:not(:disabled) {
+  border-color: rgba(196, 181, 253, 0.52);
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.wiki-review-nav-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.wiki-review-nav-count {
+  min-width: 3.6rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .wiki-review-error {
@@ -53,8 +108,10 @@
 .wiki-review-list {
   overflow: auto;
   display: grid;
+  align-content: start;
   gap: var(--space-sm);
-  padding-right: 2px;
+  padding: 0.2rem 2px 0.2rem 0;
+  min-height: 0;
   scrollbar-width: thin;
 }
 
@@ -67,6 +124,7 @@
     rgba(255, 255, 255, 0.025);
   display: grid;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .wiki-review-card-top {
@@ -204,6 +262,10 @@
     display: grid;
   }
 
+  .wiki-review-header-actions {
+    justify-content: flex-start;
+  }
+
   .wiki-review-diff {
     grid-template-columns: 1fr;
   }
@@ -211,5 +273,9 @@
   .wiki-review-actions,
   .wiki-review-header-actions {
     justify-content: stretch;
+  }
+
+  .wiki-review-nav {
+    margin-right: 0;
   }
 }
