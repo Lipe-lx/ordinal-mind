@@ -162,9 +162,9 @@ export function WikiGraphModal({
       container,
       elements: toCytoscapeElements(filteredPayload),
       layout: buildGraphLayout(),
-      wheelSensitivity: 0.18,
-      minZoom: 0.35,
-      maxZoom: 2.4,
+      wheelSensitivity: 0.8,
+      minZoom: 0.1,
+      maxZoom: 18.0,
       style: buildGraphStylesheet(),
     })
 
@@ -212,6 +212,12 @@ export function WikiGraphModal({
       if (!node) return
       const target = resolveNavigationTarget(node)
       if (target) navigate(target)
+    })
+
+    cy.on("dbltap", (event) => {
+      if (event.target === cy) {
+        fitGraph()
+      }
     })
 
     const initialFocus = filteredPayload.focus_node_id ?? filteredPayload.nodes[0]?.id ?? null
@@ -555,24 +561,8 @@ function buildGraphStylesheet(): cytoscape.StylesheetJson {
         "text-outline-width": 2,
         "shape": "round-rectangle",
         "padding": "10",
-      },
-    },
-    {
-      selector: "node:childless",
-      style: {
         "width": "label",
         "height": "label",
-      },
-    },
-    {
-      selector: ":parent",
-      style: {
-        "background-opacity": 0.12,
-        "border-width": 1,
-        "border-style": "dashed",
-        "padding": "24",
-        "text-valign": "top",
-        "text-margin-y": -10,
       },
     },
     {

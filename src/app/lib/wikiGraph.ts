@@ -135,14 +135,12 @@ export function filterWikiGraphPayload(payload: WikiGraphPayload, filters: WikiG
 
   const visibleNodeIds = new Set(nodes.map((n) => n.id))
 
-  // Detach orphans: if a node's parent is filtered out, set its parent_id to null
-  // so Cytoscape can render it as a top-level node rather than hiding it.
-  const processedNodes = nodes.map((node) => {
-    if (node.parent_id && !visibleNodeIds.has(node.parent_id)) {
-      return { ...node, parent_id: null }
-    }
-    return node
-  })
+  // Flatten hierarchy visually to avoid compound node rendering crashes/bugs.
+  // We rely on edges (has_field, has_claim) to represent the hierarchy in the layout.
+  const processedNodes = nodes.map((node) => ({
+    ...node,
+    parent_id: null,
+  }))
 
   const edges = payload.edges.filter((edge) => {
     if (!allowedStatuses.has(edge.status)) return false
