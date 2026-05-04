@@ -12,7 +12,7 @@ export function BYOKModal({ onClose }: Props) {
   const [config, setConfig] = useState<ByokConfig>(
     KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
   )
-  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity">("llm")
+  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity">("identity")
   const { identity, isLoading: identityLoading, connect, disconnect } = useDiscordIdentity()
 
   function handleProviderChange(e: ChangeEvent<HTMLSelectElement>) {
@@ -79,12 +79,21 @@ export function BYOKModal({ onClose }: Props) {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         >
-          <h2>Bring Your Own Key (BYOK)</h2>
+          <h2>Configuration</h2>
           <p>
             Keys stay in this browser session only. Select your provider and model below.
           </p>
 
           <div className="byok-tabs">
+            <button 
+              className={`byok-tab-btn ${activeTab === "identity" ? "active" : ""}`}
+              onClick={() => setActiveTab("identity")}
+            >
+              Identity
+              {identity && (
+                <span className={`identity-tier-dot tier-${identity.tier}`} />
+              )}
+            </button>
             <button 
               className={`byok-tab-btn ${activeTab === "llm" ? "active" : ""}`}
               onClick={() => setActiveTab("llm")}
@@ -97,20 +106,11 @@ export function BYOKModal({ onClose }: Props) {
             >
               Research Tools
             </button>
-            <button 
-              className={`byok-tab-btn ${activeTab === "identity" ? "active" : ""}`}
-              onClick={() => setActiveTab("identity")}
-            >
-              Identity
-              {identity && (
-                <span className={`identity-tier-dot tier-${identity.tier}`} />
-              )}
-            </button>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginTop: "0.5rem", minHeight: "340px" }}>
             <AnimatePresence mode="wait">
-              {activeTab === "llm" ? (
+              {activeTab === "llm" && (
                 <motion.div 
                   key="llm"
                   initial={{ opacity: 0, y: 10 }}
@@ -161,7 +161,9 @@ export function BYOKModal({ onClose }: Props) {
                     />
                   </div>
                 </motion.div>
-              ) : (
+              )}
+
+              {activeTab === "research" && (
                 <motion.div 
                   key="research"
                   initial={{ opacity: 0, y: 10 }}
@@ -223,9 +225,7 @@ export function BYOKModal({ onClose }: Props) {
                   </div>
                 </motion.div>
               )}
-            </AnimatePresence>
 
-            <AnimatePresence mode="wait">
               {activeTab === "identity" && (
                 <motion.div
                   key="identity"
@@ -263,6 +263,19 @@ export function BYOKModal({ onClose }: Props) {
                         <span className={`identity-tier-badge tier-badge-${identity.tier}`}>
                           {identity.tier.toUpperCase()}
                         </span>
+                        
+                        {identity.badges && identity.badges.length > 0 && (
+                          <div className="identity-badges-list">
+                            {identity.badges.map((badge) => (
+                              <div key={badge} className="identity-badge-item">
+                                <svg className="identity-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                {badge}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <button
                         className="btn btn-ghost identity-disconnect-btn"
@@ -299,22 +312,24 @@ export function BYOKModal({ onClose }: Props) {
             </AnimatePresence>
           </div>
 
-          <div className="byok-actions" style={{ marginTop: "1.5rem" }}>
-            <button className="btn btn-ghost" onClick={handleClear}>
-              Clear
-            </button>
-            <button className="btn btn-ghost" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={handleSave}
-              disabled={!isValid}
-              id="byok-save-btn"
-            >
-              Save
-            </button>
-          </div>
+          {activeTab !== "identity" && (
+            <div className="byok-actions" style={{ marginTop: "1.5rem" }}>
+              <button className="btn btn-ghost" onClick={handleClear}>
+                Clear
+              </button>
+              <button className="btn btn-ghost" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={!isValid}
+                id="byok-save-btn"
+              >
+                Save
+              </button>
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>

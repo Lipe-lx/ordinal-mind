@@ -9,6 +9,7 @@ export interface JWTPayload {
   username: string
   avatar: string | null
   tier: OGTier
+  badges?: string[]  // names of verified servers
   iat: number        // issued at (seconds)
   exp: number        // expires at (seconds)
 }

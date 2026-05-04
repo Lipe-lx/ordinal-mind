@@ -9,6 +9,7 @@ export interface JWTPayload {
   username: string
   avatar: string | null
   tier: OGTier
+  badges?: string[]
   iat: number
   exp: number
 }

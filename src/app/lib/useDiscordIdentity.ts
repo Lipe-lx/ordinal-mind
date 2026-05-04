@@ -16,6 +16,7 @@ export interface DiscordIdentity {
   username: string
   avatar: string | null
   tier: OGTier
+  badges?: string[]
 }
 
 const JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
@@ -64,6 +65,7 @@ function payloadToIdentity(payload: ReturnType<typeof decodeJWTPayload>): Discor
     username: payload.username,
     avatar: payload.avatar,
     tier: payload.tier,
+    badges: payload.badges || [],
   }
 }
 

@@ -227,3 +227,35 @@
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 1; }
 }
+
+/* === Identity Badges === */
+.identity-badges-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  max-width: 300px;
+}
+
+.identity-badge-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.identity-badge-icon {
+  width: 10px;
+  height: 10px;
+  color: #818cf8;
+}

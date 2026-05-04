@@ -8,6 +8,7 @@
 //   genesis   → manual whitelist in KV (score 1.0)
 
 import type { OGTier } from "./jwt"
+import type { DiscordGuild } from "./discord"
 
 export const TIER_SCORES: Record<OGTier, number> = {
   anon: 0.3,
@@ -27,6 +28,34 @@ const DEFAULT_SERVER_CONFIG: ServerConfig = {
   og_servers: [],      // configured via KV: og_server_config
   community_servers: [], // configured via KV: og_server_config
 }
+
+// Curated lists from user
+const VERIFIED_SERVER_IDS = [
+  "987504378242007100", // Muito importante
+  "1131000554005467206", // Muito importante
+  "1304975015942422568",
+  "1375176106096984154",
+  "1298700658769268817", // Importante
+  "1090331629827924020", // Importante
+  "1343702732837748747",
+  "1072872589778755644", // Importante
+  "1321689786116866048", // Importante
+  "1189000124215599164", // Importante
+  "1099100624597033123",
+  "1349373889972539403",
+  "1228725022437277819",
+  "1116728354234695771",
+  "1072650133851869204",
+  "1069807785283428373", // Importante
+  "1069763617861423195", // Importante
+  "891779082063319122",
+  "1072557304668487771",
+  "1115735125494341762",
+  "1088742892354408518",
+  "1121957212181508146",
+  "988901741640687717",
+  "1241112027963986001"
+]
 
 /**
  * Read server config from KV. Falls back to empty lists on error.
@@ -99,4 +128,25 @@ export async function calculateTier(
 
   // 5. Fallback: Discord connected but no recognized server
   return "community"
+}
+
+/**
+ * Calculate badges based on membership in curated servers.
+ * Uses the name of the guild directly from Discord.
+ */
+export async function calculateBadges(
+  guilds: DiscordGuild[],
+  _kv: KVNamespace
+): Promise<string[]> {
+  const verifiedSet = new Set(VERIFIED_SERVER_IDS)
+  const badges: string[] = []
+
+  for (const guild of guilds) {
+    if (verifiedSet.has(guild.id)) {
+      badges.push(guild.name)
+    }
+  }
+
+  // Deduplicate and return
+  return Array.from(new Set(badges))
 }

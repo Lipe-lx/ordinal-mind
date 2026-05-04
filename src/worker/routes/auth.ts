@@ -16,7 +16,7 @@ import {
   fetchDiscordUser,
   generateCodeVerifier,
 } from "../auth/discord"
-import { calculateTier } from "../auth/tierEngine"
+import { calculateTier, calculateBadges } from "../auth/tierEngine"
 
 const PKCE_TTL_SECONDS = 5 * 60 // 5 minutes
 
@@ -158,8 +158,9 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
     const guildIds = guilds.map((g) => g.id)
     console.log(`[Auth] Calculating tier for user: ${user.username} (${user.id})`)
     const tier = await calculateTier(user.id, guildIds, accountCreatedAt, env.CHRONICLES_KV)
+    const badges = await calculateBadges(guilds, env.CHRONICLES_KV)
 
-    console.log(`[Auth] Tier calculated: ${tier}. Upserting user in DB...`)
+    console.log(`[Auth] Tier calculated: ${tier}. Badges: ${badges.join(", ")}. Upserting user in DB...`)
 
     // Upsert user in D1
     if (env.DB) {
@@ -199,6 +200,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
         username: user.username,
         avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
         tier,
+        badges,
       },
       env.JWT_SECRET || ""
     )
@@ -251,6 +253,7 @@ async function handleAuthMe(request: Request, env: Env): Promise<Response> {
       username: payload.username,
       avatar: payload.avatar,
       tier: payload.tier,
+      badges: payload.badges || [],
     },
   })
 }
