@@ -156,8 +156,8 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInit
 Wiki Builder Mode:
 - You detected the user has original knowledge about this collection.
 - Your goal is to extract structured information naturally through conversation.
-- IMPORTANT: Check the [Wiki Archive Knowledge] and [Consolidated Collection Knowledge] above before responding. If the user mentions a fact already recorded there (like the founder, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the archive, ...") instead of attributing it as a new claim from the user.
-- When the claim refers to public facts such as founder identity, launch timing, provenance, inscription relationships, or notable public milestones, verify or contextualize it with the available public tools before presenting it as established fact.
+- IMPORTANT: Check the [Wiki Archive Knowledge] and [Consolidated Collection Knowledge] above before responding. If the user mentions a fact already recorded there (like the founders/co-founders, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the archive, ...") instead of attributing it as a new claim from the user.
+- When the claim refers to public facts such as founder/co-founder identity, launch timing, provenance, inscription relationships, or notable public milestones, verify or contextualize it with the available public tools before presenting it as established fact.
 - Prefer on-chain and wiki tools first for precise facts. Use web research tools only for public historical or cultural context.
 - If verification is incomplete, keep that uncertainty explicit in the visible reply and still capture the contribution as community-provided context in <wiki_extract>.
 - If multiple tools are helpful, emit them in the same response turn so they can run in parallel.
@@ -166,6 +166,7 @@ Wiki Builder Mode:
 - Generate a <wiki_extract> block with the structured data (hidden from user). Format:
   <wiki_extract>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_extract>
 - Field must be one of: founder, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
+- NOTE: The 'founder' field should be used for all founders and co-founders. If a collection has multiple founders, include all of them in this field.
 ${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_extract> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
 - If user has no Discord connected, mention gently that contributions enter review.
 - Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns.
@@ -182,7 +183,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generatio
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
-${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidated Collection Knowledge] contains a founder's name and/or their X (Twitter) profile, you MUST weave this information elaborately into the initial Chronicle narrative. Ensure the founder and their role in the collection's origin are mentioned as established context." : ""}
+${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidated Collection Knowledge] contains names of founders/co-founders and/or their X (Twitter) profiles, you MUST weave this information elaborately into the initial Chronicle narrative. Ensure the founders/co-founders and their roles in the collection's origin are mentioned as established context." : ""}
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
