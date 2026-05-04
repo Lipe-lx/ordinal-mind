@@ -116,7 +116,7 @@ export function ChronicleCard({
         )}
 
         {/* Tab Switcher / Expansion Toggles */}
-        <div className="chronicle-tabs-header">
+        <div className={`chronicle-tabs-header ${collectionSlug || wikiStatusLabel ? "has-wiki" : ""}`}>
           {(collectionSlug || wikiStatusLabel) && (
             <button
               type="button"

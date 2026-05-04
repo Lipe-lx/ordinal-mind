@@ -8,6 +8,13 @@
   margin-bottom: var(--space-md);
   padding: 0 var(--space-md);
   flex-shrink: 0;
+  gap: var(--space-md);
+}
+
+.chronicle-tabs-header.has-wiki {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr);
+  justify-content: stretch;
 }
 
 .chronicle-wiki-trigger {
@@ -33,11 +40,27 @@
   white-space: nowrap;
 }
 
+.has-wiki .chronicle-wiki-trigger {
+  position: static;
+  transform: none;
+  grid-column: 1;
+  justify-self: start;
+  max-width: 180px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.1;
+  padding: 4px 10px;
+}
+
 .chronicle-wiki-trigger:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.06);
   transform: translateY(-50%) translateX(2px);
+}
+
+.has-wiki .chronicle-wiki-trigger:hover {
+  transform: translateX(2px);
 }
 
 .wiki-status-dot {
@@ -64,11 +87,21 @@
   transition: all var(--duration-normal) var(--ease-smooth);
 }
 
+.has-wiki .chronicle-tabs {
+  grid-column: 2;
+  flex: 0 0 auto;
+}
+
 .layout-mode-split .chronicle-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
   width: 100%;
+}
+
+.has-wiki .layout-mode-split .chronicle-tabs {
+  width: auto;
+  min-width: 320px;
 }
 
 .chronicle-tab {
@@ -158,11 +191,21 @@
     padding: var(--space-xs) var(--space-sm);
   }
 
+  .chronicle-tabs-header.has-wiki {
+    grid-template-columns: minmax(80px, 1fr) auto minmax(80px, 1fr);
+    gap: var(--space-xs);
+  }
+
   .chronicle-wiki-trigger {
     padding: 4px 8px;
     font-size: 0.6rem;
     left: var(--space-xs);
     letter-spacing: 0.05em;
+  }
+
+  .has-wiki .chronicle-wiki-trigger {
+    max-width: 100px;
+    padding: 2px 6px;
   }
 }
 
