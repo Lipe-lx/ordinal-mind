@@ -48,7 +48,6 @@ export function NarrativeChatRenderer({
   streamingThought,
   phase,
   elapsed,
-  providerName,
   modelName,
   inputMode,
   wikiStatusError,
@@ -277,10 +276,21 @@ export function NarrativeChatRenderer({
         )}
       </div>
 
-      {(researchLogs.length > 0 || phase === "researching") && (
+      {(researchLogs.length > 0 || phase === "researching" || wikiActivity) && (
         <details className="narrative-chat-logs" open={showLogs} onToggle={(e) => setShowLogs((e.currentTarget as HTMLDetailsElement).open)}>
-          <summary>Research Activity ({researchLogs.length})</summary>
+          <summary>Activity ({researchLogs.length + (wikiActivity ? 1 : 0)})</summary>
           <div className="narrative-research-logs">
+            {wikiActivity && (
+              <div className={`narrative-log-item wiki-activity state-${wikiActivity.state}`}>
+                <div className="narrative-log-row">
+                  <span className="narrative-log-status">
+                    <span className="narrative-chat-status-dot" aria-hidden="true" />
+                  </span>
+                  <span className="narrative-log-tool">Portal</span>
+                  <span className="narrative-log-args">{wikiActivity.label}</span>
+                </div>
+              </div>
+            )}
             {researchLogs.length > 0 ? researchLogs.map((log) => (
               <div key={log.id} className={`narrative-log-item ${log.status}`}>
                 <div className="narrative-log-row">
@@ -291,7 +301,7 @@ export function NarrativeChatRenderer({
                   <span className="narrative-log-args">{String(log.args.query || log.args.question || log.args.keyword || JSON.stringify(log.args))}</span>
                 </div>
               </div>
-            )) : (
+            )) : !wikiActivity && (
               <div className="narrative-log-item running">
                 <div className="narrative-log-row">
                   <span className="narrative-log-status">🤔</span>
@@ -302,13 +312,6 @@ export function NarrativeChatRenderer({
             )}
           </div>
         </details>
-      )}
-
-      {wikiActivity && (
-        <p className={`narrative-chat-status is-${wikiActivity.state}`} role="status" aria-live="polite">
-          <span className="narrative-chat-status-dot" aria-hidden="true" />
-          <span>{wikiActivity.label}</span>
-        </p>
       )}
 
       {(error || inputError || localInputError) && (
@@ -345,7 +348,7 @@ export function NarrativeChatRenderer({
         />
         <div className="narrative-chat-footer">
           <div className="narrative-chat-meta">
-            {providerName && modelName && <span className="model-badge">{providerName} · {modelName}</span>}
+            {modelName && <span className="model-badge">{modelName}</span>}
             {inputMode && inputMode !== "text-only" && <span>attachments + context</span>}
             {elapsed >= 10 && <span>{elapsed}s</span>}
           </div>
