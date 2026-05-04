@@ -157,7 +157,7 @@ describe("resolveDirectFactAnswer", () => {
 
     expect(result.handled).toBe(true)
     expect(result.reason).toBe("collection_size_from_wiki_tool")
-    expect(result.envelope?.answer).toContain("112,383")
+    expect(result.envelope?.answer).toContain("112.383")
     expect(result.envelope?.used_tools).toEqual(["get_collection_context"])
   })
 
@@ -198,5 +198,17 @@ describe("resolveDirectFactAnswer", () => {
     })
 
     expect(result.handled).toBe(false)
+  })
+
+  it("answers in Spanish for direct factual prompts in Spanish", async () => {
+    const result = await resolveDirectFactAnswer({
+      prompt: "¿Quién es el owner actual de esta inscripción?",
+      chronicle: baseChronicle,
+    })
+
+    expect(result.handled).toBe(true)
+    expect(result.reason).toBe("current_owner_from_chronicle")
+    expect(result.envelope?.answer).toContain("El owner actual")
+    expect(result.envelope?.evidence).toContain("esta inscripción")
   })
 })

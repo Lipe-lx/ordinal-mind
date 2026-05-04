@@ -173,12 +173,12 @@ function stripXmlThinkingTags(raw: string): string {
 
 function cleanFinalAnswerLabel(text: string): string {
   return text
-    .replace(/^\s*(?:Final\s+Answer|Answer)\s*:\s*/i, "")
+    .replace(/^\s*(?:Final\s+Answer|Answer|Resposta\s+final|Resposta)\s*:\s*/i, "")
     .trim()
 }
 
 function extractLabeledFinalAnswer(text: string): string | null {
-  const labelPattern = /(?:^|\n)\s*(?:Final\s+Answer|Answer)\s*:\s*/i
+  const labelPattern = /(?:^|\n)\s*(?:Final\s+Answer|Answer|Resposta\s+final|Resposta)\s*:\s*/i
   const match = labelPattern.exec(text)
   if (!match) return null
 
@@ -192,7 +192,7 @@ function extractInlineDataCheckAnswer(text: string): string | null {
   for (const line of lines) {
     if (!isInlineDataCheckLine(line)) continue
 
-    const match = line.match(/\?\s*((?:No|Yes)\.?\s+[\s\S]+)$/i)
+    const match = line.match(/\?\s*((?:No|Yes|Não|Nao|Sim)\.?\s+[\s\S]+)$/i)
     if (match?.[1]) {
       return cleanFinalAnswerLabel(match[1])
     }
@@ -204,6 +204,85 @@ function extractInlineDataCheckAnswer(text: string): string | null {
 function isInlineDataCheckLine(line: string): boolean {
   return /\b(data|dados|provided|fornecid[oa]s|specif(?:y|ies)|especifica|source data|current data|dados atuais)\b/i.test(line)
 }
+
+function extractStructuredSupplyAnswer(text: string): string | null {
+  if (!/\b(?:User Question|Target Entity|Collection Name|Supply)\s*:/i.test(text)) return null
+
+  const fields = new Map<string, string>()
+  let supplySource = ""
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim().replace(/^["“”]+|["“”]+$/g, "")
+    const match = line.match(/^([A-Za-z ]+?)(?:\s*\(([^)]+)\))?:\s*(.+)$/)
+    if (!match) continue
+
+    const key = match[1].trim().toLowerCase()
+    const source = match[2]?.trim() ?? ""
+    const value = match[3].trim().replace(/^["“”]+|["“”]+$/g, "")
+    fields.set(key, value)
+    if (key === "supply") supplySource = source
+  }
+
+  const rawSupply = fields.get("supply")
+  if (!rawSupply) return null
+
+  const supply = normalizeSupply(rawSupply)
+  const collection = normalizeEntityName(
+    fields.get("collection name") ?? fields.get("target entity") ?? "Runestone"
+  )
+  const language = fields.get("language") ?? ""
+  const userQuestion = fields.get("user question") ?? ""
+  const distribution = fields.get("distribution design")
+  const sourceSuffix = supplySource ? ` na ${supplySource}` : ""
+
+  if (isPortugueseText(`${language} ${userQuestion}`)) {
+    const distributionCount = distribution?.match(/\b\d{1,3}(?:,\d{3})+\b/)?.[0]
+    const distributionSentence = distributionCount
+      ? ` O desenho de distribuição menciona airdrop para ${distributionCount} wallets.`
+      : ""
+
+    return `A coleção ${collection} aparece com supply de ${supply}${sourceSuffix}.${distributionSentence}`.trim()
+  }
+
+  return `The ${collection} collection is listed with a supply of ${supply}${sourceSuffix}.`
+}
+
+function extractJsonEnvelopeAnswer(text: string): string | null {
+  const candidate = text.trim()
+  if (!candidate.startsWith("{")) return null
+
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>
+    const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : ""
+    if (!answer) return null
+
+    const evidence = typeof parsed.evidence === "string" ? parsed.evidence.trim() : ""
+    const uncertainty = typeof parsed.uncertainty === "string" ? parsed.uncertainty.trim() : ""
+
+    return [answer, evidence, uncertainty].filter(Boolean).join(" ").trim()
+  } catch {
+    return null
+  }
+}
+
+function normalizeSupply(value: string): string {
+  return value
+    .replace(/\s*\(specifically\s+["“”]?supply\s+[^)"“”]+["“”]?\)/i, "")
+    .replace(/^supply\s+/i, "")
+    .trim()
+}
+
+function normalizeEntityName(value: string): string {
+  return value
+    .replace(/^The\s+/i, "")
+    .replace(/\s+collection\.?$/i, "")
+    .trim()
+}
+
+function isPortugueseText(value: string): boolean {
+  return /\b(portuguese|portugu[eê]s|quant[ao]s?|existem|runas?)\b/i.test(value)
+}
+
 /**
  * Extracts the final narrative block from text that may contain
  * multiple draft iterations. If multiple narrative blocks exist,
@@ -301,6 +380,11 @@ export function sanitizeNarrative(raw: string): string {
 
   // Layer 1: Strip XML thinking tags
   text = stripXmlThinkingTags(text)
+
+  const jsonEnvelopeAnswer = extractJsonEnvelopeAnswer(text)
+  if (jsonEnvelopeAnswer) {
+    return jsonEnvelopeAnswer
+  }
 
   const inlineDataCheckAnswer = extractInlineDataCheckAnswer(text)
   if (inlineDataCheckAnswer) {

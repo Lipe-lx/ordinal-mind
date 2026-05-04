@@ -19,7 +19,7 @@ export function buildSystemPrompt(availableTools: SearchToolDefinition[] = []): 
 Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
 
 Rules:
-- Write in the same language used by the user in their latest messages. Default to English if unclear.
+- Determine the response language from the latest user message only. Do not inherit the answer language from earlier turns. Default to English (United States) if the latest user message is ambiguous.
 - Tone: objective, vivid, and historically aware. Avoid hype copy.
 - Maximum 5 short paragraphs.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
@@ -43,10 +43,10 @@ The final user-facing Chronicle narrative or answer.
 
 Everything outside the <final_answer> tags will be filtered out and never seen by the user.
 
-### MANDATORY FINAL RULE
-- Before responding with ANY number, calculated result, total supply, quote, or numerical conclusion, you MUST have called a tool from the list below to obtain that value.
-- Mental calculation, estimation, or extrapolation of data not provided is STRICTLY PROHIBITED.
-- If data is missing or incomplete after research, state the uncertainty explicitly instead of inventing values.`
+### FINAL NUMERIC RULE
+- Before giving ANY number, calculated result, total supply, price, or numeric conclusion, you MUST call a relevant tool from the available list to obtain that value.
+- Mental math, guessing, or extrapolating beyond the provided or tool-fetched data is strictly prohibited.
+- If the required data is missing or incomplete after research, state the uncertainty explicitly instead of inventing values.`
 
   if (!supportsTools) return baseRules
 
@@ -152,7 +152,7 @@ ${wikiCompletenessInfo ? `\nConsolidated Wiki Context:\n${wikiCompletenessInfo}\
 - Field must be one of: founder, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
 - Always validate: "You're saying X, correct? That's valuable context for this collection's chronicle."
 - If user has no Discord connected, mention gently that contributions enter review.
-- Answer in the same language as the latest user message.
+- Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns.
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
@@ -162,7 +162,7 @@ ${wikiCompletenessInfo ? `\nConsolidated Wiki Context:\n${wikiCompletenessInfo}\
   if (mode === "narrative") {
     return `Response policy:
 - Provide a concise collector-grade Chronicle narrative (max 5 short paragraphs).
-${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generation. You MUST write the final narrative strictly in English, regardless of any past chat history." : "- CRITICAL LANGUAGE RULE: Respond in the exact same language as the user's latest message."}
+${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generation. You MUST write the final narrative strictly in English (United States), regardless of any past chat history." : "- CRITICAL LANGUAGE RULE: Respond in the exact language of the latest user message only. Do not inherit answer language from earlier turns."}
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
@@ -179,7 +179,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generatio
 
   return `Response policy:
 ${intentSpecific}
-${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in English." : "- Answer in the same language as the latest user message."}
+${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in English (United States)." : "- Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns."}
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
@@ -196,7 +196,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in E
 - Never repeat a tool call with the same arguments unless the earlier result explicitly says partial, missing, or errored.
 - For transfer/sale questions, prefer a single get_raw_events call that includes all required event_types, such as ["transfer","sale"], instead of separate calls for each type.
 - If you need both the compact history and the raw rows, call get_timeline and get_raw_events together in the same turn.
-- CRITICAL RULE: Never invent supply numbers, mint dates, or sales volumes. If the tool fails to bring the exact data, state that the information was not found in public records.`
+- CRITICAL FACT RULE: Never invent supply numbers, mint dates, or sale volumes. If a tool fails to return the exact value, say the information was not found in the available public records.`
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {

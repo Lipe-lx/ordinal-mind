@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildChatTurnPrompt } from "../../src/app/lib/byok/prompt"
+import { buildChatTurnPrompt, buildSystemPrompt } from "../../src/app/lib/byok/prompt"
 import type { ChatMessage } from "../../src/app/lib/byok/chatTypes"
 import type { Chronicle } from "../../src/app/lib/types"
 
@@ -92,7 +92,7 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("Assistant: One genesis and no transfer yet.")
     expect(prompt).toContain("Latest user message")
     expect(prompt).toContain("Any uncertainty?")
-    expect(prompt).toContain("Answer in the same language as the latest user message.")
+    expect(prompt).toContain("Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns.")
     expect(prompt).toContain("between these exact tags: <final_answer> and </final_answer>")
     expect(prompt).toContain("complete sentences")
     expect(prompt).toContain("Use <thought> tags for internal reasoning")
@@ -115,5 +115,14 @@ describe("buildChatTurnPrompt", () => {
     expect(prompt).toContain("reinterpret the previous factual question")
     expect(prompt).toContain("If the parent mint date is not present")
     expect(prompt).toContain("falo da parent")
+  })
+
+  it("keeps the system prompt in English and defaults to en-US without naming other languages", () => {
+    const prompt = buildSystemPrompt()
+
+    expect(prompt).toContain("Default to English (United States) if the latest user message is ambiguous.")
+    expect(prompt).toContain("Determine the response language from the latest user message only.")
+    expect(prompt).not.toMatch(/portuguese/i)
+    expect(prompt).not.toMatch(/REGRA/i)
   })
 })

@@ -1,4 +1,5 @@
 import type { ChatIntent, ChatIntentDecision, ChatResponseMode } from "./chatIntentRouter"
+import { detectUserLocale, selectLocalized } from "./language"
 
 export const CHAT_INTENT_ROUTER_V1 = true
 
@@ -21,32 +22,69 @@ export interface PolicyOutcome {
   responseText?: string
 }
 
-export function resolvePolicyResponse(intent: ChatIntent, _input: string): PolicyOutcome {
+export function resolvePolicyResponse(intent: ChatIntent, input: string): PolicyOutcome {
+  const locale = detectUserLocale(input)
+
   switch (intent) {
     case "greeting":
       return {
         handledLocally: true,
-        responseText: "Hi. I can help with this Chronicle, whether you want a short overview or a specific answer about provenance, transfers, parent links, or collection context.",
+        responseText: selectLocalized(locale, {
+          "en-US": "Hi. I can help with this Chronicle, whether you want a short overview or a specific answer about provenance, transfers, parent links, or collection context.",
+          "pt-BR": "Oi. Posso ajudar com esta Chronicle, seja com uma visão rápida ou com uma resposta específica sobre proveniência, transferências, parent links ou contexto da coleção.",
+          "es-ES": "Hola. Puedo ayudarte con esta Chronicle, ya sea con un resumen breve o con una respuesta específica sobre procedencia, transferencias, parent links o contexto de la colección.",
+          "fr-FR": "Bonjour. Je peux vous aider avec cette Chronicle, soit avec un bref aperçu, soit avec une réponse précise sur la provenance, les transferts, les parent links ou le contexte de la collection.",
+          "de-DE": "Hallo. Ich kann bei dieser Chronicle helfen, entweder mit einem kurzen Überblick oder mit einer konkreten Antwort zu Herkunft, Transfers, Parent-Links oder Sammlungskontext.",
+          "it-IT": "Ciao. Posso aiutarti con questa Chronicle, sia con una panoramica breve sia con una risposta specifica su provenienza, trasferimenti, parent links o contesto della collezione.",
+        }),
       }
     case "smalltalk_social":
       return {
         handledLocally: true,
-        responseText: "All good here. I can stay focused on this inscription and help with its current owner, recent transfers, parent links, or unresolved details.",
+        responseText: selectLocalized(locale, {
+          "en-US": "All good here. I can stay focused on this inscription and help with its current owner, recent transfers, parent links, or unresolved details.",
+          "pt-BR": "Tudo certo por aqui. Posso manter o foco nesta inscrição e ajudar com o owner atual, transferências recentes, parent links ou detalhes ainda em aberto.",
+          "es-ES": "Todo bien por aquí. Puedo mantener el foco en esta inscripción y ayudarte con el owner actual, las transferencias recientes, los parent links o los detalles aún no resueltos.",
+          "fr-FR": "Tout va bien ici. Je peux rester concentré sur cette inscription et vous aider avec le propriétaire actuel, les transferts récents, les parent links ou les points encore non résolus.",
+          "de-DE": "Alles gut hier. Ich kann bei dieser Inschrift bleiben und mit aktuellem Eigentümer, jüngsten Transfers, Parent-Links oder offenen Details helfen.",
+          "it-IT": "Tutto bene qui. Posso restare concentrato su questa iscrizione e aiutarti con l'owner attuale, i trasferimenti recenti, i parent links o i dettagli ancora irrisolti.",
+        }),
       }
     case "acknowledgement":
       return {
         handledLocally: true,
-        responseText: "Got it. Ask the next question about this inscription and I will answer from the available Chronicle data.",
+        responseText: selectLocalized(locale, {
+          "en-US": "Got it. Ask the next question about this inscription and I will answer from the available Chronicle data.",
+          "pt-BR": "Entendi. Faça a próxima pergunta sobre esta inscrição e eu respondo com base nos dados disponíveis no Chronicle.",
+          "es-ES": "Entendido. Haz la siguiente pregunta sobre esta inscripción y responderé con base en los datos disponibles del Chronicle.",
+          "fr-FR": "Compris. Posez la prochaine question sur cette inscription et je répondrai à partir des données disponibles dans la Chronicle.",
+          "de-DE": "Verstanden. Stell die nächste Frage zu dieser Inschrift, und ich antworte auf Basis der verfügbaren Chronicle-Daten.",
+          "it-IT": "Capito. Fai la prossima domanda su questa iscrizione e risponderò in base ai dati disponibili nel Chronicle.",
+        }),
       }
     case "clarification_request":
       return {
         handledLocally: true,
-        responseText: "I can explain. Tell me which part you mean: overview, on-chain provenance, parent links, transfer history, or collection signals.",
+        responseText: selectLocalized(locale, {
+          "en-US": "I can explain. Tell me which part you mean: overview, on-chain provenance, parent links, transfer history, or collection signals.",
+          "pt-BR": "Posso explicar. Diga a qual parte você se refere: visão geral, proveniência on-chain, parent links, histórico de transferências ou sinais da coleção.",
+          "es-ES": "Puedo explicarlo. Dime a qué parte te refieres: visión general, procedencia on-chain, parent links, historial de transferencias o señales de la colección.",
+          "fr-FR": "Je peux expliquer. Dites-moi quelle partie vous voulez: vue d'ensemble, provenance on-chain, parent links, historique des transferts ou signaux de collection.",
+          "de-DE": "Ich kann es erklären. Sag mir, welchen Teil du meinst: Überblick, On-Chain-Herkunft, Parent-Links, Transferhistorie oder Sammlungssignale.",
+          "it-IT": "Posso spiegare. Dimmi quale parte intendi: panoramica, provenienza on-chain, parent links, storico dei trasferimenti o segnali della collezione.",
+        }),
       }
     case "offtopic_safe":
       return {
         handledLocally: true,
-        responseText: "I should stay focused on this inscription's Chronicle. I can answer about provenance, current owner, transfers, parent links, or collection context.",
+        responseText: selectLocalized(locale, {
+          "en-US": "I should stay focused on this inscription's Chronicle. I can answer about provenance, current owner, transfers, parent links, or collection context.",
+          "pt-BR": "Devo manter o foco na Chronicle desta inscrição. Posso responder sobre proveniência, owner atual, transferências, parent links ou contexto da coleção.",
+          "es-ES": "Debo mantener el foco en la Chronicle de esta inscripción. Puedo responder sobre procedencia, owner actual, transferencias, parent links o contexto de la colección.",
+          "fr-FR": "Je dois rester concentré sur la Chronicle de cette inscription. Je peux répondre sur la provenance, le propriétaire actuel, les transferts, les parent links ou le contexte de la collection.",
+          "de-DE": "Ich sollte bei der Chronicle dieser Inschrift bleiben. Ich kann zu Herkunft, aktuellem Eigentümer, Transfers, Parent-Links oder Sammlungskontext antworten.",
+          "it-IT": "Devo restare concentrato sulla Chronicle di questa iscrizione. Posso rispondere su provenienza, owner attuale, trasferimenti, parent links o contesto della collezione.",
+        }),
       }
     case "knowledge_contribution":
       // Handled by LLM via prompt mode (Wiki Builder Mode)

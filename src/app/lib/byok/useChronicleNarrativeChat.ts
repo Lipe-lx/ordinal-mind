@@ -32,6 +32,7 @@ import { formatChatAnswerEnvelope, toChatAnswerEnvelope } from "./responseContra
 import { resolveChatToolPolicy } from "./toolPolicy"
 import { fetchConsolidated, formatConsolidatedForPrompt } from "./wikiCompleteness"
 import { parseWikiExtract, hasWikiExtract } from "./wikiExtractor"
+import { detectUserLocale, selectLocalized } from "./language"
 
 export type SynthesisPhase =
   | "idle"
@@ -63,14 +64,16 @@ function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((message) => keepTurnIds.has(message.turnId))
 }
 
-function detectNonEnglishPrompt(prompt: string): boolean {
-  return /\b(que|quando|quem|como|cole[cç][aã]o|wiki|inscri[cç][aã]o|fundador|criador|comunidade|hist[oó]ria|lan[cç]ou|mintou)\b/iu.test(prompt)
-}
-
 function buildKnowledgeContributionFallback(prompt: string): string {
-  return detectNonEnglishPrompt(prompt)
-    ? "Entendi. Vou tratar isso como uma contribuição da comunidade para a wiki, mantendo a validação factual separada do relato enviado no chat."
-    : "Understood. I'll treat that as a community wiki contribution while keeping factual verification separate from the claim shared in chat."
+  const locale = detectUserLocale(prompt)
+  return selectLocalized(locale, {
+    "en-US": "Understood. I'll treat that as a community wiki contribution while keeping factual verification separate from the claim shared in chat.",
+    "pt-BR": "Entendi. Vou tratar isso como uma contribuição da comunidade para a wiki, mantendo a validação factual separada do relato enviado no chat.",
+    "es-ES": "Entendido. Trataré eso como una contribución de la comunidad para la wiki, manteniendo la verificación factual separada de lo compartido en el chat.",
+    "fr-FR": "Compris. Je traiterai cela comme une contribution communautaire à la wiki, tout en gardant la vérification factuelle séparée de ce qui a été partagé dans le chat.",
+    "de-DE": "Verstanden. Ich behandle das als Community-Beitrag für das Wiki und halte die Faktenprüfung getrennt von der im Chat geteilten Behauptung.",
+    "it-IT": "Capito. Tratterò questo come un contributo della community alla wiki, mantenendo la verifica fattuale separata da quanto condiviso nella chat.",
+  })
 }
 
 export function resolveAssistantDisplayText(params: {

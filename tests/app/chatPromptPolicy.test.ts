@@ -8,6 +8,12 @@ describe("chat policy responses", () => {
     expect(outcome.responseText?.length).toBeGreaterThan(20)
   })
 
+  it("localizes local greeting responses using the latest user message language", () => {
+    const outcome = resolvePolicyResponse("greeting", "¿Hola, puedes ayudarme?")
+    expect(outcome.handledLocally).toBe(true)
+    expect(outcome.responseText).toContain("Hola")
+  })
+
   it("does not short-circuit factual query", () => {
     const outcome = resolvePolicyResponse("chronicle_query", "Quem é o owner?")
     expect(outcome.handledLocally).toBe(false)

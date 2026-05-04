@@ -24,6 +24,17 @@ describe("useChronicleNarrativeChat display fallback", () => {
     expect(result).toContain("contribuição da comunidade para a wiki")
   })
 
+  it("localizes the wiki contribution fallback beyond Portuguese and English", () => {
+    const result = resolveAssistantDisplayText({
+      cleanText: "",
+      intent: "knowledge_contribution",
+      hasExtractedWiki: true,
+      prompt: "¿El fundador de esta colección fue Casey Rodarmor?",
+    })
+
+    expect(result).toContain("contribución de la comunidad")
+  })
+
   it("does not fall back to raw text for non-contribution turns", () => {
     const result = resolveAssistantDisplayText({
       cleanText: "",
