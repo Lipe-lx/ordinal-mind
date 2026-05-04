@@ -151,7 +151,7 @@
 .wiki-graph-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 2.15fr) minmax(220px, 0.48fr);
+  grid-template-columns: 1fr;
   gap: 0.75rem;
 }
 

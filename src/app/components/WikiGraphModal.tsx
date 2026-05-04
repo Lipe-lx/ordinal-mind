@@ -6,8 +6,6 @@ import cytoscape from "cytoscape"
 import cytoscapeElk from "cytoscape-elk"
 import type { WikiGraphNode } from "../lib/types"
 import {
-  buildEdgeInspector,
-  buildNodeInspector,
   createDefaultWikiGraphFilters,
   fetchWikiGraph,
   filterWikiGraphPayload,
@@ -17,7 +15,6 @@ import {
   WIKI_GRAPH_NODE_KINDS,
   WIKI_GRAPH_STATUSES,
   type WikiGraphFilters,
-  type WikiGraphInspectorData,
 } from "../lib/wikiGraph"
 import "../styles/features/wiki/wiki-graph.css"
 
@@ -31,10 +28,6 @@ interface Props {
   onClose: () => void
 }
 
-type Selection =
-  | { type: "node"; id: string }
-  | { type: "edge"; id: string }
-  | null
 
 export function WikiGraphModal({
   open,
@@ -52,14 +45,12 @@ export function WikiGraphModal({
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<WikiGraphFilters>(createDefaultWikiGraphFilters)
   const [payload, setPayload] = useState<Awaited<ReturnType<typeof fetchWikiGraph>>>(null)
-  const [selection, setSelection] = useState<Selection>(null)
   const [prevOpen, setPrevOpen] = useState(open)
   const deferredSearch = useDeferredValue(filters.search)
 
   if (open && !prevOpen) {
     setPrevOpen(true)
     setFilters(createDefaultWikiGraphFilters())
-    setSelection(null)
     setPayload(null)
     if (!collectionSlug) {
       setError("No collection wiki context is available for this inscription yet.")
@@ -134,24 +125,6 @@ export function WikiGraphModal({
     })
   }, [payload, filters, deferredSearch])
 
-  const selectedNode = useMemo(() => {
-    if (!filteredPayload || selection?.type !== "node") return null
-    return filteredPayload.nodes.find((node) => node.id === selection.id) ?? null
-  }, [filteredPayload, selection])
-
-  const selectedEdge = useMemo(() => {
-    if (!filteredPayload || selection?.type !== "edge") return null
-    return filteredPayload.edges.find((edge) => edge.id === selection.id) ?? null
-  }, [filteredPayload, selection])
-
-  const fallbackNode = useMemo(() => {
-    if (!filteredPayload) return null
-    const focus = filteredPayload.focus_node_id
-    if (focus) {
-      return filteredPayload.nodes.find((node) => node.id === focus) ?? filteredPayload.nodes[0] ?? null
-    }
-    return filteredPayload.nodes[0] ?? null
-  }, [filteredPayload])
 
 
   useEffect(() => {
@@ -199,13 +172,6 @@ export function WikiGraphModal({
       clearHover()
     })
 
-    cy.on("tap", "node", (event) => {
-      setSelection({ type: "node", id: event.target.id() })
-    })
-
-    cy.on("tap", "edge", (event) => {
-      setSelection({ type: "edge", id: event.target.id() })
-    })
 
     cy.on("dbltap", "node", (event) => {
       const node = filteredPayload.nodes.find((item) => item.id === event.target.id())
@@ -225,7 +191,6 @@ export function WikiGraphModal({
       const focusNode = cy.getElementById(initialFocus)
       if (focusNode.length) {
         focusNode.select()
-        setSelection({ type: "node", id: initialFocus })
       }
     }
 
@@ -249,16 +214,6 @@ export function WikiGraphModal({
     }
   }, [filteredPayload, navigate])
 
-  const inspector = selectedNode
-    ? buildNodeInspector(selectedNode)
-    : selectedEdge
-      ? buildEdgeInspector(selectedEdge)
-      : fallbackNode
-        ? buildNodeInspector(fallbackNode)
-        : null
-  const compactInspector = inspector ? trimInspectorData(inspector) : null
-
-  const inspectorTarget = selectedNode ?? fallbackNode
   const visibleWarnings = filteredPayload?.warnings.slice(0, 2) ?? []
 
   const content = (
@@ -424,53 +379,6 @@ export function WikiGraphModal({
                 )}
               </section>
 
-              <aside className="wiki-graph-inspector">
-                {compactInspector ? (
-                  <div className="wiki-graph-inspector-card">
-                    <div className="wiki-graph-inspector-top">
-                      <div>
-                        <h4>{compactInspector.title}</h4>
-                        <p>{compactInspector.subtitle}</p>
-                      </div>
-                      {inspectorTarget && (
-                        <span className={`wiki-graph-node-pill status-${inspectorTarget.status}`}>
-                          {formatStatusLabel(inspectorTarget.status)}
-                        </span>
-                      )}
-                    </div>
-
-                    {compactInspector.description && <p className="wiki-graph-inspector-description">{compactInspector.description}</p>}
-
-                    {compactInspector.details.length > 0 && (
-                      <dl className="wiki-graph-inspector-details">
-                        {compactInspector.details.map((detail) => (
-                          <div key={`${detail.label}:${detail.value}`} className="wiki-graph-inspector-row">
-                            <dt>{detail.label}</dt>
-                            <dd>{detail.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
-
-                    {inspectorTarget && resolveNavigationTarget(inspectorTarget) && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          const target = resolveNavigationTarget(inspectorTarget)
-                          if (target) navigate(target)
-                        }}
-                      >
-                        Open
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="wiki-graph-inspector-card is-empty">
-                    <p>Select a node.</p>
-                  </div>
-                )}
-              </aside>
             </div>
           </motion.div>
         </motion.div>
@@ -508,18 +416,6 @@ function resolveNavigationTarget(node: WikiGraphNode): string | null {
   return null
 }
 
-function trimInspectorData(data: WikiGraphInspectorData): WikiGraphInspectorData {
-  return {
-    ...data,
-    description: data.description ? truncateText(data.description, 140) : null,
-    details: data.details.slice(0, 4),
-  }
-}
-
-function truncateText(value: string, max: number): string {
-  if (value.length <= max) return value
-  return `${value.slice(0, max - 1)}…`
-}
 
 function buildGraphLayout(): cytoscape.LayoutOptions {
   return {
