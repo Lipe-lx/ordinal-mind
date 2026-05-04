@@ -114,8 +114,17 @@ export function toCytoscapeElements(payload: WikiGraphPayload): CytoscapeElement
 
 export function filterWikiGraphPayload(payload: WikiGraphPayload, filters: WikiGraphFilters): WikiGraphPayload {
   const search = filters.search.trim().toLowerCase()
-  const allowedKinds = new Set(filters.nodeKinds)
-  const allowedStatuses = new Set(filters.statuses)
+  const normalizedKinds = Array.from(new Set(filters.nodeKinds))
+  const normalizedStatuses = Array.from(new Set(filters.statuses))
+  const allowedKinds = new Set(normalizedKinds)
+  const allowedStatuses = new Set(normalizedStatuses)
+
+  const isFullKindSet = normalizedKinds.length === WIKI_GRAPH_NODE_KINDS.length
+  const isFullStatusSet = normalizedStatuses.length === WIKI_GRAPH_STATUSES.length
+
+  if (!search && isFullKindSet && isFullStatusSet) {
+    return payload
+  }
 
   const nodes = payload.nodes.filter((node) => {
     if (!allowedKinds.has(node.kind)) return false
@@ -124,7 +133,17 @@ export function filterWikiGraphPayload(payload: WikiGraphPayload, filters: WikiG
     return matchesSearch(node, search)
   })
 
-  const visibleNodeIds = new Set(nodes.map((node) => node.id))
+  const visibleNodeIds = new Set(nodes.map((n) => n.id))
+
+  // Detach orphans: if a node's parent is filtered out, set its parent_id to null
+  // so Cytoscape can render it as a top-level node rather than hiding it.
+  const processedNodes = nodes.map((node) => {
+    if (node.parent_id && !visibleNodeIds.has(node.parent_id)) {
+      return { ...node, parent_id: null }
+    }
+    return node
+  })
+
   const edges = payload.edges.filter((edge) => {
     if (!allowedStatuses.has(edge.status)) return false
     return visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
@@ -132,21 +151,21 @@ export function filterWikiGraphPayload(payload: WikiGraphPayload, filters: WikiG
 
   const filteredFocus = payload.focus_node_id && visibleNodeIds.has(payload.focus_node_id)
     ? payload.focus_node_id
-    : nodes[0]?.id ?? null
+    : processedNodes[0]?.id ?? null
 
   return {
     ...payload,
     focus_node_id: filteredFocus,
-    nodes,
+    nodes: processedNodes,
     edges,
     counts: {
-      nodes: nodes.length,
+      nodes: processedNodes.length,
       edges: edges.length,
-      fields: nodes.filter((node) => node.kind === "field").length,
-      claims: nodes.filter((node) => node.kind === "claim").length,
-      wiki_pages: nodes.filter((node) => node.kind === "wiki_page").length,
-      source_events: nodes.filter((node) => node.kind === "source_event").length,
-      external_refs: nodes.filter((node) => node.kind === "external_ref").length,
+      fields: processedNodes.filter((node) => node.kind === "field").length,
+      claims: processedNodes.filter((node) => node.kind === "claim").length,
+      wiki_pages: processedNodes.filter((node) => node.kind === "wiki_page").length,
+      source_events: processedNodes.filter((node) => node.kind === "source_event").length,
+      external_refs: processedNodes.filter((node) => node.kind === "external_ref").length,
     },
   }
 }
@@ -221,7 +240,13 @@ function formatInspectorDetails(metadata: Record<string, unknown>): WikiGraphIns
 function stringifyValue(value: unknown): string {
   if (typeof value === "string") return value
   if (typeof value === "number" || typeof value === "boolean") return String(value)
-  if (Array.isArray(value)) return value.map((item) => stringifyValue(item)).join(", ")
-  if (value && typeof value === "object") return JSON.stringify(value)
+  if (Array.isArray(value)) {
+    const preview = value.slice(0, 3).map((item) => stringifyValue(item)).join(", ")
+    return value.length > 3 ? `${preview}…` : preview
+  }
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value)
+    return keys.length > 0 ? `${keys.slice(0, 3).join(", ")}${keys.length > 3 ? "…" : ""}` : ""
+  }
   return ""
 }

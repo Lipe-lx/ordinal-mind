@@ -109,6 +109,13 @@ describe("wikiGraph client helpers", () => {
     expect(filtered.counts.nodes).toBe(1)
   })
 
+  it("returns the full payload unchanged when all filters are active", () => {
+    const filters = createDefaultWikiGraphFilters()
+    const filtered = filterWikiGraphPayload(payload, filters)
+
+    expect(filtered).toBe(payload)
+  })
+
   it("formats node and edge inspector data for the modal", () => {
     const nodeInspector = buildNodeInspector(payload.nodes[0])
     expect(nodeInspector.title).toBe("Bitcoin Frogs")

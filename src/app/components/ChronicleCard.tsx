@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { lazy, Suspense, useMemo, useState } from "react"
 import { KeyStore } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
@@ -9,6 +9,10 @@ import type { WikiActivityStatus } from "../lib/byok/useChronicleNarrativeChat"
 import type { SynthesisMode } from "../lib/byok/context"
 import { GenealogyTree } from "./GenealogyTree"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
+
+const LazyWikiGraphModal = lazy(() =>
+  import("./WikiGraphModal").then((module) => ({ default: module.WikiGraphModal }))
+)
 
 interface Props {
   chronicle: ChronicleResponse
@@ -74,6 +78,7 @@ export function ChronicleCard({
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
   const [layoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
+  const [showWikiGraph, setShowWikiGraph] = useState(false)
 
   const toggleExpand = (target: "narrative" | "genealogy") => {
     if (layoutMode === target) {
@@ -84,84 +89,98 @@ export function ChronicleCard({
   }
 
   return (
-    <div className={`chronicle-card glass-card layout-mode-${layoutMode}`}>
-      {chronicle.collector_signals.evidence_count > 0 && (
-        <CollectorSignalsPanel chronicle={chronicle} />
-      )}
-      {chronicle.debug_info?.mention_providers && (
-        <details style={{ marginBottom: "var(--space-md)" }}>
-          <summary style={{ cursor: "pointer", fontWeight: 700, marginBottom: "0.5rem" }}>
-            Collector signals debug
-          </summary>
-          <CollectorSignalsDebug debugInfo={chronicle.debug_info.mention_providers} />
-        </details>
-      )}
-
-      {/* Tab Switcher / Expansion Toggles */}
-      <div className="chronicle-tabs">
-        <button 
-          className={`chronicle-tab ${layoutMode === "narrative" ? "active is-expanded" : ""}`}
-          onClick={() => toggleExpand("narrative")}
-        >
-          <span>Chronicle Narrative</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-right">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-        <button 
-          className={`chronicle-tab ${layoutMode === "genealogy" ? "active is-expanded" : ""}`}
-          onClick={() => toggleExpand("genealogy")}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-left">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          <span>Genealogical Tree</span>
-        </button>
-      </div>
-
-      <div className={`chronicle-layout-wrapper layout-mode-${layoutMode}`}>
-        <div className="chronicle-layout-panel is-narrative">
-          <NarrativeChatRenderer
-            messages={messages}
-            activeThreadId={activeThreadId}
-            threadHistory={threadHistory}
-            streamingText={streamingText}
-            streamingThought={streamingThought}
-            phase={phase}
-            elapsed={elapsed}
-            providerName={config?.provider}
-            modelName={config?.model}
-            error={synthError}
-            inputError={inputError}
-            inputMode={lastInputMode}
-            wikiStatusLabel={wikiStatusLabel}
-            wikiStatusError={wikiStatusError}
-            wikiActivity={wikiActivity}
-            researchLogs={researchLogs}
-            hasKey={hasKey}
-            onSend={onSendMessage}
-            onEdit={onEditMessage}
-            onNewThread={onNewThread}
-            onResumeThread={onResumeThread}
-            onRenameThread={onRenameThread}
-            onDeleteThread={onDeleteThread}
-            onRetry={onRetryMessage}
-            onCancel={onCancel}
-            onOpenBYOK={onOpenBYOK}
+    <>
+      {showWikiGraph && (
+        <Suspense fallback={null}>
+          <LazyWikiGraphModal
+            open={showWikiGraph}
             collectionSlug={collectionSlug}
-            inscriptionWikiSlug={`inscription:${chronicle.meta.inscription_id}`}
+            focusSlug={`inscription:${chronicle.meta.inscription_id}`}
+            wikiStatusLabel={wikiStatusLabel}
+            onClose={() => setShowWikiGraph(false)}
           />
+        </Suspense>
+      )}
+
+      <div className={`chronicle-card glass-card layout-mode-${layoutMode}`}>
+        {chronicle.collector_signals.evidence_count > 0 && (
+          <CollectorSignalsPanel chronicle={chronicle} />
+        )}
+        {chronicle.debug_info?.mention_providers && (
+          <details style={{ marginBottom: "var(--space-md)" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700, marginBottom: "0.5rem" }}>
+              Collector signals debug
+            </summary>
+            <CollectorSignalsDebug debugInfo={chronicle.debug_info.mention_providers} />
+          </details>
+        )}
+
+        {/* Tab Switcher / Expansion Toggles */}
+        <div className="chronicle-tabs">
+          <button 
+            className={`chronicle-tab ${layoutMode === "narrative" ? "active is-expanded" : ""}`}
+            onClick={() => toggleExpand("narrative")}
+          >
+            <span>Chronicle Narrative</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-right">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+          <button 
+            className={`chronicle-tab ${layoutMode === "genealogy" ? "active is-expanded" : ""}`}
+            onClick={() => toggleExpand("genealogy")}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="tab-arrow is-left">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span>Genealogical Tree</span>
+          </button>
         </div>
-        <div className="chronicle-layout-panel is-genealogy">
-          <GenealogyTree chronicle={chronicle} />
+
+        <div className={`chronicle-layout-wrapper layout-mode-${layoutMode}`}>
+          <div className="chronicle-layout-panel is-narrative">
+            <NarrativeChatRenderer
+              messages={messages}
+              activeThreadId={activeThreadId}
+              threadHistory={threadHistory}
+              streamingText={streamingText}
+              streamingThought={streamingThought}
+              phase={phase}
+              elapsed={elapsed}
+              providerName={config?.provider}
+              modelName={config?.model}
+              error={synthError}
+              inputError={inputError}
+              inputMode={lastInputMode}
+              wikiStatusLabel={wikiStatusLabel}
+              wikiStatusError={wikiStatusError}
+              wikiActivity={wikiActivity}
+              researchLogs={researchLogs}
+              hasKey={hasKey}
+              onSend={onSendMessage}
+              onEdit={onEditMessage}
+              onNewThread={onNewThread}
+              onResumeThread={onResumeThread}
+              onRenameThread={onRenameThread}
+              onDeleteThread={onDeleteThread}
+              onRetry={onRetryMessage}
+              onCancel={onCancel}
+              onOpenBYOK={onOpenBYOK}
+              onOpenWikiGraph={() => setShowWikiGraph(true)}
+              collectionSlug={collectionSlug}
+            />
+          </div>
+          <div className="chronicle-layout-panel is-genealogy">
+            <GenealogyTree chronicle={chronicle} />
+          </div>
+        </div>
+
+        {/* Sources Widget */}
+        <div style={{ marginTop: "auto" }}>
+          <SourcesWidget sources={sources} />
         </div>
       </div>
-      
-      {/* Sources Widget */}
-      <div style={{ marginTop: "auto" }}>
-        <SourcesWidget sources={sources} />
-      </div>
-    </div>
+    </>
   )
 }
 

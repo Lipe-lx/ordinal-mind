@@ -146,7 +146,7 @@ export async function buildCollectionGraph(
 
   const warnings: string[] = []
   if (!collectionPage) {
-    warnings.push("Collection wiki page is missing; showing consensus and linked inscription pages only.")
+    warnings.push("No collection wiki page exists yet — graph built from consensus data and linked inscription pages.")
   }
   if (collectionPages.length === 0) {
     warnings.push("No inscription wiki pages are linked to this collection yet.")

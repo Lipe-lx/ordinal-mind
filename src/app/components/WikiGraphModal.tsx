@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
+import { createPortal } from "react-dom"
 import { useNavigate } from "react-router"
 import cytoscape from "cytoscape"
 import cytoscapeElk from "cytoscape-elk"
@@ -16,6 +17,7 @@ import {
   WIKI_GRAPH_NODE_KINDS,
   WIKI_GRAPH_STATUSES,
   type WikiGraphFilters,
+  type WikiGraphInspectorData,
 } from "../lib/wikiGraph"
 import "../styles/features/wiki/wiki-graph.css"
 
@@ -145,6 +147,19 @@ export function WikiGraphModal({
   }, [filteredPayload])
 
   useEffect(() => {
+    if (!selection || !filteredPayload) return
+
+    if (selection.type === "node") {
+      const exists = filteredPayload.nodes.some((node) => node.id === selection.id)
+      if (!exists) setSelection(null)
+      return
+    }
+
+    const exists = filteredPayload.edges.some((edge) => edge.id === selection.id)
+    if (!exists) setSelection(null)
+  }, [filteredPayload, selection])
+
+  useEffect(() => {
     const container = containerRef.current
     if (!container || !filteredPayload) return
 
@@ -209,13 +224,21 @@ export function WikiGraphModal({
       const focusNode = cy.getElementById(initialFocus)
       if (focusNode.length) {
         focusNode.select()
-        cy.animate({
-          fit: { eles: focusNode.closedNeighborhood(), padding: 90 },
-          duration: 260,
-        })
         setSelection({ type: "node", id: initialFocus })
       }
     }
+
+    const fitGraph = () => {
+      const elements = cy.elements()
+      if (!elements.length) return
+
+      cy.fit(elements, 72)
+    }
+
+    cy.one("layoutstop", fitGraph)
+    requestAnimationFrame(() => {
+      fitGraph()
+    })
 
     cyRef.current = cy
 
@@ -232,10 +255,12 @@ export function WikiGraphModal({
       : fallbackNode
         ? buildNodeInspector(fallbackNode)
         : null
+  const compactInspector = inspector ? trimInspectorData(inspector) : null
 
   const inspectorTarget = selectedNode ?? fallbackNode
+  const visibleWarnings = filteredPayload?.warnings.slice(0, 2) ?? []
 
-  return (
+  const content = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -259,14 +284,7 @@ export function WikiGraphModal({
             transition={{ duration: 0.22 }}
           >
             <header className="wiki-graph-header">
-              <div>
-                <h2 id="wiki-graph-title">Wiki Atlas</h2>
-                <p>
-                  {collectionSlug
-                    ? `Collection graph for ${collectionSlug}`
-                    : "This inscription does not have a collection wiki graph yet."}
-                </p>
-              </div>
+              <h2 id="wiki-graph-title">Wiki Atlas</h2>
               <div className="wiki-graph-header-actions">
                 {wikiStatusLabel && <span className="wiki-graph-status-pill">{wikiStatusLabel}</span>}
                 <button
@@ -282,17 +300,15 @@ export function WikiGraphModal({
 
             <div className="wiki-graph-toolbar">
               <label className="wiki-graph-search">
-                <span>Search</span>
                 <input
                   className="input-field"
                   value={filters.search}
                   onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-                  placeholder="Filter nodes, claims, sources..."
+                  placeholder="Search"
                 />
               </label>
 
               <div className="wiki-graph-filter-group">
-                <span>Types</span>
                 <div className="wiki-graph-chip-row">
                   {WIKI_GRAPH_NODE_KINDS.map((kind) => {
                     const active = filters.nodeKinds.includes(kind)
@@ -314,7 +330,6 @@ export function WikiGraphModal({
               </div>
 
               <div className="wiki-graph-filter-group">
-                <span>Status</span>
                 <div className="wiki-graph-chip-row">
                   {WIKI_GRAPH_STATUSES.map((status) => {
                     const active = filters.statuses.includes(status)
@@ -374,7 +389,7 @@ export function WikiGraphModal({
                 {loading && (
                   <div className="wiki-graph-state">
                     <div className="wiki-graph-spinner" />
-                    <p>Compiling the collection atlas...</p>
+                    <p>Loading graph…</p>
                   </div>
                 )}
 
@@ -395,21 +410,26 @@ export function WikiGraphModal({
                     <div className="wiki-graph-stats">
                       <span>{filteredPayload.counts.nodes} nodes</span>
                       <span>{filteredPayload.counts.edges} edges</span>
-                      <span>{filteredPayload.counts.wiki_pages} wiki pages</span>
                     </div>
                     <div ref={containerRef} className="wiki-graph-canvas" />
+                    {visibleWarnings.length > 0 && (
+                      <div className="wiki-graph-inline-warnings">
+                        {visibleWarnings.map((warning) => (
+                          <span key={warning}>{warning}</span>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </section>
 
               <aside className="wiki-graph-inspector">
-                <h3>Inspector</h3>
-                {inspector ? (
+                {compactInspector ? (
                   <div className="wiki-graph-inspector-card">
                     <div className="wiki-graph-inspector-top">
                       <div>
-                        <h4>{inspector.title}</h4>
-                        <p>{inspector.subtitle}</p>
+                        <h4>{compactInspector.title}</h4>
+                        <p>{compactInspector.subtitle}</p>
                       </div>
                       {inspectorTarget && (
                         <span className={`wiki-graph-node-pill status-${inspectorTarget.status}`}>
@@ -418,11 +438,11 @@ export function WikiGraphModal({
                       )}
                     </div>
 
-                    {inspector.description && <p className="wiki-graph-inspector-description">{inspector.description}</p>}
+                    {compactInspector.description && <p className="wiki-graph-inspector-description">{compactInspector.description}</p>}
 
-                    {inspector.details.length > 0 && (
+                    {compactInspector.details.length > 0 && (
                       <dl className="wiki-graph-inspector-details">
-                        {inspector.details.map((detail) => (
+                        {compactInspector.details.map((detail) => (
                           <div key={`${detail.label}:${detail.value}`} className="wiki-graph-inspector-row">
                             <dt>{detail.label}</dt>
                             <dd>{detail.value}</dd>
@@ -434,30 +454,19 @@ export function WikiGraphModal({
                     {inspectorTarget && resolveNavigationTarget(inspectorTarget) && (
                       <button
                         type="button"
-                        className="btn btn-primary btn-sm"
+                        className="btn btn-ghost btn-sm"
                         onClick={() => {
                           const target = resolveNavigationTarget(inspectorTarget)
                           if (target) navigate(target)
                         }}
                       >
-                        Open linked page
+                        Open
                       </button>
                     )}
                   </div>
                 ) : (
                   <div className="wiki-graph-inspector-card is-empty">
-                    <p>Select a node or edge to inspect its factual connections.</p>
-                  </div>
-                )}
-
-                {filteredPayload?.warnings && filteredPayload.warnings.length > 0 && (
-                  <div className="wiki-graph-warnings glass-card">
-                    <h4>Partial Signals</h4>
-                    <ul>
-                      {filteredPayload.warnings.map((warning) => (
-                        <li key={warning}>{warning}</li>
-                      ))}
-                    </ul>
+                    <p>Select a node.</p>
                   </div>
                 )}
               </aside>
@@ -467,15 +476,19 @@ export function WikiGraphModal({
       )}
     </AnimatePresence>
   )
+
+  if (typeof document === "undefined") return null
+  return createPortal(content, document.body)
 }
 
 function toggleValue<T>(current: T[], value: T, fallback: T[]): T[] {
-  const active = current.includes(value)
+  const uniqueCurrent = Array.from(new Set(current))
+  const active = uniqueCurrent.includes(value)
   if (active) {
-    const next = current.filter((item) => item !== value)
+    const next = uniqueCurrent.filter((item) => item !== value)
     return next.length > 0 ? next : [...fallback]
   }
-  return [...current, value]
+  return [...uniqueCurrent, value]
 }
 
 function resolveNavigationTarget(node: WikiGraphNode): string | null {
@@ -492,6 +505,19 @@ function resolveNavigationTarget(node: WikiGraphNode): string | null {
   }
 
   return null
+}
+
+function trimInspectorData(data: WikiGraphInspectorData): WikiGraphInspectorData {
+  return {
+    ...data,
+    description: data.description ? truncateText(data.description, 140) : null,
+    details: data.details.slice(0, 4),
+  }
+}
+
+function truncateText(value: string, max: number): string {
+  if (value.length <= max) return value
+  return `${value.slice(0, max - 1)}…`
 }
 
 function buildGraphLayout(): cytoscape.LayoutOptions {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { formatChronicleText } from "../lib/formatters"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
@@ -8,10 +8,6 @@ import type { SynthesisPhase } from "../lib/byok/useChronicleNarrativeChat"
 import type { WikiActivityStatus } from "../lib/byok/useChronicleNarrativeChat"
 import { ChatHistoryModal } from "./ChatHistoryModal"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
-
-const LazyWikiGraphModal = lazy(() =>
-  import("./WikiGraphModal").then((module) => ({ default: module.WikiGraphModal }))
-)
 
 interface Props {
   messages: ChatMessage[]
@@ -32,7 +28,6 @@ interface Props {
   researchLogs?: ResearchLog[]
   hasKey: boolean
   collectionSlug?: string
-  inscriptionWikiSlug?: string
   onSend: (prompt: string) => Promise<void> | void
   onEdit: (messageId: string, content: string) => Promise<void> | void
   onNewThread: () => void
@@ -42,6 +37,7 @@ interface Props {
   onRetry: () => Promise<void> | void
   onCancel: () => void
   onOpenBYOK: () => void
+  onOpenWikiGraph?: () => void
 }
 
 export function NarrativeChatRenderer({
@@ -63,7 +59,6 @@ export function NarrativeChatRenderer({
   researchLogs = [],
   hasKey,
   collectionSlug,
-  inscriptionWikiSlug,
   onSend,
   onEdit,
   onNewThread,
@@ -73,6 +68,7 @@ export function NarrativeChatRenderer({
   onRetry,
   onCancel,
   onOpenBYOK,
+  onOpenWikiGraph,
 }: Props) {
   const [prompt, setPrompt] = useState("")
   const [showLogs, setShowLogs] = useState(false)
@@ -80,7 +76,6 @@ export function NarrativeChatRenderer({
   const [localInputError, setLocalInputError] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
-  const [showWikiGraph, setShowWikiGraph] = useState(false)
   const transcriptRef = useRef<HTMLDivElement | null>(null)
   const { identity } = useDiscordIdentity()
 
@@ -123,18 +118,6 @@ export function NarrativeChatRenderer({
 
   return (
     <div className="narrative-chat-shell">
-      {showWikiGraph && (
-        <Suspense fallback={null}>
-          <LazyWikiGraphModal
-            open={showWikiGraph}
-            collectionSlug={collectionSlug}
-            focusSlug={inscriptionWikiSlug}
-            wikiStatusLabel={wikiStatusLabel}
-            onClose={() => setShowWikiGraph(false)}
-          />
-        </Suspense>
-      )}
-
       <ChatHistoryModal
         open={showHistory}
         activeThreadId={activeThreadId}
@@ -370,7 +353,7 @@ export function NarrativeChatRenderer({
               <button
                 type="button"
                 className="narrative-chat-meta-badge narrative-chat-meta-badge-wiki"
-                onClick={() => setShowWikiGraph(true)}
+                onClick={onOpenWikiGraph}
                 title="Open collection wiki atlas"
               >
                 <span className="narrative-chat-meta-dot" aria-hidden="true" />
