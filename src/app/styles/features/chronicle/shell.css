@@ -3,6 +3,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .chronicle {
@@ -11,7 +12,32 @@
   gap: var(--space-lg);
   align-items: stretch;
   flex: 1;
+  height: 100%;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.chronicle > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+.chronicle::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chronicle::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chronicle::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.chronicle::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 @media (max-width: 1280px) {

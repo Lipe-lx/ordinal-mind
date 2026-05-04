@@ -70,23 +70,6 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
   // Removed early return guard to ensure the board always renders (fluid UI pattern)
   // if (!rarity || rarity.traits.length === 0) return null
 
-  const confidenceIcon = validation
-    ? validation.confidence === "high" ? "✓" : validation.confidence === "medium" ? "⚠" : "✗"
-    : null
-
-  const confidenceLabel = validation
-    ? {
-        high: "Sources corroborated",
-        medium: "Partial corroboration",
-        low: "Data discrepancies detected",
-      }[validation.confidence]
-    : null
-
-  const agreeing = validation
-    ? validation.checks.filter(c => c.sources_agree).length
-    : 0
-  const total = validation?.checks.length ?? 0
-
   return (
     <div className="widget-rarity-grid-wrapper">
       <div className="widget-rarity-grid-header">
@@ -134,39 +117,41 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
               aria-hidden={!cell && !isPlaceholder}
             >
               {cell?.kind === "rank" ? (
-                <>
-                  <span className="widget-meta-label">Rarity Rank</span>
-                  <span className="widget-meta-value">#{cell.rank.toLocaleString("en-US")}</span>
-                  <div className="widget-rarity-trait-stats">
-                    <span className="widget-meta-sub">
-                      of {cell.supply?.toLocaleString("en-US") ?? "—"}
-                    </span>
-                    {cell.percentile != null && (
-                      <span className="widget-meta-sub">
-                        top {formatTraitFrequencyPct(cell.percentile)}
-                      </span>
-                    )}
-                  </div>
-                </>
-              ) : cell?.kind === "trait" ? (
-                <>
-                  <span className="widget-meta-label">{cell.trait.trait_type}</span>
-                  <span className="widget-meta-value">{cell.trait.value}</span>
-                  {(cell.trait.frequency !== undefined || cell.trait.frequency_pct !== undefined) && (
+                <div className="widget-rarity-cell-shell">
+                  <div className="widget-rarity-cell-main">
+                    <span className="widget-meta-label">Rarity Rank</span>
+                    <span className="widget-meta-value">#{cell.rank.toLocaleString("en-US")}</span>
                     <div className="widget-rarity-trait-stats">
-                      {cell.trait.frequency !== undefined && (
+                      <span className="widget-meta-sub">
+                        of {cell.supply?.toLocaleString("en-US") ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+                  {cell.percentile != null && (
+                    <div className={`widget-rarity-pct-badge tone-${getRarityTone(cell.percentile)}`}>
+                      <span className="widget-rarity-pct-value">{formatTraitFrequencyPct(cell.percentile)}</span>
+                    </div>
+                  )}
+                </div>
+              ) : cell?.kind === "trait" ? (
+                <div className="widget-rarity-cell-shell">
+                  <div className="widget-rarity-cell-main">
+                    <span className="widget-meta-label">{cell.trait.trait_type}</span>
+                    <span className="widget-meta-value">{cell.trait.value}</span>
+                    {cell.trait.frequency !== undefined && (
+                      <div className="widget-rarity-trait-stats">
                         <span className="widget-meta-sub">
                           {cell.trait.frequency.toLocaleString("en-US")} items
                         </span>
-                      )}
-                      {cell.trait.frequency_pct !== undefined && (
-                        <span className="widget-meta-sub">
-                          {formatTraitFrequencyPct(cell.trait.frequency_pct)}
-                        </span>
-                      )}
+                      </div>
+                    )}
+                  </div>
+                  {cell.trait.frequency_pct !== undefined && (
+                    <div className={`widget-rarity-pct-badge tone-${getRarityTone(cell.trait.frequency_pct)}`}>
+                      <span className="widget-rarity-pct-value">{formatTraitFrequencyPct(cell.trait.frequency_pct)}</span>
                     </div>
                   )}
-                </>
+                </div>
               ) : isPlaceholder ? (
                 <>
                   <span className="widget-meta-label">Attributes</span>
@@ -178,17 +163,6 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
         })}
       </div>
 
-      {/* Footer Info (Validation & Source) */}
-      <div className="widget-rarity-grid-footer">
-        {validation && (
-          <div className={`widget-rarity-confidence-mini tone-${validation.confidence}`}>
-            {confidenceIcon} {confidenceLabel} · {agreeing}/{total}
-          </div>
-        )}
-        <div className="widget-rarity-source-mini">
-          via public metadata and market overlays
-        </div>
-      </div>
     </div>
   )
 }
@@ -198,4 +172,13 @@ function formatTraitFrequencyPct(value: number): string {
   if (value < 10) return `${value.toFixed(2)}%`
   if (value < 100) return `${value.toFixed(1)}%`
   return `${Math.round(value)}%`
+}
+
+function getRarityTone(value: number): "mythic" | "legendary" | "epic" | "rare" | "uncommon" | "common" {
+  if (value <= 0.5) return "mythic"
+  if (value <= 1) return "legendary"
+  if (value <= 3) return "epic"
+  if (value <= 8) return "rare"
+  if (value <= 20) return "uncommon"
+  return "common"
 }
