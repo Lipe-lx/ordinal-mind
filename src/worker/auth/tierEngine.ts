@@ -7,7 +7,7 @@
 //   og        → account > 1yr + OG server membership (score 0.85)
 //   genesis   → manual whitelist in KV (score 1.0)
 
-import type { OGTier } from "./jwt"
+import type { OGTier, DiscordBadge } from "./jwt"
 import type { DiscordGuild } from "./discord"
 
 export const TIER_SCORES: Record<OGTier, number> = {
@@ -29,25 +29,33 @@ const DEFAULT_SERVER_CONFIG: ServerConfig = {
   community_servers: [], // configured via KV: og_server_config
 }
 
-// Curated lists from user
+// Curated lists with importance levels
+const VERY_IMPORTANT_IDS = [
+  "987504378242007100",
+  "1131000554005467206"
+]
+
+const IMPORTANT_IDS = [
+  "1298700658769268817",
+  "1090331629827924020",
+  "1072872589778755644",
+  "1321689786116866048",
+  "1189000124215599164",
+  "1069807785283428373",
+  "1069763617861423195"
+]
+
 const VERIFIED_SERVER_IDS = [
-  "987504378242007100", // Muito importante
-  "1131000554005467206", // Muito importante
+  ...VERY_IMPORTANT_IDS,
+  ...IMPORTANT_IDS,
   "1304975015942422568",
   "1375176106096984154",
-  "1298700658769268817", // Importante
-  "1090331629827924020", // Importante
   "1343702732837748747",
-  "1072872589778755644", // Importante
-  "1321689786116866048", // Importante
-  "1189000124215599164", // Importante
   "1099100624597033123",
   "1349373889972539403",
   "1228725022437277819",
   "1116728354234695771",
   "1072650133851869204",
-  "1069807785283428373", // Importante
-  "1069763617861423195", // Importante
   "891779082063319122",
   "1072557304668487771",
   "1115735125494341762",
@@ -137,16 +145,23 @@ export async function calculateTier(
 export async function calculateBadges(
   guilds: DiscordGuild[],
   _kv: KVNamespace
-): Promise<string[]> {
+): Promise<DiscordBadge[]> {
   const verifiedSet = new Set(VERIFIED_SERVER_IDS)
-  const badges: string[] = []
+  const level2Set = new Set(VERY_IMPORTANT_IDS)
+  const level1Set = new Set(IMPORTANT_IDS)
+  
+  const badgesMap = new Map<string, DiscordBadge>()
 
   for (const guild of guilds) {
     if (verifiedSet.has(guild.id)) {
-      badges.push(guild.name)
+      let level = 0
+      if (level2Set.has(guild.id)) level = 2
+      else if (level1Set.has(guild.id)) level = 1
+      
+      badgesMap.set(guild.id, { name: guild.name, level })
     }
   }
 
-  // Deduplicate and return
-  return Array.from(new Set(badges))
+  // Deduplicate by ID and return sorted by level (desc)
+  return Array.from(badgesMap.values()).sort((a, b) => b.level - a.level)
 }

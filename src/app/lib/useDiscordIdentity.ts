@@ -9,14 +9,14 @@
 import { useState, useEffect, useCallback } from "react"
 import { useLocation } from "react-router"
 import { decodeJWTPayload } from "./byok/jwtClient"
-import type { OGTier } from "./byok/jwtClient"
+import type { OGTier, DiscordBadge } from "./byok/jwtClient"
 
 export interface DiscordIdentity {
   discordId: string
   username: string
   avatar: string | null
   tier: OGTier
-  badges?: string[]
+  badges?: DiscordBadge[]
 }
 
 const JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"

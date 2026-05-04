@@ -4,12 +4,17 @@
 
 export type OGTier = "anon" | "community" | "og" | "genesis"
 
+export interface DiscordBadge {
+  name: string
+  level: number
+}
+
 export interface JWTPayload {
   sub: string
   username: string
   avatar: string | null
   tier: OGTier
-  badges?: string[]
+  badges?: DiscordBadge[]
   iat: number
   exp: number
 }

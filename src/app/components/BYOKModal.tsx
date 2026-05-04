@@ -267,11 +267,11 @@ export function BYOKModal({ onClose }: Props) {
                         {identity.badges && identity.badges.length > 0 && (
                           <div className="identity-badges-list">
                             {identity.badges.map((badge) => (
-                              <div key={badge} className="identity-badge-item">
+                              <div key={badge.name} className={`identity-badge-item badge-level-${badge.level}`}>
                                 <svg className="identity-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="20 6 9 17 4 12" />
                                 </svg>
-                                {badge}
+                                {badge.name}
                               </div>
                             ))}
                           </div>

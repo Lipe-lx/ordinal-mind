@@ -242,20 +242,52 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.15rem 0.6rem;
+  padding: 0.2rem 0.7rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 0.65rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.25s ease;
+}
+
+/* Level 2: Muito Importante (Legendary Effect) */
+.identity-badge-item.badge-level-2 {
+  background: rgba(245, 166, 35, 0.1);
+  border-color: rgba(245, 166, 35, 0.3);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(245, 166, 35, 0.15);
+  animation: badge-pulse-gold 4s infinite;
+}
+
+.identity-badge-item.badge-level-2 .identity-badge-icon {
+  color: #F5A623;
+}
+
+/* Level 1: Importante (Rare Effect) */
+.identity-badge-item.badge-level-1 {
+  background: rgba(88, 101, 242, 0.1);
+  border-color: rgba(88, 101, 242, 0.3);
+  color: #e0e7ff;
+  box-shadow: 0 0 8px rgba(88, 101, 242, 0.1);
+}
+
+.identity-badge-item.badge-level-1 .identity-badge-icon {
+  color: #818cf8;
 }
 
 .identity-badge-icon {
   width: 10px;
   height: 10px;
-  color: #818cf8;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+@keyframes badge-pulse-gold {
+  0%, 100% { box-shadow: 0 0 12px rgba(245, 166, 35, 0.15); border-color: rgba(245, 166, 35, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(245, 166, 35, 0.25); border-color: rgba(245, 166, 35, 0.5); }
 }
