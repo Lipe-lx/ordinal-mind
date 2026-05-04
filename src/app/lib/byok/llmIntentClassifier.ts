@@ -19,6 +19,7 @@ const INTENTS: ChatIntent[] = [
   "chronicle_query",
   "clarification_request",
   "offtopic_safe",
+  "knowledge_contribution",
 ]
 const MODES: ChatResponseMode[] = ["qa", "narrative"]
 const CACHE_TTL_MS = 5 * 60 * 1000
@@ -110,6 +111,7 @@ Return only JSON with keys: intent, mode, confidence, reason.
 Allowed intents: ${INTENTS.join(", ")}.
 Allowed modes: ${MODES.join(", ")}.
 Use chronicle_query when the user asks about the current inscription, its parent/child/genealogy links, mint date, provenance, owner, transfers, collection context, uncertainty, or corrects the scope of a prior factual question.
+Use knowledge_contribution when the user provides original facts about a collection (founders, launch dates, community lore) or explicitly asks to "save", "update", "record", or "add to wiki".
 Use clarification_request only when the user is asking you to clarify and there is no factual target in the current message or recent history.
 Do not answer the user. Classify only.`,
     user: `Local router guess:

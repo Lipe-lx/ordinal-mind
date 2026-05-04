@@ -49,7 +49,8 @@ export function parseWikiExtract(text: string): WikiExtractResult {
   // Remove the block from the visible text regardless of parse success
   const cleanText = text.replace(EXTRACT_TAG_RE, "").trim()
 
-  const rawContent = match[1].trim()
+  // The content group is match[2]. match[1] is the opening tag name.
+  const rawContent = (match[2] || "").trim()
   const data = parseExtractContent(rawContent)
 
   return { data, cleanText }

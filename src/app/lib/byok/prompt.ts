@@ -175,7 +175,8 @@ ${hasWikiContext ? '- If the info is already in the archive, you do NOT need to 
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
-- The <wiki_contribution> block must be OUTSIDE the <final_answer> block, placed at the very end of your response.`
+- The <wiki_contribution> block must be OUTSIDE the <final_answer> block, placed at the very end of your response. Ensure the JSON is valid and all fields are present.
+- Format again: <wiki_contribution>{"field":"...","value":"...","confidence":"...","verifiable":true,"collection_slug":"..."}</wiki_contribution>`
   }
 
   if (mode === "narrative") {
@@ -195,7 +196,7 @@ ${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidate
 
   const intentSpecific = intent === "chronicle_query"
     ? "- Answer the latest user question directly in the first sentence.\n- For short factoid questions (who/when/where/how many), keep the reply compact: one direct answer sentence, plus one brief evidence sentence only if it helps.\n- Do not recap the full Chronicle unless explicitly requested.\n- Use extra detail only if the user asks to expand."
-    : "- For greetings or simple smalltalk, keep the response short and conversational (1-2 sentences).\n- For short or ambiguous directives (e.g., 'do it', 'update correctly', 'fix it'), resolve the intent by looking at the immediate conversation history. If the user is referring to a previous knowledge contribution, fulfill it now using the <wiki_contribution> tag format defined in the system instructions."
+    : "- For greetings or simple smalltalk, keep the response short and conversational (1-2 sentences).\n- For short or ambiguous directives (e.g., 'do it', 'update correctly', 'fix it'), resolve the intent by looking at the immediate conversation history. If the user is referring to a previous knowledge contribution, fulfill it now using the <wiki_contribution> tag format: <wiki_contribution>{\"field\":\"...\",\"value\":\"...\",\"confidence\":\"...\",\"verifiable\":true,\"collection_slug\":\"...\"}</wiki_contribution>. Place this block at the very end, outside <final_answer>."
 
   return `Response policy:
 ${intentSpecific}
