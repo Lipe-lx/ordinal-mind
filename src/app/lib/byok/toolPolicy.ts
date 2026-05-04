@@ -1,7 +1,7 @@
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
 import type { SearchToolDefinition } from "./tools"
 
-export type ToolExposurePolicy = "none" | "narrow_factual" | "broad"
+export type ToolExposurePolicy = "none" | "narrow_factual" | "broad" | "wiki_builder"
 export type GeminiFunctionCallingMode = "AUTO" | "ANY" | "NONE"
 
 export interface ChatToolPolicyDecision {
@@ -17,6 +17,15 @@ export function resolveChatToolPolicy(params: {
   intent: ChatIntent
 }): ChatToolPolicyDecision {
   const normalized = normalize(params.prompt)
+
+  if (params.intent === "knowledge_contribution") {
+    return {
+      policy: "wiki_builder",
+      allowedToolNames: resolveKnowledgeContributionTools(),
+      geminiMode: "AUTO",
+      reason: "knowledge_contribution_verification",
+    }
+  }
 
   if (params.intent !== "chronicle_query") {
     return {
@@ -70,6 +79,18 @@ function resolveNarrowFactTools(prompt: string): string[] {
   }
 
   return []
+}
+
+function resolveKnowledgeContributionTools(): string[] {
+  return [
+    "search_wiki",
+    "get_collection_context",
+    "get_timeline",
+    "get_raw_events",
+    "web_search",
+    "deep_research",
+    "synthesized_search",
+  ]
 }
 
 function isCollectionSizeQuestion(prompt: string): boolean {

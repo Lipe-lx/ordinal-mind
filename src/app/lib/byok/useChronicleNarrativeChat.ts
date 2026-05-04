@@ -63,6 +63,79 @@ function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((message) => keepTurnIds.has(message.turnId))
 }
 
+function isPortuguesePrompt(prompt: string): boolean {
+  return /\b(que|quando|quem|como|cole[cç][aã]o|wiki|inscri[cç][aã]o|fundador|criador|comunidade|hist[oó]ria|lan[cç]ou|mintou)\b/iu.test(prompt)
+}
+
+function buildKnowledgeContributionFallback(prompt: string): string {
+  return isPortuguesePrompt(prompt)
+    ? "Entendi. Vou tratar isso como uma contribuição da comunidade para a wiki, mantendo a validação factual separada do relato enviado no chat."
+    : "Understood. I'll treat that as a community wiki contribution while keeping factual verification separate from the claim shared in chat."
+}
+
+export function resolveAssistantDisplayText(params: {
+  cleanText: string
+  intent: ChatIntent
+  hasExtractedWiki: boolean
+  prompt: string
+}): string {
+  if (params.cleanText.trim()) return params.cleanText
+  if (params.intent === "knowledge_contribution" && params.hasExtractedWiki) {
+    return buildKnowledgeContributionFallback(params.prompt)
+  }
+  return ""
+}
+
+async function submitWikiContribution(params: {
+  data: NonNullable<ReturnType<typeof parseWikiExtract>["data"]>
+  activeThreadId: string | null
+  prompt: string
+}): Promise<void> {
+  const jwt = localStorage.getItem("ordinal-mind_discord_jwt")
+  try {
+    const response = await fetch("/api/wiki/contribute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contribution: {
+          ...params.data,
+          session_id: params.activeThreadId,
+          source_excerpt: params.prompt,
+        },
+        jwt: jwt || undefined,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "")
+      console.warn("[NarrativeChat][WikiContributionFailed]", {
+        at: new Date().toISOString(),
+        field: params.data.field,
+        slug: params.data.collection_slug,
+        status: response.status,
+        body: errorBody,
+      })
+      return
+    }
+
+    const payload = await response.json().catch(() => ({}))
+    console.info("[NarrativeChat][WikiContribution]", {
+      at: new Date().toISOString(),
+      field: params.data.field,
+      slug: params.data.collection_slug,
+      status: payload?.status,
+      tier_applied: payload?.tier_applied,
+    })
+  } catch (error) {
+    console.warn("[NarrativeChat][WikiContributionFailed]", {
+      at: new Date().toISOString(),
+      field: params.data.field,
+      slug: params.data.collection_slug,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 export interface ChronicleChatOptions {
   wikiBuilderMode?: boolean
   targetGap?: string
@@ -449,40 +522,32 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
         setLastInputMode(result.inputMode)
 
         let finalRawText = result.text
+        let extractedWikiData: ReturnType<typeof parseWikiExtract>["data"] = null
 
         // Extract and remove <wiki_extract> block if present
         if (hasWikiExtract(finalRawText)) {
           const extracted = parseWikiExtract(finalRawText)
           finalRawText = extracted.cleanText
+          extractedWikiData = extracted.data
 
           if (extracted.data) {
-            const jwt = localStorage.getItem("ordinal-mind_discord_jwt")
-            fetch("/api/wiki/contribute", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contribution: {
-                  ...extracted.data,
-                  session_id: activeThreadId,
-                  source_excerpt: trimmedPrompt,
-                },
-                jwt: jwt || undefined,
-              }),
-            }).catch(() => {
-              // Fire and forget
-            })
-
-            console.info("[NarrativeChat][WikiContribution]", {
-              at: new Date().toISOString(),
-              field: extracted.data.field,
-              slug: extracted.data.collection_slug,
+            void submitWikiContribution({
+              data: extracted.data,
+              activeThreadId,
+              prompt: trimmedPrompt,
             })
           }
         }
 
         const clean = sanitizeNarrative(finalRawText)
+        const safeFallback = resolveAssistantDisplayText({
+          cleanText: clean,
+          intent,
+          hasExtractedWiki: Boolean(extractedWikiData),
+          prompt: trimmedPrompt,
+        })
         const envelope = toChatAnswerEnvelope({
-          text: clean || finalRawText,
+          text: safeFallback,
           usedTools: Array.from(usedToolNames),
         })
         const displayText = formatChatAnswerEnvelope(envelope)

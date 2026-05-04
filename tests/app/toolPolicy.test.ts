@@ -30,4 +30,35 @@ describe("chat tool policy", () => {
     expect(tools.some((tool) => tool.name === "web_search")).toBe(true)
     expect(tools.some((tool) => tool.name === "get_collection_context")).toBe(true)
   })
+
+  it("exposes verification tools for knowledge contributions", () => {
+    const decision = resolveChatToolPolicy({
+      prompt: "O fundador dessa coleção foi o Casey Rodarmor",
+      mode: "qa",
+      intent: "knowledge_contribution",
+    })
+
+    expect(decision.policy).toBe("wiki_builder")
+    expect(decision.geminiMode).toBe("AUTO")
+    expect(decision.allowedToolNames).toEqual([
+      "search_wiki",
+      "get_collection_context",
+      "get_timeline",
+      "get_raw_events",
+      "web_search",
+      "deep_research",
+      "synthesized_search",
+    ])
+
+    const tools = selectToolsForPolicy(COLLECTION_RESEARCH_TOOLS, decision)
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "search_wiki",
+      "get_raw_events",
+      "get_timeline",
+      "get_collection_context",
+      "web_search",
+      "deep_research",
+      "synthesized_search",
+    ])
+  })
 })
