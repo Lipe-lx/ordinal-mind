@@ -155,27 +155,27 @@ function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInit
     return `Response policy:
 Wiki Builder Mode:
 - You detected the user has original knowledge about this collection.
-- Your goal is to extract structured information naturally through conversation.
-- IMPORTANT: Check the [Wiki Archive Knowledge] and [Consolidated Collection Knowledge] above before responding. If the user mentions a fact already recorded there (like the founders/co-founders, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the archive, ...") instead of attributing it as a new claim from the user.
+- Your goal is to extract structured information naturally through conversation and update the Wiki.
+- IMPORTANT: Check the [Wiki Archive Knowledge] and [Consolidated Collection Knowledge] above before responding. These represent the current Wiki records. If the user mentions a fact already recorded there (like the founders/co-founders, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the Wiki, ...") instead of attributing it as a new claim from the user.
 - When the claim refers to public facts such as founder/co-founder identity, launch timing, provenance, inscription relationships, or notable public milestones, verify or contextualize it with the available public tools before presenting it as established fact.
-- Prefer on-chain and wiki tools first for precise facts. Use web research tools only for public historical or cultural context.
-- If verification is incomplete, keep that uncertainty explicit in the visible reply and still capture the contribution as community-provided context in <wiki_extract>.
+- Prefer on-chain and Wiki tools first for precise facts. Use web research tools only for public historical or cultural context.
+- If verification is incomplete, keep that uncertainty explicit in the visible reply and still capture the contribution as community-provided context in <wiki_contribution>.
 - If multiple tools are helpful, emit them in the same response turn so they can run in parallel.
 - DO NOT ask questions like a form. Weave questions naturally into the conversation.
 - When the user provides new information, confirm it conversationally.
-- MANDATORY TAG RULE: You MUST generate a <wiki_extract> block with the structured data for ANY new information provided by the user. The UI relies on this tag to update the database.
-- Format: <wiki_extract>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_extract>
+- MANDATORY TAG RULE: You MUST generate a <wiki_contribution> block with the structured data for ANY new information provided by the user. The UI relies on this tag to update the database.
+- Format: <wiki_contribution>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_contribution>
 - Use the "collection_slug" found in the [Metadata] section above.
 - Field must be one of: founder, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
 - NOTE: The 'founder' field should be used for all founders and co-founders. If a collection has multiple founders, include all of them in this field.
-- If the user provides multiple facts, you may emit multiple <wiki_extract> blocks, one for each field.
-${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_extract> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
+- If the user provides multiple facts, you may emit multiple <wiki_contribution> blocks, one for each field.
+${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_contribution> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
 - If user has no Discord connected, mention gently that contributions enter review.
 - Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns.
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-facing answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
-- The <wiki_extract> block must be OUTSIDE the <final_answer> block, placed at the very end of your response.`
+- The <wiki_contribution> block must be OUTSIDE the <final_answer> block, placed at the very end of your response.`
   }
 
   if (mode === "narrative") {
@@ -195,7 +195,7 @@ ${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidate
 
   const intentSpecific = intent === "chronicle_query"
     ? "- Answer the latest user question directly in the first sentence.\n- For short factoid questions (who/when/where/how many), keep the reply compact: one direct answer sentence, plus one brief evidence sentence only if it helps.\n- Do not recap the full Chronicle unless explicitly requested.\n- Use extra detail only if the user asks to expand."
-    : "- Keep response short and conversational (1-2 sentences)."
+    : "- For greetings or simple smalltalk, keep the response short and conversational (1-2 sentences).\n- For short or ambiguous directives (e.g., 'do it', 'update correctly', 'fix it'), resolve the intent by looking at the immediate conversation history. If the user is referring to a previous knowledge contribution, fulfill it now using the <wiki_contribution> tag format defined in the system instructions."
 
   return `Response policy:
 ${intentSpecific}

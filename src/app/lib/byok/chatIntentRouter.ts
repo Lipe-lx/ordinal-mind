@@ -57,6 +57,7 @@ const CHRONICLE_HINTS = [
   "parent", "parents", "pai", "mae", "mãe", "filho", "filha", "child", "children", "ancestral", "ancestrais",
   "genealogia", "genealogy", "mint", "minted", "mintado", "mintada", "cunhado", "cunhada", "cunhou", "bloco",
   "colecao", "coleção", "fundador", "founder", "criador", "creator", "supply", "launch", "lancamento", "lançamento",
+  "wiki", "record", "records", "update", "atualizar", "registro", "registros",
 ]
 
 // --- Knowledge Contribution Detection ---
@@ -70,6 +71,7 @@ const CONTRIBUTION_PATTERNS = [
   /\b(na verdade|actually|correcting|corrigindo|na real)\b/u,
   /\b(o fundador|the founder|criador|creator|quem criou|who created|quem fez|who made)\b/u,
   /\b(o supply|the supply|o total|total supply|quantos ao todo)\b/u,
+  /\b(update|atualizar|corrigir|correct|fix|records|registros|wiki)\b/u,
 ]
 
 const FIRST_PERSON_COLLECTION_PATTERNS = [

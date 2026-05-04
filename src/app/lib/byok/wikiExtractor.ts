@@ -5,10 +5,10 @@
 // response. This module parses that block and removes it from the visible text.
 //
 // Block format (JSON inside tags):
-//   <wiki_extract>
+//   <wiki_contribution>
 //   { "field": "founder", "value": "...", "confidence": "stated_by_user",
 //     "verifiable": true, "collection_slug": "...", "source_chat_excerpt": "..." }
-//   </wiki_extract>
+//   </wiki_contribution>
 //
 // The block is ALWAYS hidden from the user. It is stripped from the display text.
 
@@ -27,11 +27,11 @@ export interface WikiExtractData {
 export interface WikiExtractResult {
   /** The extracted structured contribution data, or null if none found/invalid. */
   data: WikiExtractData | null
-  /** The LLM response text with the <wiki_extract> block removed. */
+  /** The LLM response text with the block removed. */
   cleanText: string
 }
 
-const EXTRACT_TAG_RE = /<wiki_extract>([\s\S]*?)<\/wiki_extract>/i
+const EXTRACT_TAG_RE = /<(wiki_extract|wiki_contribution)>([\s\S]*?)<\/(wiki_extract|wiki_contribution)>/i
 
 /**
  * Parse and remove <wiki_extract> block from LLM response text.
