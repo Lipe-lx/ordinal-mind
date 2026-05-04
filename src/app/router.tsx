@@ -1,4 +1,10 @@
-import { createBrowserRouter, type LoaderFunctionArgs } from "react-router"
+import { createBrowserRouter, type LoaderFunctionArgs, type HydrationState } from "react-router"
+
+declare global {
+  interface Window {
+    __ROUTER_HYDRATION_DATA__?: HydrationState
+  }
+}
 import { Layout } from "./components/Layout"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { Home } from "./pages/Home"
@@ -50,5 +56,5 @@ export const router = createBrowserRouter([
     ],
   },
 ], {
-  hydrationData: (window as any).__ROUTER_HYDRATION_DATA__,
+  hydrationData: window.__ROUTER_HYDRATION_DATA__,
 })
