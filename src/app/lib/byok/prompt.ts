@@ -97,17 +97,21 @@ export function buildCombinedPrompt(chronicle: Chronicle, availableTools: Search
 export const INITIAL_NARRATIVE_PROMPT =
   "Present the Chronicle as a concise factual narrative, then be ready for follow-up questions about provenance, transfers, collection context, and uncertainties."
 
-export function buildChatSeedPrompt(chronicle: Chronicle, wikiPage?: WikiPage | null): string {
+export function buildChatSeedPrompt(chronicle: Chronicle, wikiPage?: WikiPage | null, wikiCompletenessInfo?: string): string {
   return `You are in an ongoing Chronicle chat.
 
 Use the factual context below as the authoritative source of truth.
 Never invent events, dates, transfers, sales, rarity details, or social signals.
 If data is missing or uncertain, say so explicitly.
 
-${wikiPage ? `[Wiki Archive Knowledge]
+${wikiPage ? `[Wiki Archive Knowledge (Inscription-Specific)]
 Title: ${wikiPage.title}
 Summary: ${wikiPage.summary}
 ${wikiPage.sections.length > 0 ? `Archive Sections:\n${wikiPage.sections.map(s => `- ${s.heading}: ${s.body}`).join("\n")}` : ""}
+` : ""}
+
+${wikiCompletenessInfo ? `[Consolidated Collection Knowledge]
+${wikiCompletenessInfo}
 ` : ""}
 
 ${buildSynthesisContext(chronicle)}`
@@ -134,7 +138,7 @@ export function buildChatTurnPrompt(
     ? `Conversation so far:\n${transcript}`
     : "Conversation so far:\n(no prior turns)"
 
-  return `${buildChatSeedPrompt(chronicle, wikiPage)}
+  return `${buildChatSeedPrompt(chronicle, wikiPage, wikiCompletenessInfo)}
 
 ${wikiStatus && wikiStatus !== "idle" ? `Current Wiki Context Status: ${wikiStatus}\n` : ""}
 
@@ -143,17 +147,16 @@ ${historySection}
 Latest user message:
 ${userMessage}
 
-${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT, wikiCompletenessInfo, !!wikiPage)}`
+${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT, !!wikiPage || !!wikiCompletenessInfo)}`
 }
 
-function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean, wikiCompletenessInfo?: string, hasWikiContext?: boolean): string {
+function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean, hasWikiContext?: boolean): string {
   if (intent === "knowledge_contribution") {
     return `Response policy:
 Wiki Builder Mode:
 - You detected the user has original knowledge about this collection.
 - Your goal is to extract structured information naturally through conversation.
-${wikiCompletenessInfo ? `\nConsolidated Wiki Context:\n${wikiCompletenessInfo}\n` : ""}
-- IMPORTANT: Check the [Wiki Archive Knowledge] above before responding. If the user mentions a fact already recorded there (like the founder, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the archive, ...") instead of attributing it as a new claim from the user.
+- IMPORTANT: Check the [Wiki Archive Knowledge] and [Consolidated Collection Knowledge] above before responding. If the user mentions a fact already recorded there (like the founder, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the archive, ...") instead of attributing it as a new claim from the user.
 - When the claim refers to public facts such as founder identity, launch timing, provenance, inscription relationships, or notable public milestones, verify or contextualize it with the available public tools before presenting it as established fact.
 - Prefer on-chain and wiki tools first for precise facts. Use web research tools only for public historical or cultural context.
 - If verification is incomplete, keep that uncertainty explicit in the visible reply and still capture the contribution as community-provided context in <wiki_extract>.
@@ -179,7 +182,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generatio
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
-${hasWikiContext ? "- IMPORTANT: Weave information from the [Wiki Archive Knowledge] (e.g., founder, origins, cultural context, milestones) elaborately into the Chronicle narrative to provide a rich, historically-aware context." : ""}
+${hasWikiContext ? "- IMPORTANT: Weave information from the Wiki contexts above (founder, origins, cultural context, milestones) elaborately into the Chronicle narrative to provide a rich, historically-aware context." : ""}
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
