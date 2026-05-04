@@ -13,10 +13,10 @@ export async function resolveDirectFactAnswer(params: {
   chronicle: Chronicle
 }): Promise<DirectFactResolution> {
   const normalized = normalize(params.prompt)
-  const isPt = isPortuguese(normalized)
+  const isNonEnglish = detectNonEnglish(normalized)
 
   if (isCollectionSizeQuestion(normalized)) {
-    return resolveCollectionSizeAnswer(params.chronicle, isPt)
+    return resolveCollectionSizeAnswer(params.chronicle, isNonEnglish)
   }
 
   if (isOwnerQuestion(normalized)) {
@@ -27,10 +27,10 @@ export async function resolveDirectFactAnswer(params: {
       handled: true,
       reason: "current_owner_from_chronicle",
       envelope: {
-        answer: isPt
+        answer: isNonEnglish
           ? `O owner atual registrado no Chronicle é ${address}.`
           : `The current owner recorded in the Chronicle is ${address}.`,
-        evidence: isPt
+        evidence: isNonEnglish
           ? `Isso vem do campo de owner atual no Chronicle desta inscrição.`
           : `This comes from the Chronicle field for the current owner of this inscription.`,
         used_tools: [],
@@ -46,10 +46,10 @@ export async function resolveDirectFactAnswer(params: {
       handled: true,
       reason: "genesis_from_chronicle",
       envelope: {
-        answer: isPt
+        answer: isNonEnglish
           ? `A inscrição foi cunhada em ${genesisTimestamp}.`
           : `The inscription was minted on ${genesisTimestamp}.`,
-        evidence: isPt
+        evidence: isNonEnglish
           ? `O Chronicle registra isso no bloco ${genesisBlock.toLocaleString("en-US")}.`
           : `The Chronicle records this at block ${genesisBlock.toLocaleString("en-US")}.`,
         used_tools: [],
@@ -66,7 +66,7 @@ export async function resolveDirectFactAnswer(params: {
         handled: true,
         reason: "parent_missing_in_chronicle",
         envelope: {
-          answer: isPt
+          answer: isNonEnglish
             ? "Não encontrei uma inscrição parent confirmada nos dados atuais do Chronicle."
             : "I could not find a confirmed parent inscription in the current Chronicle data.",
           used_tools: [],
@@ -78,10 +78,10 @@ export async function resolveDirectFactAnswer(params: {
       handled: true,
       reason: "parent_from_chronicle",
       envelope: {
-        answer: isPt
+        answer: isNonEnglish
           ? `A parent inscription registrada é ${parentId}.`
           : `The recorded parent inscription is ${parentId}.`,
-        evidence: isPt
+        evidence: isNonEnglish
           ? "Isso vem das relações de coleção já presentes no Chronicle."
           : "This comes from the collection relations already present in the Chronicle.",
         used_tools: [],
@@ -95,10 +95,10 @@ export async function resolveDirectFactAnswer(params: {
       handled: true,
       reason: "transfer_count_from_chronicle",
       envelope: {
-        answer: isPt
+        answer: isNonEnglish
           ? `Encontrei ${transferCount.toLocaleString("en-US")} eventos de transferência ou venda no Chronicle atual.`
           : `I found ${transferCount.toLocaleString("en-US")} transfer or sale events in the current Chronicle.`,
-        evidence: isPt
+        evidence: isNonEnglish
           ? "A contagem foi feita a partir da timeline factual já carregada."
           : "The count comes from the factual timeline already loaded.",
         used_tools: [],
@@ -109,7 +109,7 @@ export async function resolveDirectFactAnswer(params: {
   return { handled: false }
 }
 
-async function resolveCollectionSizeAnswer(chronicle: Chronicle, isPt: boolean): Promise<DirectFactResolution> {
+async function resolveCollectionSizeAnswer(chronicle: Chronicle, isNonEnglish: boolean): Promise<DirectFactResolution> {
   const collectionSlug = chronicle.collection_context.market.match?.collection_slug
     ?? chronicle.collection_context.registry.match?.slug
   const collectionName = chronicle.collection_context.presentation.full_label
@@ -129,10 +129,10 @@ async function resolveCollectionSizeAnswer(chronicle: Chronicle, isPt: boolean):
         handled: true,
         reason: "collection_size_from_wiki_tool",
         envelope: {
-          answer: isPt
+          answer: isNonEnglish
             ? `Encontrei ${exactCount.toLocaleString("en-US")} inscrições mapeadas para a coleção ${collectionName}.`
             : `I found ${exactCount.toLocaleString("en-US")} inscriptions mapped to the ${collectionName} collection.`,
-          evidence: isPt
+          evidence: isNonEnglish
             ? "Esse total veio de `get_collection_context`, baseado nos eventos públicos de genesis indexados."
             : "That total came from `get_collection_context`, based on indexed public genesis events.",
           used_tools: ["get_collection_context"],
@@ -147,10 +147,10 @@ async function resolveCollectionSizeAnswer(chronicle: Chronicle, isPt: boolean):
       handled: true,
       reason: "collection_supply_from_market_profile",
       envelope: {
-        answer: isPt
+        answer: isNonEnglish
           ? `Os dados públicos da coleção ${collectionName} mostram supply de ${publicSupply}.`
           : `Public collection data for ${collectionName} shows a supply of ${publicSupply}.`,
-        uncertainty: isPt
+        uncertainty: isNonEnglish
           ? "Isso é um supply público de página de coleção e pode não corresponder a uma contagem on-chain exata."
           : "That is a public collection-page supply figure and may not match an exact on-chain count.",
         used_tools: [],
@@ -162,10 +162,10 @@ async function resolveCollectionSizeAnswer(chronicle: Chronicle, isPt: boolean):
     handled: true,
     reason: "collection_size_unavailable",
     envelope: {
-      answer: isPt
+      answer: isNonEnglish
         ? `Não consegui confirmar uma contagem exata para ${collectionName} com os dados públicos disponíveis agora.`
         : `I could not confirm an exact count for ${collectionName} from the public data currently available.`,
-      uncertainty: isPt
+      uncertainty: isNonEnglish
         ? "Os dados atuais não trazem um total confiável o suficiente para afirmar esse número sem extrapolar."
         : "The current data does not provide a reliable enough total to state that number without extrapolating.",
       used_tools: collectionSlug ? ["get_collection_context"] : [],
@@ -200,7 +200,7 @@ function isTransferCountQuestion(prompt: string): boolean {
   )
 }
 
-function isPortuguese(prompt: string): boolean {
+function detectNonEnglish(prompt: string): boolean {
   return /\b(quant[ao]s?|colecao|colec[aã]o|inscri[cç][aã]o|dono|cunhad[ao]|vendas?)\b/u.test(prompt)
 }
 

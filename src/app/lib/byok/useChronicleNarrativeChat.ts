@@ -63,12 +63,12 @@ function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((message) => keepTurnIds.has(message.turnId))
 }
 
-function isPortuguesePrompt(prompt: string): boolean {
+function detectNonEnglishPrompt(prompt: string): boolean {
   return /\b(que|quando|quem|como|cole[cç][aã]o|wiki|inscri[cç][aã]o|fundador|criador|comunidade|hist[oó]ria|lan[cç]ou|mintou)\b/iu.test(prompt)
 }
 
 function buildKnowledgeContributionFallback(prompt: string): string {
-  return isPortuguesePrompt(prompt)
+  return detectNonEnglishPrompt(prompt)
     ? "Entendi. Vou tratar isso como uma contribuição da comunidade para a wiki, mantendo a validação factual separada do relato enviado no chat."
     : "Understood. I'll treat that as a community wiki contribution while keeping factual verification separate from the claim shared in chat."
 }

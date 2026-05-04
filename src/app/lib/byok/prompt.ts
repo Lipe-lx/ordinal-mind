@@ -19,7 +19,7 @@ export function buildSystemPrompt(availableTools: SearchToolDefinition[] = []): 
 Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
 
 Rules:
-- Write in the same language used by the user in their latest messages. If they write in Portuguese, respond in Portuguese. Default to English if unclear.
+- Write in the same language used by the user in their latest messages. Default to English if unclear.
 - Tone: objective, vivid, and historically aware. Avoid hype copy.
 - Maximum 5 short paragraphs.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
@@ -43,10 +43,10 @@ The final user-facing Chronicle narrative or answer.
 
 Everything outside the <final_answer> tags will be filtered out and never seen by the user.
 
-### REGRA FINAL OBRIGATÓRIA
-- Antes de responder com QUALQUER número, resultado calculado, supply total, cotação ou conclusão numérica, você DEVE ter chamado uma ferramenta da lista abaixo para obter esse valor.
-- Cálculo mental, estimativa ou extrapolação de dados não fornecidos é TERMINANTEMENTE PROIBIDO.
-- Se os dados estiverem ausentes ou incompletos após a pesquisa, informe a incerteza explicitamente em vez de inventar valores.`
+### MANDATORY FINAL RULE
+- Before responding with ANY number, calculated result, total supply, quote, or numerical conclusion, you MUST have called a tool from the list below to obtain that value.
+- Mental calculation, estimation, or extrapolation of data not provided is STRICTLY PROHIBITED.
+- If data is missing or incomplete after research, state the uncertainty explicitly instead of inventing values.`
 
   if (!supportsTools) return baseRules
 
@@ -196,7 +196,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in E
 - Never repeat a tool call with the same arguments unless the earlier result explicitly says partial, missing, or errored.
 - For transfer/sale questions, prefer a single get_raw_events call that includes all required event_types, such as ["transfer","sale"], instead of separate calls for each type.
 - If you need both the compact history and the raw rows, call get_timeline and get_raw_events together in the same turn.
-- REGRA CRÍTICA: Nunca invente números de supply, datas de mint ou volumes de venda. Se a ferramenta falhar em trazer o dado exato, diga que a informação não foi encontrada nos registros públicos.`
+- CRITICAL RULE: Never invent supply numbers, mint dates, or sales volumes. If the tool fails to bring the exact data, state that the information was not found in public records.`
 }
 
 export function buildSynthesisContext(chronicle: Chronicle): string {
