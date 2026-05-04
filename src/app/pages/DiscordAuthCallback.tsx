@@ -42,29 +42,49 @@ export function DiscordAuthCallback() {
     exchangeStarted.current = true
 
     async function exchange() {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
+
       try {
+        console.log("[AuthCallback] Starting code exchange...")
         setStatus("Verifying identity...")
 
-        // We call the actual worker endpoint. 
-        // We MUST use Accept: application/json to get the token back instead of a 302 redirect.
         const res = await fetch(`/api/auth/callback?code=${code}&state=${state}`, {
-          headers: { "Accept": "application/json" }
+          headers: { "Accept": "application/json" },
+          signal: controller.signal
         })
+
+        clearTimeout(timeoutId)
+
+        const contentType = res.headers.get("content-type")
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text()
+          console.error("[AuthCallback] Expected JSON but received:", text.slice(0, 200))
+          throw new Error("Server returned an invalid response (not JSON).")
+        }
 
         const data = await res.json()
         if (cancelled) return
 
         if (res.ok && data.token) {
-          // Success! Redirect home with the token so useDiscordIdentity can pick it up.
+          console.log("[AuthCallback] Exchange successful, redirecting home.")
           navigate(`/?auth_token=${encodeURIComponent(data.token)}`, { replace: true })
         } else {
           const msg = data.error || "Failed to exchange authorization code."
+          console.warn("[AuthCallback] Exchange failed:", msg)
           navigate(`/?auth_error=${encodeURIComponent(msg)}`, { replace: true })
         }
       } catch (err) {
+        clearTimeout(timeoutId)
         if (cancelled) return
-        console.error("Auth exchange failed:", err)
-        setError(err instanceof Error ? err.message : "Connection failed.")
+        
+        if (err instanceof Error && err.name === "AbortError") {
+          console.error("[AuthCallback] Exchange timed out.")
+          setError("Connection timed out. Discord API or Worker might be slow.")
+        } else {
+          console.error("[AuthCallback] Auth exchange failed:", err)
+          setError(err instanceof Error ? err.message : "Connection failed.")
+        }
       }
     }
 

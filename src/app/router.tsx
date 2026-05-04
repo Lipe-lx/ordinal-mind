@@ -3,6 +3,7 @@ import { Layout } from "./components/Layout"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { Home } from "./pages/Home"
 import { Chronicle } from "./pages/Chronicle"
+import { DiscordAuthCallback } from "./pages/DiscordAuthCallback"
 
 
 // The loader now only validates the ID and passes it to the component.
@@ -18,6 +19,11 @@ export const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     errorElement: <ErrorBoundary />,
+    HydrateFallback: () => (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
+        Loading...
+      </div>
+    ),
     children: [
       {
         index: true,
@@ -45,9 +51,10 @@ export const router = createBrowserRouter([
       },
       {
         path: "api/auth/callback",
-        lazy: () => import("./pages/DiscordAuthCallback").then(m => ({ Component: m.DiscordAuthCallback })),
+        element: <DiscordAuthCallback />,
       },
-
     ],
   },
-])
+], {
+  hydrationData: (window as any).__ROUTER_HYDRATION_DATA__,
+})

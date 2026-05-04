@@ -130,7 +130,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
   }
 
   try {
-    // Exchange code for access token
+    console.log(`[Auth] Exchanging code for Discord tokens...`)
     const tokens = await exchangeCode({
       code,
       codeVerifier,
@@ -139,7 +139,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
       clientSecret: env.DISCORD_CLIENT_SECRET,
     })
 
-    // Fetch Discord user + guilds in parallel
+    console.log(`[Auth] Fetching user profile and guilds...`)
     const [user, guilds] = await Promise.all([
       fetchDiscordUser(tokens.access_token),
       fetchDiscordGuilds(tokens.access_token),
@@ -147,30 +147,42 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
 
     const accountCreatedAt = discordSnowflakeToDate(user.id)
     const guildIds = guilds.map((g) => g.id)
+    console.log(`[Auth] Calculating tier for user: ${user.username} (${user.id})`)
     const tier = await calculateTier(user.id, guildIds, accountCreatedAt, env.CHRONICLES_KV)
+
+    console.log(`[Auth] Tier calculated: ${tier}. Upserting user in DB...`)
 
     // Upsert user in D1
     if (env.DB) {
-      await env.DB.prepare(`
-        INSERT INTO users (discord_id, username, avatar_hash, og_tier, server_ids_json, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(discord_id) DO UPDATE SET
-          username = excluded.username,
-          avatar_hash = excluded.avatar_hash,
-          og_tier = excluded.og_tier,
-          server_ids_json = excluded.server_ids_json,
-          last_seen_at = datetime('now')
-      `)
-        .bind(
-          user.id,
-          user.username,
-          user.avatar ?? null,
-          tier,
-          JSON.stringify(guildIds)
-        )
-        .run()
+      try {
+        await env.DB.prepare(`
+          INSERT INTO users (discord_id, username, avatar_hash, og_tier, server_ids_json, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(discord_id) DO UPDATE SET
+            username = excluded.username,
+            avatar_hash = excluded.avatar_hash,
+            og_tier = excluded.og_tier,
+            server_ids_json = excluded.server_ids_json,
+            last_seen_at = datetime('now')
+        `)
+          .bind(
+            user.id,
+            user.username,
+            user.avatar ?? null,
+            tier,
+            JSON.stringify(guildIds)
+          )
+          .run()
+        console.log(`[Auth] User upserted in DB successfully.`)
+      } catch (dbErr) {
+        console.error(`[Auth] DB upsert failed:`, dbErr)
+        // We continue anyway, DB is non-critical for auth
+      }
+    } else {
+      console.warn(`[Auth] DB not bound, skipping upsert.`)
     }
 
+    console.log(`[Auth] Signing JWT...`)
     // Sign JWT
     const jwt = await signJWT(
       {
@@ -179,8 +191,9 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
         avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
         tier,
       },
-      env.JWT_SECRET
+      env.JWT_SECRET || ""
     )
+    console.log(`[Auth] JWT signed. Sending response.`)
 
     // Redirect back to SPA with JWT as query param
     // The useDiscordIdentity hook captures this, stores it, and cleans the URL
