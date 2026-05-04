@@ -128,6 +128,26 @@ const chronicle: Chronicle = {
         owner_address: "bc1ptest",
         source_ref: "https://ord.net/inscription/rooti0",
       },
+      satflow_match: null,
+      ord_net_match: null,
+      preferred_description: {
+        source: "satflow",
+        source_ref: "https://www.satflow.com/ordinal/rooti0",
+        text: "Quantum Cats is a test collection description from Satflow.",
+        target: "inscription_page",
+      },
+      satflow_description: {
+        source: "satflow",
+        source_ref: "https://www.satflow.com/ordinal/rooti0",
+        text: "Quantum Cats is a test collection description from Satflow.",
+        target: "inscription_page",
+      },
+      ord_net_description: {
+        source: "ord_net",
+        source_ref: "https://ord.net/inscription/101",
+        text: "Quantum Cats is a parent description from ord.net.",
+        target: "parent_inscription_page",
+      },
     },
     profile: {
       name: "Quantum Cats",
@@ -205,9 +225,12 @@ describe("buildSynthesisContext", () => {
     expect(context).toContain("Identity:")
     expect(context).toContain("Gallery sample:")
     expect(context).toContain("Collector focus:")
+    expect(context).toContain("Trusted collection descriptions:")
     expect(context).toContain("Collection profile:")
     expect(context).toContain("Curated collection match:")
     expect(context).toContain("Market overlay:")
+    expect(context).toContain("Preferred source: Satflow inscription page (https://www.satflow.com/ordinal/rooti0)")
+    expect(context).toContain("Alternate source: ord.net parent inscription page (https://ord.net/inscription/101)")
     expect(context).toContain("Official X accounts: https://x.com/quantumcats")
     expect(context).toContain("Quantum Cats")
     expect(context).toContain("Primary lens")

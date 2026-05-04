@@ -107,6 +107,11 @@ const baseChronicle: Chronicle = {
         verified: true,
         source_ref: "https://ord.net/collection/runestone",
       },
+      satflow_match: null,
+      ord_net_match: null,
+      preferred_description: null,
+      satflow_description: null,
+      ord_net_description: null,
     },
     profile: {
       name: "Runestone",
@@ -190,7 +195,14 @@ describe("resolveDirectFactAnswer", () => {
         collection_context: {
           ...baseChronicle.collection_context,
           registry: { match: null, issues: [] },
-          market: { match: null },
+          market: {
+            match: null,
+            satflow_match: null,
+            ord_net_match: null,
+            preferred_description: null,
+            satflow_description: null,
+            ord_net_description: null,
+          },
           profile: null,
           presentation: { primary_label: null, full_label: null, facets: [] },
         },

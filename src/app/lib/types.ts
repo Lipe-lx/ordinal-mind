@@ -192,6 +192,13 @@ export interface MarketRarityOverlay {
   traits: Array<{ key: string, value: string, tokenCount: number }>
 }
 
+export interface CollectionDescriptionEvidence {
+  source: "satflow" | "ord_net"
+  source_ref: string
+  text: string
+  target: "inscription_page" | "parent_inscription_page"
+}
+
 export interface MarketOverlayMatch {
   collection_slug: string
   collection_name: string
@@ -245,8 +252,11 @@ export interface CollectionContext {
   }
   market: {
     match: MarketOverlayMatch | null
-    satflow_match?: MarketOverlayMatch | null
-    ord_net_match?: MarketOverlayMatch | null
+    satflow_match: MarketOverlayMatch | null
+    ord_net_match: MarketOverlayMatch | null
+    preferred_description: CollectionDescriptionEvidence | null
+    satflow_description: CollectionDescriptionEvidence | null
+    ord_net_description: CollectionDescriptionEvidence | null
   }
   profile: CollectionProfile | null
   socials: {

@@ -25,6 +25,7 @@ Rules:
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
 - Do not repeat the visible metadata as a checklist. Use identity, block, owner, and transfers only when they explain why the artifact matters.
 - If collection profile data exists, lead with the collection's factual story, creators, milestones, and collector signals before zooming into this specific inscription.
+- Treat trusted collection descriptions from Satflow or ord.net as high-confidence editorial context for framing the collection. Prefer Satflow when both are present, but never let editorial descriptions override on-chain facts, timestamps, provenance, transfers, or exact counts.
 - Explain the relationship between this inscription and the collection: on-chain parent/provenance, curated registry match, and market overlay are separate evidence layers.
 - Prefer collector-relevant meaning: distribution method, creator roles, supply/index signals, provenance mechanism, notable milestones, and what remains uncertain.
 - Treat protocol-native relations as higher trust than curated registry matches.
@@ -237,6 +238,7 @@ export function buildSynthesisContext(chronicle: Chronicle): string {
         : "Fallback reason: none",
     ]),
     buildSection("Collector focus", buildCollectorFocus(chronicle)),
+    buildSection("Trusted collection descriptions", buildTrustedCollectionDescriptionSection(chronicle)),
     buildSection("Collection profile", buildCollectionProfileSection(chronicle)),
     buildSection("On-chain facts", buildTimelineSummary(events)),
     buildSection("Web Lore & Context", buildWebResearchSection(chronicle)),
@@ -377,6 +379,36 @@ function buildCollectionProfileSection(chronicle: Chronicle): string[] {
   return lines
 }
 
+function buildTrustedCollectionDescriptionSection(chronicle: Chronicle): string[] {
+  const preferred = chronicle.collection_context.market.preferred_description
+  const satflow = chronicle.collection_context.market.satflow_description
+  const ordNet = chronicle.collection_context.market.ord_net_description
+
+  if (!preferred && !satflow && !ordNet) {
+    return ["No trusted collection descriptions found."]
+  }
+
+  const lines: string[] = []
+  if (preferred) {
+    lines.push(`Preferred source: ${formatCollectionDescriptionSource(preferred)}`)
+    lines.push(`Preferred text: ${preferred.text}`)
+  }
+
+  const alternate =
+    preferred?.source === "satflow"
+      ? ordNet
+      : preferred?.source === "ord_net"
+        ? satflow
+        : satflow ?? ordNet
+
+  if (alternate && normalizeComparableText(alternate.text) !== normalizeComparableText(preferred?.text ?? "")) {
+    lines.push(`Alternate source: ${formatCollectionDescriptionSource(alternate)}`)
+    lines.push(`Alternate text: ${alternate.text}`)
+  }
+
+  return lines
+}
+
 function buildWebResearchSection(chronicle: Chronicle): string[] {
   const research = chronicle.web_research
   if (!research || research.results.length === 0) {
@@ -493,6 +525,21 @@ function describeRelatedInscription(item: RelatedInscriptionSummary): string {
   const contentType = item.content_type ?? "unknown type"
   const date = item.genesis_timestamp ? ` · minted ${String(item.genesis_timestamp).slice(0, 10)}` : ""
   return `${number} · ${item.inscription_id} · ${contentType}${date}`
+}
+
+function formatCollectionDescriptionSource(
+  description: NonNullable<Chronicle["collection_context"]["market"]["preferred_description"]>
+): string {
+  const provider = description.source === "satflow" ? "Satflow" : "ord.net"
+  const target =
+    description.target === "inscription_page"
+      ? "inscription page"
+      : "parent inscription page"
+  return `${provider} ${target} (${description.source_ref})`
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, " ").trim()
 }
 
 function buildSection(title: string, lines: string[]): string {

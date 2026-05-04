@@ -10,7 +10,9 @@ import {
   parseOrdMarketOverlay,
   parseOrdNetCollectionDirectory,
   parseOfficialXProfileLinks,
+  parseOrdNetParentCollectionDescription,
   parseSatflowInscriptionOverlay,
+  parseSatflowCollectionDescription,
   parseSatflowCollectionStats,
   parseRegistryEntries,
   resolveCommercialCollectionName,
@@ -319,6 +321,52 @@ describe("Satflow collection stats parsing", () => {
     `
 
     expect(parseSatflowCollectionStats(html, "https://www.satflow.com/ordinals/runestone")).toBeNull()
+  })
+})
+
+describe("collection description parsing", () => {
+  it("extracts the trusted collection prose from a Satflow inscription page", () => {
+    const html = `
+      <div class="max-w-full line-clamp-2 overflow-ellipse">
+        <span class="text-sm">
+          <p class="inline">Pupsogette is 77777 Pupsogs on Ordinals. As per custom, VPL, no whitepaper, no corp, no roadmap. Just art.</p>
+        </span>
+      </div>
+    `
+
+    expect(parseSatflowCollectionDescription(html, "https://www.satflow.com/ordinal/example")).toEqual({
+      source: "satflow",
+      source_ref: "https://www.satflow.com/ordinal/example",
+      text: "Pupsogette is 77777 Pupsogs on Ordinals. As per custom, VPL, no whitepaper, no corp, no roadmap. Just art.",
+      target: "inscription_page",
+    })
+  })
+
+  it("extracts the parent collection description from ord.net traits payload", () => {
+    const html = `
+      <script>
+        __sveltekit_ywycw.resolve(1, () => [{
+          item:{
+            traits:[
+              {type:"CollectionName",value:"Pupsogette"},
+              {type:"Description",value:"BJ! Pupsogette is a VPL licensed collection of 77777 Pupsogs made with Z-Image Turbo."}
+            ]
+          }
+        }])
+      </script>
+    `
+
+    expect(parseOrdNetParentCollectionDescription(html, "https://ord.net/inscription/124517225")).toEqual({
+      source: "ord_net",
+      source_ref: "https://ord.net/inscription/124517225",
+      text: "BJ! Pupsogette is a VPL licensed collection of 77777 Pupsogs made with Z-Image Turbo.",
+      target: "parent_inscription_page",
+    })
+  })
+
+  it("returns null when the public pages do not expose a usable description", () => {
+    expect(parseSatflowCollectionDescription("<div>No useful prose here</div>", "https://www.satflow.com/ordinal/example")).toBeNull()
+    expect(parseOrdNetParentCollectionDescription("<script>traits:[{type:\"CollectionName\",value:\"Pupsogette\"}]</script>", "https://ord.net/inscription/124517225")).toBeNull()
   })
 })
 
@@ -783,6 +831,109 @@ describe("collection context descendants", () => {
     expect(
       grandchildren?.items.find((item) => item.inscription_id === "shared-grandchildi0")?.related_to_ids
     ).toEqual(["child-1i0", "child-2i0"])
+  })
+})
+
+describe("collection description enrichment", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("stores both trusted descriptions and prefers Satflow when both are available", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+
+      if (url === `https://ordinals.com/inscription/${baseMeta.inscription_id}`) {
+        return jsonResponse({
+          id: baseMeta.inscription_id,
+          number: baseMeta.inscription_number,
+          properties: {
+            attributes: {
+              title: "Root Inscription",
+            },
+          },
+        })
+      }
+
+      if (url === `https://ordinals.com/r/parents/${baseMeta.inscription_id}/inscriptions`) {
+        return jsonResponse({
+          parents: [
+            {
+              id: "parent1i0",
+              number: 124517225,
+              content_type: "image/png",
+              height: 840001,
+              timestamp: 1713571300,
+            },
+          ],
+          more: false,
+          page: 0,
+        })
+      }
+
+      if (url === `https://ordinals.com/r/children/${baseMeta.inscription_id}/inscriptions`) {
+        return jsonResponse({ children: [], more: false, page: 0 })
+      }
+
+      if (url === `https://www.satflow.com/ordinal/${baseMeta.inscription_id}`) {
+        return new Response(`
+          <meta property="og:title" content="Pupsog 1202 - Pupsogette" />
+          <a href="/ordinals/pupsogette">Pupsogette</a>
+          <div class="max-w-full line-clamp-2 overflow-ellipse">
+            <span class="text-sm">
+              <p class="inline">Pupsogette is 77777 Pupsogs on Ordinals. As per custom, VPL, no whitepaper, no corp, no roadmap. Just art.</p>
+            </span>
+          </div>
+        `, { status: 200 })
+      }
+
+      if (url === "https://ord.net/inscription/124517225") {
+        return new Response(`
+          <script>
+            __sveltekit_ywycw.resolve(1, () => [{
+              item:{
+                traits:[
+                  {type:"CollectionName",value:"Pupsogette"},
+                  {type:"Description",value:"BJ! Pupsogette is a VPL licensed collection of 77777 Pupsogs made with Z-Image Turbo."}
+                ]
+              }
+            }])
+          </script>
+        `, { status: 200 })
+      }
+
+      if (
+        url === "https://raw.githubusercontent.com/TheWizardsOfOrd/ordinals-collections/main/collections.json" ||
+        url === "https://raw.githubusercontent.com/TheWizardsOfOrd/ordinals-collections/main/collections-needs-info.json"
+      ) {
+        return jsonResponse([])
+      }
+
+      return new Response("not found", { status: 404 })
+    }))
+
+    const result = await fetchCollectionContext(baseMeta.inscription_id, {
+      ...baseMeta,
+      collection: { parent_inscription_id: "fallback-parenti0" },
+    })
+
+    expect(result.collectionContext.market.preferred_description).toEqual({
+      source: "satflow",
+      source_ref: `https://www.satflow.com/ordinal/${baseMeta.inscription_id}`,
+      text: "Pupsogette is 77777 Pupsogs on Ordinals. As per custom, VPL, no whitepaper, no corp, no roadmap. Just art.",
+      target: "inscription_page",
+    })
+    expect(result.collectionContext.market.satflow_description?.source).toBe("satflow")
+    expect(result.collectionContext.market.ord_net_description).toEqual({
+      source: "ord_net",
+      source_ref: "https://ord.net/inscription/124517225",
+      text: "BJ! Pupsogette is a VPL licensed collection of 77777 Pupsogs made with Z-Image Turbo.",
+      target: "parent_inscription_page",
+    })
   })
 })
 

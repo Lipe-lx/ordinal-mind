@@ -1,4 +1,5 @@
 import type {
+  CollectionDescriptionEvidence,
   CollectionContext,
   CollectionMarketStats,
   CollectionPresentationFacet,
@@ -377,6 +378,33 @@ export async function fetchCollectionContext(
       marketOverlay?.rarity_overlay?.source ?? "none",
     selected_rarity_trait_count: marketOverlay?.rarity_overlay?.traits.length ?? 0,
   })
+  const ordNetParentRef =
+    parents?.items[0]?.inscription_number != null
+      ? String(parents.items[0].inscription_number)
+      : meta.collection?.parent_inscription_id
+  const [satflowDescription, ordNetDescription] = await Promise.all([
+    fetchSatflowCollectionDescriptionFromInscription(
+      inscriptionId,
+      fetchedAt,
+      sourceCatalog,
+      diagnostics
+    ),
+    ordNetParentRef
+      ? fetchOrdNetParentCollectionDescription(
+          ordNetParentRef,
+          fetchedAt,
+          sourceCatalog,
+          diagnostics
+        )
+      : Promise.resolve(null),
+  ])
+  const preferredDescription = satflowDescription ?? ordNetDescription
+  debugCollection(diagnostics, inscriptionId, "description_resolution", {
+    has_satflow_description: Boolean(satflowDescription),
+    has_ord_net_description: Boolean(ordNetDescription),
+    preferred_description_source: preferredDescription?.source ?? null,
+    ord_net_parent_ref: ordNetParentRef ?? null,
+  })
   const ordNetDirectoryMatch = marketOverlay
     ? await fetchOrdNetCollectionDirectoryMatch(marketOverlay, fetchedAt, sourceCatalog)
     : null
@@ -466,6 +494,9 @@ export async function fetchCollectionContext(
       match: marketOverlay,
       satflow_match: satflowOverlay,
       ord_net_match: ordNetOverlay,
+      preferred_description: preferredDescription,
+      satflow_description: satflowDescription,
+      ord_net_description: ordNetDescription,
     },
     profile,
     socials: {
@@ -938,6 +969,43 @@ function normalizeCollectionName(name: string | undefined): string | undefined {
   return normalized ? normalized : undefined
 }
 
+function normalizeCollectionDescriptionText(raw: string): string | null {
+  if (!raw) return null
+
+  const text = decodeSimpleHtmlEntities(
+    raw
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\\n/g, "\n")
+      .replace(/\\"/g, "\"")
+      .replace(/\\'/g, "'")
+      .replace(/\\u0026/gi, "&")
+      .replace(/\\u003c/gi, "<")
+      .replace(/\\u003e/gi, ">")
+  )
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (!text) return null
+  if (/^(?:description|unknown|n\/a|none|null|undefined)$/i.test(text)) return null
+  if (/^#?\d+$/.test(text)) return null
+
+  return text
+}
+
+function decodeSimpleHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#x2f;/gi, "/")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ")
+}
+
 function isPlaceholderCollectionName(name: string): boolean {
   const normalized = name.trim().toLowerCase()
 
@@ -1157,6 +1225,32 @@ async function fetchSatflowCollectionPageData(
   return { stats, officialXProfiles }
 }
 
+async function fetchSatflowCollectionDescriptionFromInscription(
+  inscriptionId: string,
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
+): Promise<CollectionDescriptionEvidence | null> {
+  const url = `${SATFLOW_ORDINAL_BASE_URL}/${inscriptionId}`
+  const html = await fetchOptionalText(url, {
+    sourceCatalog,
+    sourceType: "market_collection_description_satflow",
+    urlOrRef: url,
+    trustLevel: "market_overlay",
+    fetchedAt,
+    detail: "Satflow inscription page collection description",
+  })
+
+  if (!html) return null
+
+  const description = parseSatflowCollectionDescription(html, url)
+  debugCollection(diagnostics, inscriptionId, "satflow_collection_description_parsed", {
+    has_description: Boolean(description),
+    text_length: description?.text.length ?? 0,
+  })
+  return description
+}
+
 async function fetchOrdNetCollectionOfficialXUrls(
   collectionHref: string,
   hints: {
@@ -1193,6 +1287,32 @@ async function fetchOrdNetCollectionOfficialXUrls(
     official_x_count: officialXProfiles.length,
   })
   return officialXProfiles
+}
+
+async function fetchOrdNetParentCollectionDescription(
+  parentRef: string,
+  fetchedAt: string,
+  sourceCatalog: SourceCatalogItem[],
+  diagnostics?: CollectionDiagnosticsOptions
+): Promise<CollectionDescriptionEvidence | null> {
+  const url = `${ORD_MARKET_BASE_URL}/inscription/${encodeURIComponent(parentRef)}`
+  const html = await fetchOptionalText(url, {
+    sourceCatalog,
+    sourceType: "market_collection_description_ord_net",
+    urlOrRef: url,
+    trustLevel: "market_overlay",
+    fetchedAt,
+    detail: "ord.net parent inscription collection description",
+  })
+
+  if (!html) return null
+
+  const description = parseOrdNetParentCollectionDescription(html, url)
+  debugCollection(diagnostics, parentRef, "ord_net_parent_collection_description_parsed", {
+    has_description: Boolean(description),
+    text_length: description?.text.length ?? 0,
+  })
+  return description
 }
 
 async function fetchCoinGeckoCollectionOfficialXUrls(
@@ -1336,6 +1456,24 @@ export function parseSatflowInscriptionOverlay(
     verified: false,
     source_ref: sourceRef,
     rarity_overlay,
+  }
+}
+
+export function parseSatflowCollectionDescription(
+  html: string,
+  sourceRef: string
+): CollectionDescriptionEvidence | null {
+  const match = html.match(
+    /<div[^>]*class="[^"]*line-clamp-2[^"]*"[^>]*>\s*<span[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>/i
+  )
+  const text = normalizeCollectionDescriptionText(match?.[1] ?? "")
+  if (!text) return null
+
+  return {
+    source: "satflow",
+    source_ref: sourceRef,
+    text,
+    target: "inscription_page",
   }
 }
 
@@ -1492,6 +1630,25 @@ export function parseOrdMarketOverlay(
     owner_address: ownerAddress,
     source_ref: sourceRef,
     rarity_overlay: ordNetRarity,
+  }
+}
+
+export function parseOrdNetParentCollectionDescription(
+  html: string,
+  sourceRef: string
+): CollectionDescriptionEvidence | null {
+  const payload = normalizeOrdNetPayload(html)
+  const match = payload.match(
+    /(?:^|[,{])(?:"type"|type):"Description",(?:"value"|value):"((?:\\.|[^"\\])*)"/i
+  )
+  const text = normalizeCollectionDescriptionText(match?.[1] ?? "")
+  if (!text) return null
+
+  return {
+    source: "ord_net",
+    source_ref: sourceRef,
+    text,
+    target: "parent_inscription_page",
   }
 }
 

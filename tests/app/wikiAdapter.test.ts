@@ -53,7 +53,14 @@ const chronicle = {
   collection_context: {
     protocol: { parents: null, children: null, grandchildren: null, gallery: null, grandparents: null, greatGrandparents: null },
     registry: { match: null, issues: [] },
-    market: { match: null },
+    market: {
+      match: null,
+      satflow_match: null,
+      ord_net_match: null,
+      preferred_description: null,
+      satflow_description: null,
+      ord_net_description: null,
+    },
     profile: null,
     socials: { official_x_profiles: [] },
     presentation: { facets: [] },

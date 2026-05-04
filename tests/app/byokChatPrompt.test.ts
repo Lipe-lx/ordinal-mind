@@ -66,7 +66,14 @@ const chronicle = {
       greatGrandparents: null,
     },
     registry: { match: null, issues: [] },
-    market: { match: null },
+    market: {
+      match: null,
+      satflow_match: null,
+      ord_net_match: null,
+      preferred_description: null,
+      satflow_description: null,
+      ord_net_description: null,
+    },
     profile: null,
     socials: { official_x_profiles: [] },
     presentation: { facets: [] },
@@ -122,6 +129,8 @@ describe("buildChatTurnPrompt", () => {
 
     expect(prompt).toContain("Default to English (United States) if the latest user message is ambiguous.")
     expect(prompt).toContain("Determine the response language from the latest user message only.")
+    expect(prompt).toContain("Prefer Satflow when both are present")
+    expect(prompt).toContain("never let editorial descriptions override on-chain facts")
     expect(prompt).not.toMatch(/portuguese/i)
     expect(prompt).not.toMatch(/REGRA/i)
   })
