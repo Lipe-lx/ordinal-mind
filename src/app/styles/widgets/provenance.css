@@ -105,18 +105,26 @@
 
 .widget-provenance-heading {
   display: block;
+  width: 100%;
   font-size: 0.938rem;
   line-height: 1.2;
   font-weight: 800;
   color: var(--text-primary);
   transition: color var(--duration-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .widget-provenance-summary {
+  width: 100%;
   max-width: 46rem;
   font-size: 0.75rem;
   line-height: 1.45;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .widget-provenance:not(.expanded) .widget-provenance-kicker,
