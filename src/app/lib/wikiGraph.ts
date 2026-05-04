@@ -119,12 +119,7 @@ export function filterWikiGraphPayload(payload: WikiGraphPayload, filters: WikiG
   const allowedKinds = new Set(normalizedKinds)
   const allowedStatuses = new Set(normalizedStatuses)
 
-  const isFullKindSet = normalizedKinds.length === WIKI_GRAPH_NODE_KINDS.length
-  const isFullStatusSet = normalizedStatuses.length === WIKI_GRAPH_STATUSES.length
 
-  if (!search && isFullKindSet && isFullStatusSet) {
-    return payload
-  }
 
   const nodes = payload.nodes.filter((node) => {
     if (!allowedKinds.has(node.kind)) return false
