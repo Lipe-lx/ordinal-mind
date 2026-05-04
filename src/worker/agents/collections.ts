@@ -1698,6 +1698,7 @@ function extractSatflowRarity(
   try {
     const rank = extractMetricInteger(html, ["rarityRank"]) ?? 0
     const rawAttributes = selectBestSatflowAttributeArray(html)
+    const renderedTraitPercentages = extractSatflowRenderedTraitPercentages(html)
 
     const traits = (rawAttributes ?? [])
       .map((entry) => {
@@ -1711,7 +1712,10 @@ function extractSatflowRarity(
             : typeof candidate.count === "number"
               ? candidate.count
               : null
-        const percentage = parseOptionalPercentage(candidate.percentage)
+        const renderedPercentage = key && value != null
+          ? renderedTraitPercentages.get(buildTraitLookupKey(key, String(value)))
+          : undefined
+        const percentage = parseOptionalPercentage(candidate.percentage) ?? renderedPercentage
 
         if (!key || value === undefined || value === null) return null
 
@@ -1782,6 +1786,48 @@ function scoreSatflowAttributeArray(candidate: unknown[]): number {
   }
 
   return countedTraits * 100 + populatedTraits
+}
+
+function extractSatflowRenderedTraitPercentages(html: string): Map<string, number> {
+  const percentages = new Map<string, number>()
+  const pattern = /href="\/ordinals\/[^"]+\?attributes=([^"]+)"[^>]*>[\s\S]*?<span class="text-\[10px\] inline-block ml-2">\(&lt;!-- --&gt;([0-9.]+)&lt;!-- --&gt;%\)<\/span>|href="\/ordinals\/[^"]+\?attributes=([^"]+)"[^>]*>[\s\S]*?<span class="text-\[10px\] inline-block ml-2">\(\<!-- --\>([0-9.]+)\<!-- --\>%\)<\/span>/g
+
+  for (const match of html.matchAll(pattern)) {
+    const encodedAttributes = match[1] ?? match[3]
+    const percentageRaw = match[2] ?? match[4]
+    if (!encodedAttributes || !percentageRaw) continue
+
+    const percentage = Number.parseFloat(percentageRaw)
+    if (!Number.isFinite(percentage)) continue
+
+    const decoded = decodeSatflowAttributesFilter(encodedAttributes)
+    if (!decoded) continue
+
+    percentages.set(buildTraitLookupKey(decoded.key, decoded.value), percentage)
+  }
+
+  return percentages
+}
+
+function decodeSatflowAttributesFilter(
+  encodedAttributes: string
+): { key: string; value: string } | null {
+  try {
+    const decoded = decodeURIComponent(decodeHtmlHref(encodedAttributes))
+    const parsed = JSON.parse(decoded) as Record<string, unknown>
+    const [key, values] = Object.entries(parsed)[0] ?? []
+    if (!key || !Array.isArray(values) || typeof values[0] !== "string") return null
+    return {
+      key,
+      value: values[0],
+    }
+  } catch {
+    return null
+  }
+}
+
+function buildTraitLookupKey(key: string, value: string): string {
+  return `${key.trim().toLowerCase()}\u0000${value.trim().toLowerCase()}`
 }
 
 function parseOptionalPercentage(value: unknown): number | undefined {

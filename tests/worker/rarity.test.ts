@@ -50,6 +50,26 @@ describe("rarity builder", () => {
     ])
   })
 
+  it("preserves explicit overlay percentages even when they are zero-like values", () => {
+    const rarity = buildInscriptionRarity(null, {
+      source: "satflow",
+      rank: 0,
+      supply: 1000,
+      traits: [
+        { key: "Aura", value: "Null", tokenCount: 1, percentage: 0 },
+      ],
+    })
+
+    expect(rarity?.trait_breakdown).toEqual([
+      expect.objectContaining({
+        trait_type: "Aura",
+        value: "Null",
+        frequency: 1,
+        frequency_pct: 0,
+      }),
+    ])
+  })
+
   it("returns null when CBOR and market overlay traits are unavailable", () => {
     expect(buildInscriptionRarity(null, undefined)).toBeNull()
   })

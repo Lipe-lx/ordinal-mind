@@ -86,7 +86,7 @@ export function buildInscriptionRarity(
       trait_type: attr.trait_type,
       value: attr.value,
       frequency: count,
-      frequency_pct: pct ? Math.round(pct * 100) / 100 : undefined,
+      frequency_pct: pct !== undefined ? Math.round(pct * 100) / 100 : undefined,
       rarity_contribution: contribution ? Math.round(contribution * 10000) / 10000 : undefined,
     }
   })
@@ -103,7 +103,7 @@ export function buildInscriptionRarity(
   const supply = marketRarity?.supply ?? null
   let percentile: number | null = null
   
-  if (rank && supply && supply > 0) {
+  if (rank != null && supply && supply > 0) {
     percentile = Math.round((rank / supply) * 10000) / 100
   }
 

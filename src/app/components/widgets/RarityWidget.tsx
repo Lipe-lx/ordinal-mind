@@ -14,7 +14,7 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
   const [currentPage, setCurrentPage] = useState(0)
 
   const rarity = unisatEnrichment?.rarity
-  const TRAITS_PER_PAGE = 6
+  const CELLS_PER_PAGE = 6
 
   const traitItems: TraitRarityBreakdown[] = useMemo(() => {
     if (!rarity) return []
@@ -29,21 +29,43 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
         }))
   }, [rarity])
 
-  const totalPages = Math.max(1, Math.ceil(traitItems.length / TRAITS_PER_PAGE))
+  const gridCells = useMemo(() => {
+    const cells: Array<
+      | { kind: "rank"; rank: number; supply: number | null; percentile: number | null }
+      | { kind: "trait"; trait: TraitRarityBreakdown }
+    > = []
+
+    if (rarity?.rarity_rank != null) {
+      cells.push({
+        kind: "rank",
+        rank: rarity.rarity_rank,
+        supply: rarity.total_supply,
+        percentile: rarity.rarity_percentile,
+      })
+    }
+
+    for (const trait of traitItems) {
+      cells.push({ kind: "trait", trait })
+    }
+
+    return cells
+  }, [rarity?.rarity_percentile, rarity?.rarity_rank, rarity?.total_supply, traitItems])
+
+  const totalPages = Math.max(1, Math.ceil(gridCells.length / CELLS_PER_PAGE))
 
 
-  const visibleTraits = useMemo(() => {
-    const start = currentPage * TRAITS_PER_PAGE
-    return traitItems.slice(start, start + TRAITS_PER_PAGE)
-  }, [currentPage, traitItems])
+  const visibleCells = useMemo(() => {
+    const start = currentPage * CELLS_PER_PAGE
+    return gridCells.slice(start, start + CELLS_PER_PAGE)
+  }, [currentPage, gridCells])
 
-  const traitSlots = useMemo(() => {
-    const slots: Array<(typeof visibleTraits)[number] | null> = [...visibleTraits]
-    while (slots.length < TRAITS_PER_PAGE) {
+  const cellSlots = useMemo(() => {
+    const slots: Array<(typeof visibleCells)[number] | null> = [...visibleCells]
+    while (slots.length < CELLS_PER_PAGE) {
       slots.push(null)
     }
     return slots
-  }, [visibleTraits])
+  }, [visibleCells])
 
   // Removed early return guard to ensure the board always renders (fluid UI pattern)
   // if (!rarity || rarity.traits.length === 0) return null
@@ -96,35 +118,53 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
         )}
       </div>
 
-      {!!rarity?.rarity_rank && (
-        <div className="widget-meta-cell widget-rarity-rank-cell">
-          <span className="widget-meta-label">Rarity Rank</span>
-          <span className="widget-meta-value">#{rarity.rarity_rank.toLocaleString("en-US")}</span>
-          <span className="widget-meta-sub">
-            of {rarity.total_supply?.toLocaleString("en-US") ?? "—"} {rarity.rarity_percentile ? `· top ${rarity.rarity_percentile}%` : ""}
-          </span>
-        </div>
-      )}
-      
       <div className="widget-meta-grid widget-rarity-traits-grid">
-        {traitSlots.map((trait, index) => {
-          const isPlaceholder = !trait && index === 0 && traitItems.length === 0
+        {cellSlots.map((cell, index) => {
+          const isPlaceholder = !cell && index === 0 && gridCells.length === 0
           return (
             <div
-              key={trait ? `${trait.trait_type}-${trait.value}` : `empty-${currentPage}-${index}`}
-              className={`widget-meta-cell ${trait || isPlaceholder ? "" : "widget-meta-cell-empty"}`.trim()}
-              aria-hidden={!trait && !isPlaceholder}
+              key={
+                cell?.kind === "rank"
+                  ? `rank-${currentPage}`
+                  : cell?.kind === "trait"
+                    ? `${cell.trait.trait_type}-${cell.trait.value}`
+                    : `empty-${currentPage}-${index}`
+              }
+              className={`widget-meta-cell ${cell || isPlaceholder ? "" : "widget-meta-cell-empty"}`.trim()}
+              aria-hidden={!cell && !isPlaceholder}
             >
-              {trait ? (
+              {cell?.kind === "rank" ? (
                 <>
-                  <span className="widget-meta-label">{trait.trait_type}</span>
-                  <span className="widget-meta-value">{trait.value}</span>
-                  {trait.frequency_pct !== undefined && (
+                  <span className="widget-meta-label">Rarity Rank</span>
+                  <span className="widget-meta-value">#{cell.rank.toLocaleString("en-US")}</span>
+                  <div className="widget-rarity-trait-stats">
                     <span className="widget-meta-sub">
-                      {trait.frequency_pct < 1
-                        ? `${trait.frequency_pct.toFixed(2)}%`
-                        : `${Math.round(trait.frequency_pct)}%`} freq
+                      of {cell.supply?.toLocaleString("en-US") ?? "—"}
                     </span>
+                    {cell.percentile != null && (
+                      <span className="widget-meta-sub">
+                        top {formatTraitFrequencyPct(cell.percentile)}
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : cell?.kind === "trait" ? (
+                <>
+                  <span className="widget-meta-label">{cell.trait.trait_type}</span>
+                  <span className="widget-meta-value">{cell.trait.value}</span>
+                  {(cell.trait.frequency !== undefined || cell.trait.frequency_pct !== undefined) && (
+                    <div className="widget-rarity-trait-stats">
+                      {cell.trait.frequency !== undefined && (
+                        <span className="widget-meta-sub">
+                          {cell.trait.frequency.toLocaleString("en-US")} items
+                        </span>
+                      )}
+                      {cell.trait.frequency_pct !== undefined && (
+                        <span className="widget-meta-sub">
+                          {formatTraitFrequencyPct(cell.trait.frequency_pct)}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </>
               ) : isPlaceholder ? (
@@ -151,4 +191,11 @@ export function RarityWidget({ unisatEnrichment, validation }: Props) {
       </div>
     </div>
   )
+}
+
+function formatTraitFrequencyPct(value: number): string {
+  if (value < 1) return `${value.toFixed(2)}%`
+  if (value < 10) return `${value.toFixed(2)}%`
+  if (value < 100) return `${value.toFixed(1)}%`
+  return `${Math.round(value)}%`
 }

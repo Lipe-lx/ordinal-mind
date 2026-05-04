@@ -483,7 +483,7 @@ export async function enrichment(
     : null
   state.validation = validateAcrossSources(state.meta, validationUnisatInfo)
 
-  if (state.rarity?.rarity_rank) {
+  if (state.rarity?.rarity_rank != null) {
     await state.onProgress?.(
       "unisat",
       2,

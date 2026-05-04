@@ -511,6 +511,42 @@ describe("Satflow inscription overlay parsing", () => {
       },
     })
   })
+
+  it("enriches current trait rows with rendered Satflow percentages when JSON omits them", () => {
+    const html = `
+      <meta property="og:title" content="Pupsog 3484 - Pupsogette" />
+      <a href="/ordinals/pupsogette">Pupsogette</a>
+      <script>
+        self.__next_f.push([1,'meta:{"token":{"attributes":[
+          {"key":"TYPE","kind":"string","value":"pup","tokenCount":5568},
+          {"key":"GARB","kind":"string","value":"pupnotded","tokenCount":47},
+          {"key":"HEAD","kind":"string","value":"sombrero","tokenCount":45}
+        ]},"rarityRank":0}'])
+      </script>
+      <a href="/ordinals/pupsogette?attributes=%7B%22TYPE%22%3A%5B%22pup%22%5D%7D" class="min-w-0">
+        <div><p class="text-xs text-white/70">5.57K<span class="text-[10px] inline-block ml-2">(<!-- -->96.2<!-- -->%)</span></p></div>
+      </a>
+      <a href="/ordinals/pupsogette?attributes=%7B%22GARB%22%3A%5B%22pupnotded%22%5D%7D" class="min-w-0">
+        <div><p class="text-xs text-white/70">47<span class="text-[10px] inline-block ml-2">(<!-- -->0.8<!-- -->%)</span></p></div>
+      </a>
+      <a href="/ordinals/pupsogette?attributes=%7B%22HEAD%22%3A%5B%22sombrero%22%5D%7D" class="min-w-0">
+        <div><p class="text-xs text-white/70">45<span class="text-[10px] inline-block ml-2">(<!-- -->0.8<!-- -->%)</span></p></div>
+      </a>
+    `
+
+    expect(parseSatflowInscriptionOverlay(html, "https://www.satflow.com/ordinal/pupsog-3484")).toMatchObject({
+      collection_slug: "pupsogette",
+      rarity_overlay: {
+        source: "satflow",
+        source_ref: "https://www.satflow.com/ordinal/pupsog-3484",
+        traits: [
+          { key: "TYPE", value: "pup", tokenCount: 5568, percentage: 96.2 },
+          { key: "GARB", value: "pupnotded", tokenCount: 47, percentage: 0.8 },
+          { key: "HEAD", value: "sombrero", tokenCount: 45, percentage: 0.8 },
+        ],
+      },
+    })
+  })
 })
 
 describe("commercial collection name resolution", () => {
