@@ -179,6 +179,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generatio
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
+${hasWikiContext ? "- IMPORTANT: Weave information from the [Wiki Archive Knowledge] (e.g., founder, origins, cultural context, milestones) elaborately into the Chronicle narrative to provide a rich, historically-aware context." : ""}
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
