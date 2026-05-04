@@ -26,19 +26,11 @@ Rules:
 
 export function buildHybridUserMessage(
   input: string,
-  options?: { wikiPage?: WikiPage | null; wikiStatus?: string }
+  _options?: { wikiPage?: WikiPage | null; wikiStatus?: string }
 ): string {
-  const hints: string[] = [HYBRID_WIKI_POLICY.trim()]
-
-  if (options?.wikiPage) {
-    hints.push(`Known wiki context: ${options.wikiPage.title} — ${options.wikiPage.summary}`)
-  }
-
-  if (options?.wikiStatus && options.wikiStatus !== "idle") {
-    hints.push(`Wiki context status: ${options.wikiStatus}`)
-  }
-
-  return `${input}\n\n[System Context]\n${hints.join("\n")}`
+  // We no longer append wiki context to the user message to prevent attribution errors.
+  // The wiki context is now handled at the prompt assembly level in prompt.ts.
+  return input
 }
 
 export async function executeWikiTool(

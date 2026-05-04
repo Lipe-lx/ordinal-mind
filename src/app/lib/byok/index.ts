@@ -42,6 +42,8 @@ export interface LLMAdapter {
     intent: ChatIntent
     toolPolicyDecision?: ChatToolPolicyDecision
     wikiCompletenessInfo?: string
+    wikiPage?: import("../wikiTypes").WikiPage | null
+    wikiStatus?: string
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor

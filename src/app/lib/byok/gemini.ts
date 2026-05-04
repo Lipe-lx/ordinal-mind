@@ -83,6 +83,8 @@ export class GeminiAdapter implements LLMAdapter {
     intent,
     toolPolicyDecision,
     wikiCompletenessInfo,
+    wikiPage,
+    wikiStatus,
     onChunk,
     signal,
     toolExecutor,
@@ -94,6 +96,8 @@ export class GeminiAdapter implements LLMAdapter {
     intent: ChatIntent
     toolPolicyDecision?: ChatToolPolicyDecision
     wikiCompletenessInfo?: string
+    wikiPage?: import("../wikiTypes").WikiPage | null
+    wikiStatus?: string
     onChunk: (text: string) => void
     signal?: AbortSignal
     toolExecutor?: ToolExecutor
@@ -102,7 +106,7 @@ export class GeminiAdapter implements LLMAdapter {
       chronicle,
       history,
       userMessage || INITIAL_NARRATIVE_PROMPT,
-      { mode, intent, wikiCompletenessInfo }
+      { mode, intent, wikiCompletenessInfo, wikiPage, wikiStatus }
     )
     const enableAttachments = shouldAttachContentForChat({
       chronicle,

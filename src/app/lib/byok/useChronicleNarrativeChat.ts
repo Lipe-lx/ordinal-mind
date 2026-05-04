@@ -602,6 +602,8 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
           intent,
           toolPolicyDecision,
           wikiCompletenessInfo,
+          wikiPage: wikiLifecycle.wikiPage,
+          wikiStatus: wikiLifecycle.status,
           onChunk: (chunk) => {
             if (firstChunk) {
               setPhase("streaming")

@@ -5,6 +5,7 @@
 import type { Chronicle, ChronicleEvent, InscriptionRarity, ProtocolRelationSet, RelatedInscriptionSummary } from "../types"
 import type { ChatMessage } from "./chatTypes"
 import type { ChatIntent, ChatResponseMode } from "./chatIntentRouter"
+import type { WikiPage } from "../wikiTypes"
 
 import { SearchToolDefinition } from "./tools"
 
@@ -96,12 +97,18 @@ export function buildCombinedPrompt(chronicle: Chronicle, availableTools: Search
 export const INITIAL_NARRATIVE_PROMPT =
   "Present the Chronicle as a concise factual narrative, then be ready for follow-up questions about provenance, transfers, collection context, and uncertainties."
 
-export function buildChatSeedPrompt(chronicle: Chronicle): string {
+export function buildChatSeedPrompt(chronicle: Chronicle, wikiPage?: WikiPage | null): string {
   return `You are in an ongoing Chronicle chat.
 
 Use the factual context below as the authoritative source of truth.
 Never invent events, dates, transfers, sales, rarity details, or social signals.
 If data is missing or uncertain, say so explicitly.
+
+${wikiPage ? `[Wiki Archive Knowledge]
+Title: ${wikiPage.title}
+Summary: ${wikiPage.summary}
+${wikiPage.sections.length > 0 ? `Archive Sections:\n${wikiPage.sections.map(s => `- ${s.heading}: ${s.body}`).join("\n")}` : ""}
+` : ""}
 
 ${buildSynthesisContext(chronicle)}`
 }
@@ -114,9 +121,11 @@ export function buildChatTurnPrompt(
     mode: ChatResponseMode
     intent: ChatIntent
     wikiCompletenessInfo?: string
+    wikiPage?: WikiPage | null
+    wikiStatus?: string
   }
 ): string {
-  const { mode, intent, wikiCompletenessInfo } = options
+  const { mode, intent, wikiCompletenessInfo, wikiPage, wikiStatus } = options
   const transcript = history
     .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content}`)
     .join("\n")
@@ -125,23 +134,26 @@ export function buildChatTurnPrompt(
     ? `Conversation so far:\n${transcript}`
     : "Conversation so far:\n(no prior turns)"
 
-  return `${buildChatSeedPrompt(chronicle)}
+  return `${buildChatSeedPrompt(chronicle, wikiPage)}
+
+${wikiStatus && wikiStatus !== "idle" ? `Current Wiki Context Status: ${wikiStatus}\n` : ""}
 
 ${historySection}
 
 Latest user message:
 ${userMessage}
 
-${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT, wikiCompletenessInfo)}`
+${buildChatPolicyBlock(mode, intent, userMessage === INITIAL_NARRATIVE_PROMPT, wikiCompletenessInfo, !!wikiPage)}`
 }
 
-function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean, wikiCompletenessInfo?: string): string {
+function buildChatPolicyBlock(mode: ChatResponseMode, intent: ChatIntent, isInitial: boolean, wikiCompletenessInfo?: string, hasWikiContext?: boolean): string {
   if (intent === "knowledge_contribution") {
     return `Response policy:
 Wiki Builder Mode:
 - You detected the user has original knowledge about this collection.
 - Your goal is to extract structured information naturally through conversation.
 ${wikiCompletenessInfo ? `\nConsolidated Wiki Context:\n${wikiCompletenessInfo}\n` : ""}
+- IMPORTANT: Check the [Wiki Archive Knowledge] above before responding. If the user mentions a fact already recorded there (like the founder, launch date, etc.), acknowledge it as existing archive knowledge (e.g., "As recorded in the archive, ...") instead of attributing it as a new claim from the user.
 - When the claim refers to public facts such as founder identity, launch timing, provenance, inscription relationships, or notable public milestones, verify or contextualize it with the available public tools before presenting it as established fact.
 - Prefer on-chain and wiki tools first for precise facts. Use web research tools only for public historical or cultural context.
 - If verification is incomplete, keep that uncertainty explicit in the visible reply and still capture the contribution as community-provided context in <wiki_extract>.
@@ -151,7 +163,7 @@ ${wikiCompletenessInfo ? `\nConsolidated Wiki Context:\n${wikiCompletenessInfo}\
 - Generate a <wiki_extract> block with the structured data (hidden from user). Format:
   <wiki_extract>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_extract>
 - Field must be one of: founder, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
-- Always validate: "You're saying X, correct? That's valuable context for this collection's chronicle."
+${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_extract> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
 - If user has no Discord connected, mention gently that contributions enter review.
 - Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns.
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
