@@ -3,8 +3,6 @@ import { Layout } from "./components/Layout"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { Home } from "./pages/Home"
 import { Chronicle } from "./pages/Chronicle"
-import { DiscordAuthCallback } from "./pages/DiscordAuthCallback"
-
 
 // The loader now only validates the ID and passes it to the component.
 // Actual data fetching happens client-side via SSE for progress feedback.
@@ -48,10 +46,6 @@ export const router = createBrowserRouter([
         path: "wiki/:slug",
         lazy: () => import("./pages/WikiPage").then(m => ({ Component: m.WikiPage })),
         errorElement: <ErrorBoundary />,
-      },
-      {
-        path: "api/auth/callback",
-        element: <DiscordAuthCallback />,
       },
     ],
   },

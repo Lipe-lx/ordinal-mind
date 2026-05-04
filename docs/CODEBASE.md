@@ -22,7 +22,6 @@ This is the current structure and responsibility map of the repository.
 - `pages/AddressPage.tsx`: wallet address explorer and inscription grid.
 - `pages/Chronicle.tsx`: main Chronicle screen; wires Worker stream + chat hook.
 - `pages/WikiPage.tsx`: collection-level wiki view with factual L0 data injection.
-- `pages/DiscordAuthCallback.tsx`: client-side OAuth callback handler to bypass Vite dev-server issues.
 - `components/Layout.tsx`: top-level layout, Discord Connect button, and BYOK modal integration.
 
 ### Main UI components
@@ -36,7 +35,7 @@ This is the current structure and responsibility map of the repository.
 
 ### Identity and Auth (`src/app/lib`)
 
-- `useDiscordIdentity.ts`: React hook for managing OAuth flow, JWT session verification, and Collector Tier calculation.
+- `useDiscordIdentity.ts`: React hook for managing OAuth redirects, JWT session verification, and Collector Tier calculation.
 - `byok/index.ts`: includes `KeyStore` logic for AES-256-GCM encrypted persistence when authenticated.
 
 ### BYOK and chat engine (`src/app/lib/byok`)

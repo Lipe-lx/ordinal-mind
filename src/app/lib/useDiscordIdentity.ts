@@ -210,20 +210,8 @@ export function useDiscordIdentity() {
    * Redirect to Discord OAuth flow.
    */
   const connect = useCallback(async () => {
-    try {
-      const res = await fetch("/api/auth/discord", {
-        headers: { Accept: "application/json" }
-      })
-      const data = await res.json()
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        throw new Error(data.error || "Failed to initiate Discord connection.")
-      }
-    } catch (err) {
-      console.error(err)
-      setAuthError(err instanceof Error ? err.message : "Connection failed.")
-    }
+    setAuthError(null)
+    window.location.href = "/api/auth/discord"
   }, [])
 
   /**
