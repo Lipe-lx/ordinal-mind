@@ -1,8 +1,8 @@
 # Architecture: Ordinal Mind
 
 Ordinal Mind uses a factual-first split architecture:
-- Worker builds and serves verifiable Chronicle data from public sources.
-- Client performs optional BYOK AI synthesis/chat on top of that data.
+- **Worker** builds and serves verifiable Chronicle data (Layer 0) from public sources.
+- **Client** performs optional BYOK AI synthesis/chat and Wiki contributions (Layer 1/2) on top of that data.
 
 ## High-Level Runtime
 
@@ -24,7 +24,7 @@ graph TD
 
   C -->|BYOK key in browser| LLM[OpenAI/Anthropic/Gemini/OpenRouter]
   C --> Chat[Chronicle Narrative Chat]
-  Chat --> UI[Timeline + Narrative + Genealogy]
+  Chat --> UI[Timeline + Narrative + Genealogy + Wiki Atlas]
 
   U -->|OAuth PKCE| D[Discord]
   D -->|code| W
@@ -34,6 +34,10 @@ graph TD
   C -->|POST /api/wiki/contribute| W
   W --> Cons[Consensus Engine]
   Cons --> D1[(D1: Wiki Pages + Contributions + Stats)]
+  
+  C -->|GET /api/wiki/graph| W
+  W --> Graph[Graph Engine]
+  Graph -->|Neural Layout| UI
 ```
 
 ## Layer 0: Worker Data Plane (Factual)
@@ -64,27 +68,31 @@ graph TD
 - Build prompt context from factual chronicle + conversation state.
 - Stream model output directly from provider (no server proxy for user key).
 - Execute optional research tools client-side via `toolExecutor`.
+- **Activity Monitoring**: Integrated dropdown for real-time research and status tracking.
 
 ## Layer 3: Chronicle Wiki & Consensus Plane
 
 ### Routes
 
 - `GET /api/wiki/collection/:slug/consolidated`
+- `GET /api/wiki/collection/:slug/graph`
 - `POST /api/wiki/contribute`
+- `POST /api/wiki/review`
 - `GET /api/wiki/health`
 
 ### Consensus Logic
 
 - **Tiered Weighting**: Contributions from `Genesis` and `OG` tiers have immediate canonical preference.
-- **Dynamic Consolidation**: Wiki pages are built by merging L0 factual data with L1/L2 human-contributed insights.
-- **L0 Injection**: Wiki stats (supply, blocks) are injected dynamically from on-chain metadata into the consolidated view.
+- **Strict Scoping**: Fields are scoped to `inscription` or `collection` levels (e.g., `artist` vs `founder`) to prevent data bleed.
+- **Review Loop**: Anonymous or low-tier contributions enter a quarantine state for community/OG review.
+- **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
 
 ## Security and Privacy Model
 
 - **No Server Secrets**: LLM keys are never seen by the server.
-- **Sealed Storage**: Authenticated users have their LLM keys encrypted with AES-256-GCM in `localStorage`. Disconnecting wipes the keys or demotes them back to `sessionStorage`.
+- **Sealed Storage**: Authenticated users have their LLM keys encrypted with AES-256-GCM in `localStorage`.
 - **Public Data Only**: The Worker only scrapes public, cacheable data.
-- **JWT Identity**: Session state is stateless on the server, carried by signed JWTs.
+- **Stateless Identity**: Session state is carried by signed JWTs.
 
 ## Failure and Degradation Strategy
 
@@ -96,4 +104,4 @@ graph TD
 
 - Keeps factual provenance auditable.
 - Keeps sensitive LLM credentials out of server runtime.
-- Allows iterative evolution toward LLM Wiki without breaking current Chronicle UX.
+- Allows a community-driven Wiki to coexist with an immutable on-chain record.

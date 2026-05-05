@@ -1,23 +1,23 @@
 # Ordinal Mind — CSS Architecture
 
-> Estado atual da refatoração de estilos após a modularização do antigo `src/app/index.css`.
+> Current state of style refactoring after modularizing the former `src/app/index.css`.
 
 ---
 
 ## Status
 
-- O antigo monólito de ~5.4k linhas foi desmontado.
-- `src/app/index.css` agora é apenas o entrypoint global com `@import`s.
-- Os estilos foram distribuídos em `src/app/styles/` por base, components, layout, pages, features e widgets.
-- A UI foi validada manualmente e a build/typecheck continuam passando.
+- The former ~5.4k line monolith has been disassembled.
+- `src/app/index.css` is now just a global entrypoint with `@import`s.
+- Styles have been distributed across `src/app/styles/` by base, components, layout, pages, features, and widgets.
+- UI has been manually validated, and build/typecheck continue to pass.
 
 ---
 
-## Estrutura atual
+## Current Structure
 
 ```text
 src/app/
-├── index.css                        ← entrypoint global, apenas imports
+├── index.css                        ← global entrypoint, imports only
 └── styles/
     ├── base/
     │   ├── tokens.css
@@ -31,6 +31,7 @@ src/app/
     │   ├── inputs.css
     │   ├── modal.css
     │   ├── skeleton.css
+    │   ├── identity.css            ← new: tier styles and identity badges
     │   └── tooltip.css
     │
     ├── layout/
@@ -57,24 +58,25 @@ src/app/
     │   ├── scan/
     │   │   └── scan-progress.css
     │   └── wiki/
-    │       └── wiki.css
+    │       ├── wiki.css
+    │       └── review-inbox.css    ← new: contribution moderation UI
     │
     ├── widgets/
     │   ├── meta.css
     │   ├── provenance.css
-    │   ├── collection-context.css  ← alias seguro para provenance.css
+    │   ├── collection-context.css  ← safe alias for provenance.css
     │   ├── ownership.css
     │   ├── sources.css
     │   └── rarity.css
     │
-    └── legacy-responsive.css       ← bloco responsivo misto mantido separado por segurança
+    └── legacy-responsive.css       ← mixed responsive block kept separate for safety
 ```
 
 ---
 
 ## Entry Point
 
-O `src/app/index.css` deve continuar sem regras próprias, funcionando apenas como agregador do cascade global:
+The `src/app/index.css` should remain without its own rules, functioning only as an aggregator for the global cascade:
 
 ```css
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap');
@@ -102,6 +104,7 @@ O `src/app/index.css` deve continuar sem regras próprias, funcionando apenas co
 
 @import "./styles/components/modal.css";
 @import "./styles/components/skeleton.css";
+@import "./styles/components/identity.css";
 
 @import "./styles/layout/error-boundary.css";
 @import "./styles/pages/address.css";
@@ -117,6 +120,8 @@ O `src/app/index.css` deve continuar sem regras próprias, funcionando apenas co
 @import "./styles/features/narrative/content.css";
 @import "./styles/features/narrative/chat.css";
 @import "./styles/features/narrative/history.css";
+@import "./styles/features/wiki/wiki.css";
+@import "./styles/features/wiki/review-inbox.css";
 
 @import "./styles/legacy-responsive.css";
 
@@ -125,17 +130,17 @@ O `src/app/index.css` deve continuar sem regras próprias, funcionando apenas co
 @import "./styles/features/chronicle/genealogy.css";
 ```
 
-Regra importante:
+Important rule:
 
-- Preserve a ordem dos imports, porque ela foi alinhada ao cascade do monólito original para evitar regressão visual.
+- Preserve the import order, as it was aligned with the original monolith cascade to avoid visual regression.
 
 ---
 
-## Tokens e contratos
+## Tokens and Contracts
 
-Os tokens globais vivem em `base/tokens.css`.
+Global tokens live in `base/tokens.css`.
 
-Custom properties críticas já normalizadas:
+Critical normalized custom properties:
 
 - `--danger`
 - `--color-market`
@@ -143,52 +148,52 @@ Custom properties críticas já normalizadas:
 - `--text-dim`
 - `--glass-border`
 
-Regras de manutenção:
+Maintenance rules:
 
-- Novos tokens globais entram em `base/tokens.css`.
-- Não reintroduzir tokens duplicados em arquivos de feature/widget.
-- Se um seletor depende de um token novo, o token deve existir antes de trocar a ordem de imports.
-
----
-
-## Decisões tomadas na migração
-
-- Mantivemos a árvore `src/app/styles/` já iniciada em vez de rebatizar tudo para um blueprint idealizado.
-- Não houve mudança em JSX ou `className`; a rodada foi CSS-only.
-- `collection-context.css` foi mantido como alias explícito para evitar churn desnecessário, enquanto `provenance.css` continua como source of truth.
-- O bloco responsivo misto ficou em `legacy-responsive.css` para preservar comportamento sem forçar uma divisão arriscada.
-- Scrollbars repetidas ainda não foram consolidadas em utilitário compartilhado, de propósito.
+- New global tokens go into `base/tokens.css`.
+- Do not reintroduce duplicate tokens in feature/widget files.
+- If a selector depends on a new token, the token must exist before changing the import order.
 
 ---
 
-## Próximos passos seguros
+## Decisions Made During Migration
 
-1. Consolidar scrollbars repetidas em um utilitário compartilhado.
-2. Avaliar extração de animações globais recorrentes para um arquivo dedicado, se isso puder ser feito sem alterar cascade.
-3. Reduzir aliases/arquivos de transição como `collection-context.css` quando não houver mais risco de regressão.
-4. Opcionalmente dividir `legacy-responsive.css` por domínio depois de validar cada bloco isoladamente.
+- We kept the `src/app/styles/` tree as already started instead of renaming everything to an idealized blueprint.
+- There were no changes to JSX or `className`; this was a CSS-only pass.
+- `collection-context.css` was kept as an explicit alias to avoid unnecessary churn, while `provenance.css` remains the source of truth.
+- The mixed responsive block was kept in `legacy-responsive.css` to preserve behavior without forcing a risky split.
+- Repeated scrollbars have not yet been consolidated into a shared utility, by design.
 
 ---
 
-## Validação esperada
+## Safe Next Steps
 
-Sempre que mexer nessa arquitetura, rodar:
+1. Consolidate repeated scrollbars into a shared utility.
+2. Evaluate extracting recurring global animations into a dedicated file, if it can be done without altering the cascade.
+3. Reduce transition aliases/files like `collection-context.css` once there is no more risk of regression.
+4. Optionally split `legacy-responsive.css` by domain after validating each block in isolation.
+
+---
+
+## Expected Validation
+
+Whenever touching this architecture, run:
 
 - `npm run typecheck`
 - `npm run build`
 
-E validar manualmente na UI:
+And manually validate in the UI:
 
-- Home e address selection
+- Home and address selection
 - Chronicle shell
-- Timeline e badges
-- Widgets de meta/provenance/ownership/sources/rarity
+- Timeline and badges
+- Meta/provenance/ownership/sources/rarity widgets
 - Narrative render/chat/history
-- Fullscreen preview e navigation overlay
+- Fullscreen preview and navigation overlay
 - Tabs/layout modes
 - Genealogy tree/explorer
 
-Observação:
+Note:
 
-- O build pode exibir o warning conhecido de chunk > 500 kB.
-- Em ambiente sandboxado, o Wrangler pode emitir ruído ao tentar escrever logs fora da workspace, sem invalidar a build.
+- The build may display the known chunk > 500 kB warning.
+- In sandboxed environments, Wrangler may emit noise when trying to write logs outside the workspace, without invalidating the build.

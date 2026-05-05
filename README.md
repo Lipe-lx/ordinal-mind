@@ -20,9 +20,10 @@ Ordinal Mind is a verifiable memory engine for Bitcoin Ordinals. It transforms a
 - **🌐 Multi-Source Chronicle**: Aggregates data from Ordinals.com, Mempool.space, UniSat, and web discovery.
 - **🌳 Genealogical Tree**: Visualizes the ancestry and provenance of any inscription.
 - **💬 Chronicle Narrative**: Interactive BYOK chat for deep research, intent-aware and QA-optimized.
+- **🧠 Wiki Atlas**: **New** neural, force-directed graph visualization of collection relationships and history.
 - **📚 Wiki & Consensus (L0-L2)**: Tiered knowledge base (Genesis/OG/Community) where contributors earn identity badges.
 - **🆔 Discord Identity**: Secure PKCE-based OAuth with automated tier calculation based on server membership.
-- **⚡ Real-time Scan**: SSE-powered progress tracking for deep asset resolution.
+- **⚡ Real-time Scan**: SSE-powered progress tracking with integrated **Activity Monitoring** for deep asset resolution.
 
 ---
 
@@ -74,6 +75,7 @@ npm run typecheck
 | :--- | :--- | :--- |
 | `/api/chronicle` | `GET` | Resolve inscription metadata and events. |
 | `/api/wiki/collection/:slug/consolidated` | `GET` | Retrieve the consensus-driven wiki for a collection. |
+| `/api/wiki/collection/:slug/graph` | `GET` | Retrieve graph data for the Wiki Atlas. |
 | `/api/wiki/contribute` | `POST` | Submit a knowledge contribution (requires Discord JWT). |
 | `/api/auth/discord` | `GET` | Initiate Discord OAuth PKCE flow. |
 | `/api/auth/me` | `GET` | Verify session and return identity profile. |
@@ -85,6 +87,7 @@ npm run typecheck
 - 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Runtime flow and data layer.
 - 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Detailed file-by-file directory.
 - 🤖 [**AGENTS.md**](./AGENTS.md): Core product rules and implementation constraints.
+- 🗺️ [**ROADMAP.md**](./ROADMAP.md): Implementation status and history.
 
 ---
 

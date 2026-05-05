@@ -7,95 +7,120 @@ This is the current structure and responsibility map of the repository.
 - `README.md`: project overview and operational commands.
 - `ARCHITECTURE.md`: system architecture and data flow.
 - `AGENTS.md`: product and implementation guardrails.
+- `ROADMAP.md`: implementation status and future plans.
 - `wrangler.jsonc`: Worker entrypoint, KV binding, assets config.
 - `vite.config.ts`: React + Cloudflare Vite plugin.
 - `package.json`: scripts and dependencies.
-- `tests/`: app and worker tests.
+- `migrations/`: D1 database schema migrations.
 
 ## Frontend (`src/app`)
 
 ### Routes and app shell
 
 - `main.tsx`: React bootstrap.
-- `router.tsx`: route definitions.
+- `router.tsx`: route definitions (Home, Address, Chronicle, Wiki).
 - `pages/Home.tsx`: input/search entry.
 - `pages/AddressPage.tsx`: wallet address explorer and inscription grid.
 - `pages/Chronicle.tsx`: main Chronicle screen; wires Worker stream + chat hook.
 - `pages/WikiPage.tsx`: collection-level wiki view with factual L0 data injection.
-- `components/Layout.tsx`: top-level layout, Discord Connect button, and BYOK modal integration.
 
-### Main UI components
+### Components
 
-- `components/ChronicleCard.tsx`: center card with tabs (Narrative / Genealogical Tree), narrative chat and sources.
-- `components/NarrativeChatRenderer.tsx`: transcript, prompt box, actions, chat controls; includes tier-badge rendering.
-- `components/ChatHistoryModal.tsx`: resume/rename/delete chat sessions.
-- `components/GenealogyTree.tsx`: relation visualization.
+- `components/Layout.tsx`: top-level layout, Discord Connect, and BYOK modal.
+- `components/ChronicleCard.tsx`: center card with tabs (Narrative / Genealogical Tree / Wiki Atlas), narrative chat.
+- `components/NarrativeChatRenderer.tsx`: transcript, prompt box, and the new **Activity Dropdown** (Research/Status).
+- `components/WikiGraphModal.tsx`: **Wiki Atlas** neural graph visualization (force-directed layout).
+- `components/WikiReviewModal.tsx`: interface for reviewing and approving wiki contributions.
+- `components/ChatHistoryModal.tsx`: refactored 2-column grid for chat session management.
 - `components/TemporalTree.tsx`: factual event timeline.
-- `components/BYOKModal.tsx`: provider/model/API-key and research keys UI; includes Discord identity status.
+- `components/GenealogyTree.tsx`: relation visualization.
+- `components/BYOKModal.tsx`: provider/model/API-key and Discord identity status.
+- `components/widgets/`: specialized factual widgets (Metadata, Ownership, Sources, Rarity, Collection Context).
 
 ### Identity and Auth (`src/app/lib`)
 
-- `useDiscordIdentity.ts`: React hook for managing OAuth redirects, JWT session verification, and Collector Tier calculation.
-- `byok/index.ts`: includes `KeyStore` logic for AES-256-GCM encrypted persistence when authenticated.
+- `useDiscordIdentity.ts`: React hook for managing OAuth, JWT session, and Collector Tiers.
+- `keyEncryption.ts`: AES-256-GCM encrypted persistence for LLM keys.
 
-### BYOK and chat engine (`src/app/lib/byok`)
+### BYOK and Chat Engine (`src/app/lib/byok`)
 
-- `index.ts`: provider registry, model lists, adapter factory, key store.
-- `openai.ts`, `anthropic.ts`, `gemini.ts`, `openrouter.ts`: provider adapters with stream + tool-calling loops.
-- `useChronicleNarrativeChat.ts`: chat orchestration hook; includes "Builder/QA mode" injection for Wiki contributions.
+- `index.ts`: provider registry, model lists, and adapter factory.
+- `prompt.ts`: centralized system prompt with Chronicle, Wiki, and Research policies.
+- `chatIntentRouter.ts`: classifies user intent (greeting, query, contribution, research).
+- `wikiExtractor.ts`: parses `<wiki_contribution>` tags from LLM output.
+- `toolExecutor.ts`: client-side execution of research tools (mempool, ordinals, web).
+- `chatStorage.ts`: indexedDB/localStorage persistence for chat threads.
+- `useChronicleNarrativeChat.ts`: main orchestration hook for the narrative experience.
+- `adapters/`: `openai.ts`, `anthropic.ts`, `gemini.ts`, `openrouter.ts` provider implementations.
 
-### Shared app utilities
+### Shared App Utilities
 
 - `lib/types.ts`: shared DTO/types between frontend and Worker.
-- `lib/brandLinks.tsx`: links known entities in narrative text.
-- `lib/formatters.tsx`: recursive text formatting for UX, glassmorphism aesthetics for addresses, inscriptions, and blocks.
-
-### Styling
-
-- `index.css`: global stylesheet entrypoint; imports the modular CSS tree.
-- `styles/features/wiki/*`: collection wiki and consensus UI styles.
+- `lib/wikiTypes.ts`: types for the consensus and wiki engine.
+- `lib/wikiGraph.ts`: Cytoscape configuration and graph layout logic.
+- `lib/wikiLint.ts`: client-side validation for wiki entries.
+- `lib/formatters.tsx`: recursive text formatting and glassmorphism styling.
 
 ## Worker (`src/worker`)
 
-### Entry and routing
+### Core Engine
 
-- `index.ts`: Worker entrypoint, `/api/chronicle` orchestration, SSE streaming, auth/wiki delegation.
-- `routes/auth.ts`: Discord OAuth PKCE flow initiation and callback processing.
-- `routes/wiki.ts`: wiki namespace router, contribution handling, and consensus-driven page reads.
+- `resolver.ts`: entry point for ID/Address normalization and resolution.
+- `timeline.ts`: merges multiple data sources into a single deterministic chronology.
+- `validation.ts`: cross-checks data between indexers to ensure factuality.
+- `rarity.ts`: calculates satoshi rarity and provenance markers.
+- `db.ts`: shared D1 database interface and helpers.
+
+### Entry and Routing
+
+- `index.ts`: Worker entrypoint and route orchestration.
+- `routes/auth.ts`: Discord OAuth PKCE flow and session management.
+- `routes/wiki.ts`: wiki namespace router (contribute, consolidated, health).
+
+### Data Pipeline (`src/worker/pipeline`)
+
+- `phases.ts`: definition of the 4 resolution phases (L0-L3).
+- `defaults.ts`: default event types and normalization rules.
+- `withRetry.ts`: robust fetching wrapper for upstream APIs.
 
 ### Wiki & Consensus Engine (`src/worker/wiki`)
 
-- `consolidate.ts`: merges L0 factual data with L1/L2 human contributions based on Tier weights.
+- `consolidate.ts`: multi-tier consensus logic (Genesis/OG/Community).
+- `graph.ts`: generates nodes and edges for the Wiki Atlas.
+- `reviews.ts`: handles approval/rejection of contributions.
+- `lint.ts`: server-side validation and formatting of contributions.
 - `completeness.ts`: calculates knowledge gaps for builder mode incentives.
-- `schema.ts`: centralized D1 schema readiness checks.
+- `schema.ts`: D1 schema management and readiness checks.
 - `persistEvents.ts`: immutable raw Chronicle event persistence to D1.
+
+### Data Agents (`src/worker/agents`)
+
+- `ordinals.ts`, `mempool.ts`, `unisat.ts`: on-chain and indexer data fetching.
+- `collections.ts`, `collectionProfiles.ts`: metadata and rarity enrichment.
+- `webResearch.ts`: scraping and public signal discovery.
 
 ### Auth Engine (`src/worker/auth`)
 
-- `discord.ts`: Discord API adapter for profile and guild membership verification.
+- `tierEngine.ts`: server-side Tier calculation (Genesis, OG, Community).
+- `discord.ts`: Discord API adapter.
 - `jwt.ts`: stateless session management via signed tokens.
-- `tiers.ts`: server-side Tier calculation logic.
-- `crypto.ts`: server-side key derivation for client-side encryption.
 
 ## Tests (`tests`)
 
-### App tests (`tests/app`)
+### App Tests (`tests/app`)
+- `byok*.test.ts`: context, adapter, and prompt behaviors.
+- `wiki*.test.ts`: lifecycle, extractor, lint, and graph logic.
+- `chat*.test.ts`: intent routing, storage, and policy enforcement.
+- `discordIdentity.test.ts`, `keyEncryption.test.ts`: auth and security.
 
-- `byok*.test.ts`: provider context/adapter/prompt behaviors.
-- `chatIntentRouter.test.ts`: intent classification policy.
-- `chatPromptPolicy.test.ts`: response guardrails and verbosity control.
-- `chatStorage.test.ts`: thread persistence, migration, rename/delete behavior.
-- `media.test.ts`: media helper behavior.
-
-### Worker tests (`tests/worker`)
-
-- `resolver.test.ts`, `timeline.test.ts`, `rarity.test.ts`, `mempool.test.ts`, `collections.test.ts`, etc.
-- `chronicleSmoke.test.ts`: scan pipeline smoke.
-- `wikiRoutes.test.ts`: wiki health, ingest, search/tools, fail-soft schema behavior, and page-read contracts.
-- `wikiPersistEvents.test.ts`: raw event persistence, insert-or-ignore behavior, and missing-schema degradation.
+### Worker Tests (`tests/worker`)
+- `resolver.test.ts`, `timeline.test.ts`, `rarity.test.ts`: data pipeline validation.
+- `wiki*.test.ts`: routes, persistence, and contribution logic.
+- `auth.test.ts`: JWT and tier engine validation.
+- `chronicleSmoke.test.ts`: end-to-end pipeline smoke test.
 
 ## Current Known Boundaries
 
-- Wiki requires D1 migrations locally and remotely; use `npm run db:migrate:local` for `npm run dev` and `npm run db:migrate:remote` for deployed D1.
-- Production builds may still emit the existing chunk-size warning from Vite.
-- In sandboxed environments, Wrangler may emit a non-blocking log-write warning when it cannot write outside the workspace.
+- Wiki requires D1 migrations (`npm run db:migrate:local`).
+- LLM synthesis is strictly client-side; keys never leave the browser.
+- Factual Layer 0 (On-chain) has priority over Layer 1 (Wiki) narrative.
