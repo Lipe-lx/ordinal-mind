@@ -20,18 +20,30 @@ export type CanonicalField =
   | "connections"
   | "current_status"
 
-export const CANONICAL_FIELDS: CanonicalField[] = [
+export const COLLECTION_ONLY_FIELDS: CanonicalField[] = [
   "founder",
-  "artist",
-  "inscriber",
   "launch_date",
   "launch_context",
   "origin_narrative",
-  "technical_details",
-  "notable_moments",
   "community_culture",
   "connections",
   "current_status",
+]
+
+export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = [
+  "inscriber",
+]
+
+export const SHARED_FIELDS: CanonicalField[] = [
+  "artist",
+  "technical_details",
+  "notable_moments",
+]
+
+export const CANONICAL_FIELDS: CanonicalField[] = [
+  ...COLLECTION_ONLY_FIELDS,
+  ...INSCRIPTION_ONLY_FIELDS,
+  ...SHARED_FIELDS,
 ]
 
 export interface CollectionCanonicalFields {

@@ -12,25 +12,64 @@ import type { Env } from "../index"
 import { verifyJWT } from "../auth/jwt"
 import type { OGTier } from "../auth/jwt"
 
-/** The 11 canonical fields for a collection wiki page. */
-export const CANONICAL_FIELDS = [
+/** Fields strictly for collections (origin, founders, etc.) */
+export const COLLECTION_ONLY_FIELDS = [
   "founder",
-  "artist",
-  "inscriber",
   "launch_date",
   "launch_context",
   "origin_narrative",
-  "technical_details",
-  "notable_moments",
   "community_culture",
   "connections",
   "current_status",
+] as const
+
+/** Fields strictly for individual inscriptions (inscriber) */
+export const INSCRIPTION_ONLY_FIELDS = [
+  "inscriber",
+] as const
+
+/** Fields that can exist at both collection and inscription level */
+export const SHARED_FIELDS = [
+  "artist",
+  "technical_details",
+  "notable_moments",
+] as const
+
+/** The union of all possible canonical fields. */
+export const CANONICAL_FIELDS = [
+  ...COLLECTION_ONLY_FIELDS,
+  ...INSCRIPTION_ONLY_FIELDS,
+  ...SHARED_FIELDS,
 ] as const
 
 export type CanonicalField = (typeof CANONICAL_FIELDS)[number]
 
 export function isCanonicalField(value: unknown): value is CanonicalField {
   return typeof value === "string" && (CANONICAL_FIELDS as readonly string[]).includes(value)
+}
+
+/** Regex for Bitcoin Inscription IDs: 64 hex chars followed by 'i' and a sequence number. */
+const INSCRIPTION_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
+
+export function isInscriptionId(slug: string): boolean {
+  return INSCRIPTION_ID_RE.test(slug)
+}
+
+/** 
+ * Enforce field scope: 
+ * - 'inscriber' is only for inscriptions.
+ * - 'founder', 'launch_date', etc. are only for collections.
+ */
+export function isFieldAllowedForSlug(field: CanonicalField, slug: string): boolean {
+  const isInscription = isInscriptionId(slug)
+  
+  if (isInscription) {
+    return (INSCRIPTION_ONLY_FIELDS as readonly string[]).includes(field) || 
+           (SHARED_FIELDS as readonly string[]).includes(field)
+  }
+  
+  return (COLLECTION_ONLY_FIELDS as readonly string[]).includes(field) || 
+         (SHARED_FIELDS as readonly string[]).includes(field)
 }
 
 export interface WikiContributionInput {
@@ -161,6 +200,15 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
   const { contribution, jwt } = parsed
   const { contributor_id, tier } = await resolveContributor(jwt, env)
+
+  // Enforce field scope (Inscriber belongs to Inscriptions, Founder to Collections, etc.)
+  if (!isFieldAllowedForSlug(contribution.field, contribution.collection_slug)) {
+    return json({ 
+      ok: false, 
+      error: "field_scope_mismatch", 
+      detail: `Field '${contribution.field}' is not allowed for ${isInscriptionId(contribution.collection_slug) ? "inscriptions" : "collections"}.` 
+    }, 400)
+  }
 
   if (contribution.operation === "delete") {
     if (tier !== "genesis") {

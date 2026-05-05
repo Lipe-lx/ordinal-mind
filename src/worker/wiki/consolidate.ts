@@ -12,7 +12,7 @@
 // 4. Community/anon only -> draft.
 
 import type { Env } from "../index"
-import { CANONICAL_FIELDS, type CanonicalField } from "./contribute"
+import { CANONICAL_FIELDS, isFieldAllowedForSlug, type CanonicalField } from "./contribute"
 import type { 
   ConsolidatedCollection, 
   ConsolidatedField, 
@@ -48,7 +48,8 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     .all<DBContributionRow>()
 
   const contributionsByField = new Map<CanonicalField, DBContributionRow[]>()
-  CANONICAL_FIELDS.forEach(f => contributionsByField.set(f, []))
+  const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, slug))
+  allowedFields.forEach(f => contributionsByField.set(f, []))
 
   const sources: ConsolidatedCollection["sources"] = []
 
@@ -70,7 +71,7 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
   let totalConfidence = 0
   let filledCount = 0
 
-  for (const field of CANONICAL_FIELDS) {
+  for (const field of allowedFields) {
     const fieldRows = contributionsByField.get(field) ?? []
     
     if (fieldRows.length === 0) {
@@ -133,7 +134,7 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     totalConfidence += topWeight / 4 // Normalize confidence to 0-1 based on top tier weight
   }
 
-  const total = CANONICAL_FIELDS.length
+  const total = allowedFields.length
   const score = total > 0 ? filledCount / total : 0
   const averageConfidence = filledCount > 0 ? totalConfidence / filledCount : 0
 

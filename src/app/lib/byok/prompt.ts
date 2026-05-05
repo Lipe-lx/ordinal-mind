@@ -194,9 +194,10 @@ Wiki Builder Mode:
 - MANDATORY TAG RULE: You MUST generate a <wiki_contribution> block with the structured data for ANY new information provided by the user. The UI relies on this tag to update the database.
 - Format: <wiki_contribution>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_contribution>
 - Use the "collection_slug" found in the [Metadata] section above.
-- Field must be one of: founder, artist, inscriber, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
-- NOTE: The 'founder' field should be used for the creators/founders of the collection. The 'artist' field is for the artist(s). The 'inscriber' field is specifically for the person/entity that performed the on-chain inscription of the asset (this may differ from the collection founder, especially for historical or aggregated collections).
-- SLUG RULE: For collection-level facts (e.g., founder of sub10k), use the collection_slug from [Metadata]. For inscription-level facts (e.g., Rodamor inscribed Inscription 0), use the inscription_id from [Metadata] as the "collection_slug".
+- SLUG RULE (MANDATORY): 
+  - Collection Scope: Use collection_slug from [Metadata] for these fields: founder, artist, launch_date, launch_context, origin_narrative, community_culture, connections, current_status.
+  - Inscription Scope: Use inscription_id from [Metadata] as the "collection_slug" for these fields: inscriber, technical_details (asset-specific), notable_moments (asset-specific), artist (if asset-specific).
+  - CRITICAL: The 'inscriber' field MUST ALWAYS use the inscription_id. Linking 'inscriber' to a collection_slug is a factual error and will be rejected by the API.
 - If the user provides multiple facts, you may emit multiple <wiki_contribution> blocks, one for each field.
 - DELETION RULE: If the user requests the deletion or removal of a specific wiki field (e.g., "clear the founder field", "apague o artista"), you can perform this by adding "operation": "delete" to the tag. This is a privileged operation usually reserved for Genesis/Admin users. The "value" field can be empty for deletions.
 - Format for deletion: <wiki_contribution>{"field":"...","operation":"delete","collection_slug":"...","confidence":"correcting_existing","verifiable":true}</wiki_contribution>

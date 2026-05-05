@@ -8,7 +8,7 @@ import type {
 } from "../../app/lib/types"
 import type { Env } from "../index"
 import { buildConsolidation } from "./consolidate"
-import { CANONICAL_FIELDS } from "./contribute"
+import { CANONICAL_FIELDS, isFieldAllowedForSlug } from "./contribute"
 
 const MAX_SOURCE_EVENT_NODES = 24
 
@@ -172,7 +172,8 @@ export async function buildCollectionGraph(
   const rootNodeId = collectionWikiSlug
   addNode(buildCollectionRootNode(consolidated, collectionPage, rootNodeId))
 
-  for (const field of CANONICAL_FIELDS) {
+  const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, slug))
+  for (const field of allowedFields) {
     const consolidatedField = consolidated.narrative[field]
     const fieldNodeId = buildFieldNodeId(slug, field)
     addNode({
@@ -207,7 +208,7 @@ export async function buildCollectionGraph(
     contributionsByField.set(row.field, list)
   }
 
-  for (const field of CANONICAL_FIELDS) {
+  for (const field of allowedFields) {
     const fieldContributions = (contributionsByField.get(field) ?? []).slice().sort(sortContributions)
     const fieldState = consolidated.narrative[field]
     const fieldNodeId = buildFieldNodeId(slug, field)
