@@ -230,8 +230,91 @@
   box-shadow: 0 0 12px rgba(247, 147, 26, 0.32);
 }
 
+.model-badge-container {
+  position: relative;
+  display: inline-flex;
+}
+
 .narrative-chat-meta .model-badge {
   color: rgba(248, 250, 252, 0.88);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: bottom;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  font: inherit;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.narrative-chat-meta .model-badge:hover {
+  border-color: rgba(247, 147, 26, 0.35);
+  background: rgba(247, 147, 26, 0.08);
+}
+
+.model-selector-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  width: 220px;
+  z-index: 1000;
+  padding: 8px;
+  background: var(--bg-modal-elevated);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-glass-heavy);
+  animation-fill-mode: forwards;
+}
+
+.model-selector-header {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  padding: 0 8px;
+  letter-spacing: 0.05em;
+}
+
+.model-selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-selector-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.model-selector-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.model-selector-item.active {
+  background: rgba(247, 147, 26, 0.1);
+  color: var(--accent-primary);
+  font-weight: 600;
 }
 
 .narrative-chat-logs {

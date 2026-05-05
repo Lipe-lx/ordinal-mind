@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import { motion, AnimatePresence } from "motion/react"
 import { formatChronicleText } from "../lib/formatters"
+import { MODELS } from "../lib/byok"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import type { SynthesisMode } from "../lib/byok/context"
@@ -19,6 +21,8 @@ interface Props {
   elapsed: number
   providerName?: string
   modelName?: string
+  modelId?: string
+  onModelChange?: (modelId: string) => void
   inputMode?: SynthesisMode | null
   wikiStatusLabel?: string
   wikiStatusError?: string | null
@@ -48,7 +52,10 @@ export function NarrativeChatRenderer({
   streamingThought,
   phase,
   elapsed,
+  providerName,
   modelName,
+  modelId,
+  onModelChange,
   inputMode,
   wikiStatusError,
   wikiActivity,
@@ -70,6 +77,7 @@ export function NarrativeChatRenderer({
   const [prompt, setPrompt] = useState("")
   const [showLogs, setShowLogs] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showModelSelector, setShowModelSelector] = useState(false)
   const [localInputError, setLocalInputError] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
@@ -348,7 +356,66 @@ export function NarrativeChatRenderer({
         />
         <div className="narrative-chat-footer">
           <div className="narrative-chat-meta">
-            {modelName && <span className="model-badge">{modelName}</span>}
+            {modelName && (
+              <div className="model-badge-container">
+                <AnimatePresence>
+                  {showModelSelector && providerName && (
+                    <motion.div
+                      className="model-selector-menu glass-card"
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                    >
+                      <div className="model-selector-header">Switch Model</div>
+                      <div className="model-selector-list">
+                        {MODELS[providerName]?.map((m) => (
+                          <button
+                            key={m.id}
+                            className={`model-selector-item ${m.id === modelId ? "active" : ""}`}
+                            onClick={() => {
+                              onModelChange?.(m.id)
+                              setShowModelSelector(false)
+                            }}
+                          >
+                            <span className="model-item-name">{m.name}</span>
+                            {m.id === modelId && (
+                              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="3" fill="none">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <button
+                  type="button"
+                  className="model-badge"
+                  title={`Current: ${modelName}. Click to change model.`}
+                  onClick={() => setShowModelSelector(!showModelSelector)}
+                >
+                  {modelName}
+                  <svg 
+                    width="8" 
+                    height="8" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="3" 
+                    style={{ 
+                      marginLeft: "4px", 
+                      opacity: 0.6,
+                      transform: showModelSelector ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s ease"
+                    }}
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+            )}
             {inputMode && inputMode !== "text-only" && <span>attachments + context</span>}
             {elapsed >= 10 && <span>{elapsed}s</span>}
           </div>

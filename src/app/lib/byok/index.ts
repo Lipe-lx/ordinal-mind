@@ -99,6 +99,15 @@ export function detectProvider(key: string): Provider {
   return "unknown"
 }
 
+/** Resolves a model ID to its commercial display name. */
+export function getModelDisplayName(provider?: Provider, modelId?: string): string {
+  if (!provider || !modelId || provider === "unknown") return modelId || ""
+  const models = MODELS[provider]
+  if (!models) return modelId
+  const model = models.find((m) => m.id === modelId)
+  return model ? model.name : modelId
+}
+
 export function createAdapter(config: ByokConfig): LLMAdapter | null {
   if (!config.key || config.provider === "unknown") return null
 

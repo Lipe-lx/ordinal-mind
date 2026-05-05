@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react"
-import { KeyStore } from "../lib/byok"
+import { KeyStore, getModelDisplayName } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
 import { NarrativeChatRenderer } from "./NarrativeChatRenderer"
@@ -68,7 +68,7 @@ export function ChronicleCard({
   onCancel,
 }: Props) {
   const hasKey = KeyStore.has()
-  const config = KeyStore.get()
+  const [config, setConfig] = useState(KeyStore.get())
   const collectionSlug =
     chronicle.collection_context.market.ord_net_match?.collection_slug
     ?? chronicle.collection_context.market.satflow_match?.collection_slug
@@ -79,6 +79,15 @@ export function ChronicleCard({
   const sources = buildDataSources(chronicle)
   const [layoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
   const [showWikiGraph, setShowWikiGraph] = useState(false)
+
+  const handleModelChange = (model: string) => {
+    const current = KeyStore.get()
+    if (!current) return
+
+    const updated = { ...current, model }
+    KeyStore.set(updated)
+    setConfig(updated)
+  }
 
   const toggleExpand = (target: "narrative" | "genealogy") => {
     if (layoutMode === target) {
@@ -162,7 +171,9 @@ export function ChronicleCard({
               phase={phase}
               elapsed={elapsed}
               providerName={config?.provider}
-              modelName={config?.model}
+              modelName={getModelDisplayName(config?.provider, config?.model)}
+              modelId={config?.model}
+              onModelChange={handleModelChange}
               error={synthError}
               inputError={inputError}
               inputMode={lastInputMode}
