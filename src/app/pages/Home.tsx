@@ -236,7 +236,7 @@ export function Home() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8, duration: 0.8 }}
         >
-          <span className="home-hint-label">Explore History:</span>
+          <span className="home-hint-label">QUICK TRACE:</span>
           <button className="btn btn-ghost" type="button" onClick={() => setInput("0")}>#0</button>
           <button className="btn btn-ghost" type="button" onClick={() => setInput("69420")}>#69420</button>
           <button className="btn btn-ghost" type="button" onClick={() => setInput("1000")}>#1000</button>
