@@ -139,7 +139,9 @@ export class OpenRouterAdapter implements LLMAdapter {
         toolExecutor,
         conversationPrompt,
         enableAttachments,
-        toolPolicyDecision
+        toolPolicyDecision,
+        wikiPage,
+        wikiCompletenessInfo
       )
     } catch (err) {
       if (isSystemRoleError(err)) {
@@ -152,7 +154,9 @@ export class OpenRouterAdapter implements LLMAdapter {
           toolExecutor,
           conversationPrompt,
           enableAttachments,
-          toolPolicyDecision
+          toolPolicyDecision,
+          wikiPage,
+          wikiCompletenessInfo
         )
       }
       throw err
@@ -169,8 +173,8 @@ export class OpenRouterAdapter implements LLMAdapter {
     promptOverride?: string,
     allowAttachments = true,
     toolPolicyDecision?: ChatToolPolicyDecision
-  ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
+  , wikiPage?: import("../wikiTypes").WikiPage | null, wikiCompletenessInfo?: string): Promise<SynthesisResult> {
+    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision, { wikiPage, wikiCompletenessInfo })
     const userPrompt = promptOverride ?? prepared.userPrompt
     const attachments = allowAttachments ? prepared.attachments : []
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
@@ -202,7 +206,7 @@ export class OpenRouterAdapter implements LLMAdapter {
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
         model: this.model,
-        max_tokens: 600,
+        max_tokens: 2048,
         messages,
         stream,
       }

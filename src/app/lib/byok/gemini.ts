@@ -126,7 +126,9 @@ export class GeminiAdapter implements LLMAdapter {
         toolExecutor,
         conversationPrompt,
         enableAttachments,
-        toolPolicyDecision
+        toolPolicyDecision,
+        wikiPage,
+        wikiCompletenessInfo
       )
     }
 
@@ -140,7 +142,9 @@ export class GeminiAdapter implements LLMAdapter {
         toolExecutor,
         conversationPrompt,
         enableAttachments,
-        toolPolicyDecision
+        toolPolicyDecision,
+        wikiPage,
+        wikiCompletenessInfo
       )
     } catch (err) {
       if (isSystemInstructionError(err)) {
@@ -154,7 +158,9 @@ export class GeminiAdapter implements LLMAdapter {
           toolExecutor,
           conversationPrompt,
           enableAttachments,
-          toolPolicyDecision
+          toolPolicyDecision,
+          wikiPage,
+          wikiCompletenessInfo
         )
       }
       throw err
@@ -170,9 +176,17 @@ export class GeminiAdapter implements LLMAdapter {
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
     allowAttachments = true,
-    toolPolicyDecision?: ChatToolPolicyDecision
+    toolPolicyDecision?: ChatToolPolicyDecision,
+    wikiPage?: import("../wikiTypes").WikiPage | null,
+    wikiCompletenessInfo?: string
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
+    const prepared = await prepareSynthesisInput(
+      chronicle,
+      this.getCapabilities(),
+      toolExecutor?.getKeys(),
+      toolPolicyDecision,
+      { wikiPage, wikiCompletenessInfo }
+    )
     const userPrompt = promptOverride
       ? (useSystemInstruction ? promptOverride : `${prepared.systemPrompt}\n\n${promptOverride}`)
       : (useSystemInstruction ? prepared.userPrompt : prepared.combinedPrompt)

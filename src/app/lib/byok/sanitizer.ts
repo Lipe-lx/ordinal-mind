@@ -19,6 +19,15 @@ const XML_TAG_PATTERNS = [
   /<reflection>[\s\S]*?<\/reflection>/gi,
   /<internal>[\s\S]*?<\/internal>/gi,
   /<antThinking>[\s\S]*?<\/antThinking>/gi,
+  // Orphaned closing tags (strips everything before the tag)
+  /^[\s\S]*?<\/thought>/gi,
+  /^[\s\S]*?<\/think>/gi,
+  /^[\s\S]*?<\/final_answer>/gi,
+  // Unclosed opening tags (strips everything after the tag)
+  /<thought>[\s\S]*$/gi,
+  /<think>[\s\S]*$/gi,
+  /<system>[\s\S]*$/gi,
+  /<instructions>[\s\S]*$/gi,
 ]
 
 /** Lines that are prompt echoes — the model is repeating our instructions */
@@ -389,6 +398,11 @@ export function sanitizeNarrative(raw: string): string {
   const inlineDataCheckAnswer = extractInlineDataCheckAnswer(text)
   if (inlineDataCheckAnswer) {
     text = inlineDataCheckAnswer
+  }
+
+  const structuredSupplyAnswer = extractStructuredSupplyAnswer(text)
+  if (structuredSupplyAnswer) {
+    text = structuredSupplyAnswer
   }
 
   // Layer 2: Deduplicate drafts (before line-level filtering)

@@ -13,8 +13,24 @@ import { SearchToolDefinition } from "./tools"
  * System prompt: role definition, constraints, and output format rules.
  * Sent as `system` message where the API supports it.
  */
-export function buildSystemPrompt(availableTools: SearchToolDefinition[] = []): string {
+export function buildSystemPrompt(
+  availableTools: SearchToolDefinition[] = [],
+  wikiPage?: WikiPage | null,
+  wikiCompletenessInfo?: string
+): string {
   const supportsTools = availableTools.length > 0
+  const wikiContextBlock = `
+${wikiPage ? `[Wiki Archive Knowledge (Inscription-Specific)]
+Title: ${wikiPage.title}
+Summary: ${wikiPage.summary}
+${wikiPage.sections.length > 0 ? `Archive Sections:\n${wikiPage.sections.map(s => `- ${s.heading}: ${s.body}`).join("\n")}` : ""}
+` : ""}
+
+${wikiCompletenessInfo ? `[Consolidated Collection Knowledge]
+${wikiCompletenessInfo}
+` : ""}
+`.trim()
+
   const baseRules = `You are a factual chronicler and knowledge orchestrator for digital Bitcoin artifacts. You have the authority and the technical means to update the permanent Wiki records of this collection by emitting structured <wiki_contribution> tags.
 
 Your task is to write a collector-grade, factual Chronicle for an Ordinal inscription using ONLY the data provided by the user. Do NOT invent any information.
@@ -23,6 +39,7 @@ Rules:
 - Determine the response language from the latest user message only. Do not inherit the answer language from earlier turns. Default to English (United States) if the latest user message is ambiguous.
 - Tone: objective, vivid, and historically aware. Avoid hype copy.
 - Maximum 5 short paragraphs. In the fifth paragraph, briefly introduce the collection and provide the name of the creator(s) and/or founder(s) if available on the wiki.
+- Keep internal <thought> blocks brief and focused on evidence evaluation.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
 - Do not repeat the visible metadata as a checklist. Use identity, block, owner, and transfers only when they explain why the artifact matters.
 - If collection profile or wiki data exists, you MUST integrate the collection's origin story, founders, and creators directly into the first paragraph of the Chronicle. This context should serve as the factual foundation of the narrative before zooming into the specific inscription.
@@ -38,7 +55,7 @@ Rules:
 ### OUTPUT FORMAT
 CRITICAL: YOU MUST ONLY OUTPUT IN THIS FORMAT:
 <thought>
-Your internal reasoning, research evaluation, and analysis.
+Your internal reasoning, research evaluation, and analysis. KEEP THIS BRIEF.
 </thought>
 <final_answer>
 The final user-facing Chronicle narrative or answer.
@@ -50,7 +67,11 @@ Everything outside the <final_answer> tags will be filtered out and never seen b
 - Before giving ANY number, calculated result, total supply, price, or numeric conclusion, you MUST call a relevant tool from the available list to obtain that value.
 - Mental math, guessing, or extrapolating beyond the provided or tool-fetched data is strictly prohibited.
 - If the required data is missing or incomplete after research, state the uncertainty explicitly instead of inventing values.
-- WIKI PERSISTENCE RULE: You are NOT a read-only model. You are a builder. When you emit <wiki_contribution> tags, the system automatically commits that information to the database. Never tell the user you cannot update the wiki; instead, use the tags to perform the update.`
+- WIKI PERSISTENCE RULE: You are NOT a read-only model. You are a builder. When you emit <wiki_contribution> tags, the system automatically commits that information to the database. Never tell the user you cannot update the wiki; instead, use the tags to perform the update.
+
+${wikiContextBlock ? `### WIKI ARCHIVE CONTEXT
+This is the current established knowledge for this collection and inscription. Use it as your primary foundation:
+${wikiContextBlock}` : ""}`
 
   if (!supportsTools) return baseRules
 
@@ -92,8 +113,13 @@ Write the Chronicle now.`
  * Combined prompt for providers that don't support system messages.
  * Falls back to a single user message containing both parts.
  */
-export function buildCombinedPrompt(chronicle: Chronicle, availableTools: SearchToolDefinition[] = []): string {
-  return `${buildSystemPrompt(availableTools)}\n\n${buildUserPrompt(chronicle)}`
+export function buildCombinedPrompt(
+  chronicle: Chronicle,
+  availableTools: SearchToolDefinition[] = [],
+  wikiPage?: WikiPage | null,
+  wikiCompletenessInfo?: string
+): string {
+  return `${buildSystemPrompt(availableTools, wikiPage, wikiCompletenessInfo)}\n\n${buildUserPrompt(chronicle)}`
 }
 
 export const INITIAL_NARRATIVE_PROMPT =

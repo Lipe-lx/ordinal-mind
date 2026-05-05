@@ -55,6 +55,8 @@ export interface PreparedSynthesisInput {
   fallbackReason?: string
   contentDigest?: string
   attachments: PreparedAttachmentInput[]
+  wikiPage?: import("../wikiTypes").WikiPage | null
+  wikiCompletenessInfo?: string
 }
 
 interface PreparedAttachmentBundle {
@@ -75,7 +77,11 @@ export async function prepareSynthesisInput(
   chronicle: Chronicle,
   capabilities: ProviderCapabilities,
   researchKeys?: ResearchKeys,
-  toolPolicyDecision?: ChatToolPolicyDecision
+  toolPolicyDecision?: ChatToolPolicyDecision,
+  options?: {
+    wikiPage?: import("../wikiTypes").WikiPage | null
+    wikiCompletenessInfo?: string
+  }
 ): Promise<PreparedSynthesisInput> {
   const allAvailableTools = capabilities.supportsToolCalling
     ? getAvailableTools(researchKeys)
@@ -88,7 +94,13 @@ export async function prepareSynthesisInput(
   }
   const availableTools = selectToolsForPolicy(allAvailableTools, decision)
   const attachmentBundle = await prepareAttachmentBundle(chronicle, capabilities)
-  const prompts = buildPromptsWithContentBundle(chronicle, availableTools, attachmentBundle)
+  const prompts = buildPromptsWithContentBundle(
+    chronicle,
+    availableTools,
+    attachmentBundle,
+    options?.wikiPage,
+    options?.wikiCompletenessInfo
+  )
 
   return {
     systemPrompt: prompts.systemPrompt,
@@ -103,6 +115,8 @@ export async function prepareSynthesisInput(
     fallbackReason: attachmentBundle.fallbackReason,
     contentDigest: attachmentBundle.contentDigest,
     attachments: attachmentBundle.attachments,
+    wikiPage: options?.wikiPage,
+    wikiCompletenessInfo: options?.wikiCompletenessInfo,
   }
 }
 
@@ -307,16 +321,18 @@ function buildTextBundleFromCached(
 function buildPromptsWithContentBundle(
   chronicle: Chronicle,
   availableTools: SearchToolDefinition[],
-  bundle: PreparedAttachmentBundle
+  bundle: PreparedAttachmentBundle,
+  wikiPage?: import("../wikiTypes").WikiPage | null,
+  wikiCompletenessInfo?: string
 ) {
-  const systemPrompt = buildSystemPrompt(availableTools)
+  const systemPrompt = buildSystemPrompt(availableTools, wikiPage, wikiCompletenessInfo)
   const baseUserPrompt = buildUserPrompt(chronicle)
   const augmentedUserPrompt = appendContentBundleToPrompt(baseUserPrompt, bundle)
 
   return {
     systemPrompt,
     userPrompt: augmentedUserPrompt,
-    combinedPrompt: `${systemPrompt}\n\n${augmentedUserPrompt}`,
+    combinedPrompt: buildCombinedPrompt(chronicle, availableTools, wikiPage, wikiCompletenessInfo),
   }
 }
 
@@ -443,6 +459,7 @@ async function readTextPreview(
 
 function normalizeExtractedText(text: string): string {
   return text
+    // eslint-disable-next-line no-control-regex
     .replace(/\u0000/g, "")
     .replace(/\r\n/g, "\n")
     .trim()

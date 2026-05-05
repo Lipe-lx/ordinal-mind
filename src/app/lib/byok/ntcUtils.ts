@@ -152,13 +152,20 @@ export function extractContentBetweenTags(text: string, tag: string): string | n
  * and scratchpad artifacts (e.g., "User question:", "Target:", etc.).
  */
 export function heuristicCleanup(text: string): string {
-  // If the text contains <final_answer>, use the specific extraction
+  // 1. If the text contains <final_answer>, use the specific extraction
   const finalAnswer = extractContentBetweenTags(text, "final_answer")
   if (finalAnswer !== null) return finalAnswer.trim()
 
   let cleaned = text
 
-  // 1. Strip common "Thinking" prefixes and structured analysis artifacts
+  // 1a. Handle orphaned or unclosed tags before general regex cleanup
+  cleaned = cleaned.replace(/^[\s\S]*?<\/thought>/gi, "")
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "")
+  cleaned = cleaned.replace(/^[\s\S]*?<\/final_answer>/gi, "")
+  cleaned = cleaned.replace(/<thought>[\s\S]*$/gi, "")
+  cleaned = cleaned.replace(/<think>[\s\S]*$/gi, "")
+
+  // 1b. Strip common "Thinking" prefixes and structured analysis artifacts
   const patternsToStrip = [
     /^User question:.*$/im,
     /^Target:.*$/im,

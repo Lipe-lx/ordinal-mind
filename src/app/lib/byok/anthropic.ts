@@ -145,7 +145,9 @@ export class AnthropicAdapter implements LLMAdapter {
         toolExecutor,
         conversationPrompt,
         enableAttachments,
-        toolPolicyDecision
+        toolPolicyDecision,
+        wikiPage,
+        wikiCompletenessInfo
       )
     } catch (err) {
       if (isSystemMessageError(err)) {
@@ -157,7 +159,9 @@ export class AnthropicAdapter implements LLMAdapter {
           toolExecutor,
           conversationPrompt,
           enableAttachments,
-          toolPolicyDecision
+          toolPolicyDecision,
+          wikiPage,
+          wikiCompletenessInfo
         )
       }
       throw err
@@ -172,9 +176,17 @@ export class AnthropicAdapter implements LLMAdapter {
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
     allowAttachments = true,
-    toolPolicyDecision?: ChatToolPolicyDecision
+    toolPolicyDecision?: ChatToolPolicyDecision,
+    wikiPage?: import("../wikiTypes").WikiPage | null,
+    wikiCompletenessInfo?: string
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
+    const prepared = await prepareSynthesisInput(
+      chronicle,
+      this.getCapabilities(),
+      toolExecutor?.getKeys(),
+      toolPolicyDecision,
+      { wikiPage, wikiCompletenessInfo }
+    )
     const userPrompt = promptOverride ?? prepared.userPrompt
     const attachments = allowAttachments ? prepared.attachments : []
     const tools = prepared.searchToolsEnabled ? prepared.availableTools.map(t => ({
@@ -190,7 +202,7 @@ export class AnthropicAdapter implements LLMAdapter {
     for (let i = 0; i < 7; i++) {
       const body: Record<string, unknown> = {
         model: this.model,
-        max_tokens: 600,
+        max_tokens: 2048,
         system: prepared.systemPrompt,
         messages,
         stream,
@@ -280,7 +292,7 @@ export class AnthropicAdapter implements LLMAdapter {
       try {
         const body: Record<string, unknown> = {
           model: this.model,
-          max_tokens: 600,
+          max_tokens: 2048,
           system: prepared.systemPrompt,
           messages,
         }
@@ -312,9 +324,17 @@ export class AnthropicAdapter implements LLMAdapter {
     toolExecutor?: ToolExecutor,
     promptOverride?: string,
     allowAttachments = true,
-    toolPolicyDecision?: ChatToolPolicyDecision
+    toolPolicyDecision?: ChatToolPolicyDecision,
+    wikiPage?: import("../wikiTypes").WikiPage | null,
+    wikiCompletenessInfo?: string
   ): Promise<SynthesisResult> {
-    const prepared = await prepareSynthesisInput(chronicle, this.getCapabilities(), toolExecutor?.getKeys(), toolPolicyDecision)
+    const prepared = await prepareSynthesisInput(
+      chronicle,
+      this.getCapabilities(),
+      toolExecutor?.getKeys(),
+      toolPolicyDecision,
+      { wikiPage, wikiCompletenessInfo }
+    )
     const userPrompt = promptOverride
       ? `${prepared.systemPrompt}\n\n${promptOverride}`
       : prepared.combinedPrompt

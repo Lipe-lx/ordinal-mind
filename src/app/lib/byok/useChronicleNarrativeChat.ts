@@ -255,6 +255,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
   const [wikiActivity, setWikiActivity] = useState<WikiActivityStatus | null>(null)
   const [inputError, setInputError] = useState<string | null>(null)
   const [wikiCompletenessInfo, setWikiCompletenessInfo] = useState<string>("")
+  const [wikiCompletenessStatus, setWikiCompletenessStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle")
   const wikiLifecycle = useWikiLifecycle(chronicle)
 
   const abortRef = useRef<AbortController | null>(null)
@@ -315,9 +316,19 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
 
       const collectionSlug = chronicle?.collection_context.market.match?.collection_slug ?? chronicle?.collection_context.registry.match?.slug
       if (collectionSlug) {
+        setWikiCompletenessStatus("loading")
         fetchConsolidated(collectionSlug).then(collection => {
-          if (collection) setWikiCompletenessInfo(formatConsolidatedForPrompt(collection))
-        }).catch(() => {})
+          if (collection) {
+            setWikiCompletenessInfo(formatConsolidatedForPrompt(collection))
+            setWikiCompletenessStatus("loaded")
+          } else {
+            setWikiCompletenessStatus("error")
+          }
+        }).catch(() => {
+          setWikiCompletenessStatus("error")
+        })
+      } else {
+        setWikiCompletenessStatus("loaded") // No collection context to wait for
       }
     }, 0)
 
@@ -826,6 +837,13 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
     if (!KeyStore.has()) return
     if (phase !== "idle") return
     if (messages.some((message) => message.role === "assistant")) return
+
+    // Pillar 2 - Race Condition Protection:
+    // If a collection context is expected, wait for it to load before sending the initial narrative.
+    // This ensures that collection-level knowledge (founders, origin story) is injected into the prompt.
+    const collectionSlug = chronicle?.collection_context.market.match?.collection_slug ?? chronicle?.collection_context.registry.match?.slug
+    if (collectionSlug && wikiCompletenessStatus !== "loaded" && wikiCompletenessStatus !== "error") return
+
     const activeThread = loadChatThread(chronicle.meta.inscription_id, activeThreadId)
     if (activeThread?.skipAutoNarrative) return
     const autoTurnKey = `${chronicle.meta.inscription_id}:${activeThreadId}`
@@ -843,7 +861,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
       forceMode: isBuilder ? "qa" : "narrative",
       intentOverride: isBuilder ? "knowledge_contribution" : "chronicle_query",
     })
-  }, [activeThreadId, chronicle, messages, phase, sendMessage, options?.wikiBuilderMode, options?.targetGap])
+  }, [activeThreadId, chronicle, messages, phase, sendMessage, options?.wikiBuilderMode, options?.targetGap, wikiCompletenessStatus])
 
   return {
     messages,
