@@ -22,7 +22,7 @@ Your task is to write a collector-grade, factual Chronicle for an Ordinal inscri
 Rules:
 - Determine the response language from the latest user message only. Do not inherit the answer language from earlier turns. Default to English (United States) if the latest user message is ambiguous.
 - Tone: objective, vivid, and historically aware. Avoid hype copy.
-- Maximum 5 short paragraphs.
+- Maximum 5 short paragraphs. In the fifth paragraph, briefly introduce the collection and provide the name of the creator(s) and/or founder(s) if available on the wiki.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
 - Do not repeat the visible metadata as a checklist. Use identity, block, owner, and transfers only when they explain why the artifact matters.
 - If collection profile or wiki data exists, you MUST integrate the collection's origin story, founders, and creators directly into the first paragraph of the Chronicle. This context should serve as the factual foundation of the narrative before zooming into the specific inscription.
@@ -71,7 +71,7 @@ When multiple tools are needed, emit them together in the same response turn so 
 Do not repeat the same tool call with the same arguments.
 If a transfer/sale question needs both a compact overview and exact rows, call get_timeline and get_raw_events in the same turn.
 For transfer/sale questions, prefer one get_raw_events call with event_types including all needed categories, such as ["transfer","sale"], instead of separate narrow calls.
-After research, write the Chronicle integrating on-chain data and cultural context.
+After research, write the Chronicle. You MUST integrate the discovered creator names and origin story directly into the first paragraph in a fluid, integrated manner.
 
 If tools are unavailable or return no results, write using only provided factual data.`
 }
@@ -188,7 +188,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generatio
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
-${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidated Collection Knowledge] contains names of founders/co-founders and/or their X (Twitter) profiles, you MUST weave this information elaborately into the initial Chronicle narrative. Ensure the founders/co-founders and their roles in the collection's origin are mentioned as established context." : ""}
+${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidated Collection Knowledge] contains names of founders/co-founders, you MUST integrate this information directly into the first paragraph of the initial Chronicle narrative. Ensure the creators and their roles in the collection's origin are mentioned as established foundation context." : ""}
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.
