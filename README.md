@@ -118,5 +118,5 @@ npm run typecheck
 ---
 
 <p align="center">
-  <i>Ordinals is forever.</i>
+  <i>Ordinals are forever. Deal with it.</i>
 </p>
