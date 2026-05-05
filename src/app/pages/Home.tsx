@@ -1,5 +1,7 @@
 import { useState, useTransition } from "react"
 import { useLocation, useNavigate } from "react-router"
+import { motion } from "motion/react"
+import { OrdinalBackground } from "../components/OrdinalBackground"
 
 const TAPROOT_RE = /^bc1p[a-z0-9]{38,62}$/i
 const HEX_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
@@ -26,7 +28,7 @@ export function Home() {
     }
 
     if (!isValidInput(trimmed)) {
-      setError("Invalid input. Use an inscription number (e.g. 69420 or -435195), hex ID, or bc1p... address.")
+      setError("Invalid input. Use an inscription number (e.g. 69420), hex ID, or bc1p... address.")
       return
     }
 
@@ -42,52 +44,89 @@ export function Home() {
 
   return (
     <div className="home fade-in">
-      <div>
-        <h1 className="home-title">
-          <span className="home-title-accent">Factual Chronicle</span>
+      <OrdinalBackground />
+      
+      <motion.div 
+        className="home-content"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <motion.h1 
+          className="home-title"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <span className="home-title-accent">The Memory Engine</span>
           <br />
           for Bitcoin Ordinals
-        </h1>
-      </div>
+        </motion.h1>
 
-      <p className="home-subtitle">
-        Explore the verifiable history of any inscription. On-chain provenance,
-        transfer timeline, social mentions — all from public data.
-      </p>
-
-      <form className="home-search" onSubmit={handleSubmit}>
-        <input
-          id="inscription-input"
-          className="input-field"
-          type="text"
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value)
-            setError(null)
-          }}
-          placeholder="Inscription # · hex ID · bc1p address"
-          autoComplete="off"
-          autoFocus
-        />
-        <button
-          id="scan-button"
-          className="btn btn-primary"
-          type="submit"
-          disabled={isPending}
+        <motion.p 
+          className="home-subtitle"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.9 }}
+          transition={{ delay: 0.4, duration: 0.8 }}
         >
-          {isPending ? "Scanning..." : "Scan"}
-        </button>
-      </form>
+          Recover the provenance, traces, and cultural consensus of any digital artifact.
+          Factual, public, and immutable — just like the chain.
+        </motion.p>
 
-      {error && <p className="home-error">{error}</p>}
+        <motion.form 
+          className="home-search" 
+          onSubmit={handleSubmit}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, duration: 0.8 }}
+        >
+          <div className="input-group">
+            <input
+              id="inscription-input"
+              className="input-field"
+              type="text"
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value)
+                setError(null)
+              }}
+              placeholder="Inscription # · hex ID · bc1p address"
+              autoComplete="off"
+              autoFocus
+            />
+          </div>
+          <button
+            id="scan-button"
+            className="btn btn-primary effect-glow-pulse"
+            type="submit"
+            disabled={isPending}
+          >
+            {isPending ? "Scanning..." : "Scan Chronicle"}
+          </button>
+        </motion.form>
 
-      <p className="home-hint">
-        Try: <button className="btn btn-ghost" type="button" onClick={() => setInput("0")} style={{ fontSize: "0.813rem" }}>#0</button>
-        {" "}
-        <button className="btn btn-ghost" type="button" onClick={() => setInput("69420")} style={{ fontSize: "0.813rem" }}>#69420</button>
-        {" "}
-        <button className="btn btn-ghost" type="button" onClick={() => setInput("1000")} style={{ fontSize: "0.813rem" }}>#1000</button>
-      </p>
+        {error && (
+          <motion.p 
+            className="home-error"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            {error}
+          </motion.p>
+        )}
+
+        <motion.div 
+          className="home-hints"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8, duration: 0.8 }}
+        >
+          <span className="home-hint-label">Explore History:</span>
+          <button className="btn btn-ghost" type="button" onClick={() => setInput("0")}>#0</button>
+          <button className="btn btn-ghost" type="button" onClick={() => setInput("69420")}>#69420</button>
+          <button className="btn btn-ghost" type="button" onClick={() => setInput("1000")}>#1000</button>
+        </motion.div>
+      </motion.div>
     </div>
   )
 }

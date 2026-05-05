@@ -3,51 +3,155 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 70vh;
+  min-height: 75vh;
   text-align: center;
+  gap: var(--space-3xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.home-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: var(--space-2xl);
 }
 
+.home-hero-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  max-width: 1200px;
+  height: 600px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.home-hero-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(
+    circle,
+    rgba(247, 147, 26, 0.08) 0%,
+    rgba(247, 147, 26, 0.03) 40%,
+    transparent 70%
+  );
+  filter: blur(80px);
+  animation: pulse-glow 8s infinite ease-in-out;
+}
+
 .home-title {
-  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
   font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  margin: 0;
 }
 
 .home-title-accent {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  background: linear-gradient(135deg, #f7931a 0%, #fdba74 50%, #f7931a 100%);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  animation: shine 5s linear infinite;
+}
+
+@keyframes shine {
+  to {
+    background-position: 200% center;
+  }
 }
 
 .home-subtitle {
-  font-size: clamp(1rem, 2vw, 1.25rem);
+  font-size: clamp(1.1rem, 2.5vw, 1.4rem);
   color: var(--text-secondary);
-  max-width: 600px;
-  line-height: 1.6;
+  max-width: 700px;
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.9;
 }
 
 .home-search {
   display: flex;
   gap: var(--space-md);
   width: 100%;
-  max-width: 640px;
+  max-width: 720px;
+  padding: var(--space-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  transition: all var(--duration-normal) var(--ease-smooth);
 }
 
-.home-search .input-field {
+.home-search:focus-within {
+  border-color: var(--accent-glow-strong);
+  box-shadow: 0 20px 50px rgba(247, 147, 26, 0.1);
+  transform: translateY(-2px);
+}
+
+.input-group {
+  position: relative;
   flex: 1;
 }
 
-.home-search .btn {
-  padding: var(--space-md) var(--space-xl);
-  white-space: nowrap;
+.home-search .input-field {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: var(--space-md) var(--space-lg);
+  font-size: 1.1rem;
+  color: var(--text-primary);
 }
 
-.home-hint {
+.home-search .input-field:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.home-search .btn {
+  padding: 0 var(--space-2xl);
+  border-radius: var(--radius-lg);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.home-hints {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+}
+
+.home-hint-label {
   font-size: 0.813rem;
+  font-weight: 600;
   color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.home-hints .btn-ghost {
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid transparent;
+}
+
+.home-hints .btn-ghost:hover {
+  color: var(--accent-primary);
+  background: var(--accent-glow);
+  border-color: var(--accent-glow-strong);
 }
 
 .home-error {
@@ -57,4 +161,29 @@
   background: rgba(239, 68, 68, 0.1);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(239, 68, 68, 0.2);
+  margin-top: calc(-1 * var(--space-md));
+}
+
+@media (max-width: 640px) {
+  .home-search {
+    flex-direction: column;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  
+  .home-search .input-field {
+    background: var(--bg-input);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+  }
+  
+  .home-search .btn {
+    padding: var(--space-md);
+  }
+  
+  .home-hints {
+    flex-wrap: wrap;
+  }
 }

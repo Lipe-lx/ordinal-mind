@@ -19,6 +19,12 @@
   --accent-glow: rgba(247, 147, 26, 0.15);
   --accent-glow-strong: rgba(247, 147, 26, 0.3);
 
+  --grid-size: 40px;
+  --grid-color: rgba(247, 147, 26, 0.03);
+  --grid-color-strong: rgba(247, 147, 26, 0.06);
+  --scanline-opacity: 0.03;
+  --glow-spread: 40px;
+
   --text-primary: #f0f0f5;
   --text-secondary: #8b8b9e;
   --text-tertiary: #55556a;

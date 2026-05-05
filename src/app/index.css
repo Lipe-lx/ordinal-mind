@@ -5,6 +5,7 @@
 @import "./styles/base/tokens.css";
 @import "./styles/base/reset.css";
 @import "./styles/base/glass.css";
+@import "./styles/base/effects.css";
 
 @import "./styles/layout/layout.css";
 
