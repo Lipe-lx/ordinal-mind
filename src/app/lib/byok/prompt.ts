@@ -198,6 +198,9 @@ Wiki Builder Mode:
 - NOTE: The 'founder' field should be used for the creators/founders of the collection. The 'artist' field is for the artist(s). The 'inscriber' field is specifically for the person/entity that performed the on-chain inscription of the asset (this may differ from the collection founder, especially for historical or aggregated collections).
 - SLUG RULE: For collection-level facts (e.g., founder of sub10k), use the collection_slug from [Metadata]. For inscription-level facts (e.g., Rodamor inscribed Inscription 0), use the inscription_id from [Metadata] as the "collection_slug".
 - If the user provides multiple facts, you may emit multiple <wiki_contribution> blocks, one for each field.
+- DELETION RULE: If the user requests the deletion or removal of a specific wiki field (e.g., "clear the founder field", "apague o artista"), you can perform this by adding "operation": "delete" to the tag. This is a privileged operation usually reserved for Genesis/Admin users. The "value" field can be empty for deletions.
+- Format for deletion: <wiki_contribution>{"field":"...","operation":"delete","collection_slug":"...","confidence":"correcting_existing","verifiable":true}</wiki_contribution>
+- IMPORTANT: Deletion is a powerful action. Confirm the user's intent clearly before emitting the delete tag.
 ${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_contribution> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
 - If user has no Discord connected, mention gently that contributions enter review.
 - Answer in the exact language of the latest user message only. Do not inherit answer language from earlier turns.

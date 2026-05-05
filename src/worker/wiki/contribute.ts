@@ -37,6 +37,7 @@ export interface WikiContributionInput {
   collection_slug: string
   field: CanonicalField
   value: string
+  operation?: "add" | "delete"
   confidence: "stated_by_user" | "inferred" | "correcting_existing"
   verifiable: boolean
   session_id: string
@@ -51,11 +52,11 @@ export interface ContributeRequest {
 export interface ContributeResponse {
   ok: boolean
   contribution_id: string
-  status: "published" | "quarantine" | "duplicate"
+  status: "published" | "quarantine" | "duplicate" | "deleted"
   tier_applied: OGTier
 }
 
-type ContributionStatus = "published" | "quarantine" | "duplicate"
+type ContributionStatus = "published" | "quarantine" | "duplicate" | "deleted"
 
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
   return tier === "og" || tier === "genesis" ? "published" : "quarantine"
@@ -78,7 +79,10 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
 
   if (typeof c.collection_slug !== "string" || !c.collection_slug.trim()) return null
   if (!isCanonicalField(c.field)) return null
-  if (typeof c.value !== "string" || !c.value.trim()) return null
+
+  const operation = c.operation === "delete" ? "delete" : "add"
+  if (operation === "add" && (typeof c.value !== "string" || !c.value.trim())) return null
+
   if (
     c.confidence !== "stated_by_user" &&
     c.confidence !== "inferred" &&
@@ -90,7 +94,8 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
     contribution: {
       collection_slug: (c.collection_slug as string).trim(),
       field: c.field,
-      value: (c.value as string).trim(),
+      value: typeof c.value === "string" ? (c.value as string).trim() : "",
+      operation,
       confidence: c.confidence,
       verifiable: Boolean(c.verifiable),
       session_id: c.session_id as string,
@@ -156,6 +161,40 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
   const { contribution, jwt } = parsed
   const { contributor_id, tier } = await resolveContributor(jwt, env)
+
+  if (contribution.operation === "delete") {
+    if (tier !== "genesis") {
+      return json({ ok: false, error: "forbidden_deletion_tier" }, 403)
+    }
+
+    try {
+      // Mark all existing published contributions for this field as 'deleted'
+      await env.DB.prepare(`
+        UPDATE wiki_contributions
+        SET status = 'deleted'
+        WHERE collection_slug = ? AND field = ? AND status = 'published'
+      `)
+        .bind(contribution.collection_slug, contribution.field)
+        .run()
+
+      // Invalidate cache
+      await env.DB.prepare(`
+        DELETE FROM consolidated_cache WHERE collection_slug = ?
+      `)
+        .bind(contribution.collection_slug)
+        .run()
+
+      return json({
+        ok: true,
+        contribution_id: generateId(),
+        status: "deleted",
+        tier_applied: tier,
+      })
+    } catch (err) {
+      console.error("[WikiContribute] Deletion failed:", err)
+      return json({ ok: false, error: "db_deletion_failed" }, 500)
+    }
+  }
 
   // Deduplication check
   const isDuplicate = await checkDuplicate(env, contribution.collection_slug, contribution.field, contribution.value)

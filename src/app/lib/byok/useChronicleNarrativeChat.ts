@@ -141,24 +141,32 @@ function formatWikiFieldLabel(field: string): string {
 export function resolveWikiContributionActivityStatus(params: {
   phase: "running" | "done" | "error"
   field: string
+  operation?: "add" | "delete"
 }): WikiActivityStatus {
+  const isDelete = params.operation === "delete"
   if (params.phase === "running") {
     return {
       state: "writing",
-      label: `Saving wiki contribution for ${formatWikiFieldLabel(params.field)}...`,
+      label: isDelete 
+        ? `Deleting wiki field ${formatWikiFieldLabel(params.field)}...`
+        : `Saving wiki contribution for ${formatWikiFieldLabel(params.field)}...`,
     }
   }
 
   if (params.phase === "done") {
     return {
       state: "success",
-      label: `Wiki contribution for ${formatWikiFieldLabel(params.field)} was recorded for review.`,
+      label: isDelete
+        ? `Wiki field ${formatWikiFieldLabel(params.field)} was deleted.`
+        : `Wiki contribution for ${formatWikiFieldLabel(params.field)} was recorded.`,
     }
   }
 
   return {
     state: "error",
-    label: `Wiki contribution for ${formatWikiFieldLabel(params.field)} could not be recorded.`,
+    label: isDelete
+      ? `Wiki field ${formatWikiFieldLabel(params.field)} could not be deleted.`
+      : `Wiki contribution for ${formatWikiFieldLabel(params.field)} could not be recorded.`,
   }
 }
 
@@ -670,6 +678,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
             setWikiActivity(resolveWikiContributionActivityStatus({
               phase: "running",
               field: extracted.data.field,
+              operation: extracted.data.operation,
             }))
             void submitWikiContribution({
               data: extracted.data,
@@ -679,6 +688,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
               setWikiActivity(resolveWikiContributionActivityStatus({
                 phase: submission.ok ? "done" : "error",
                 field: extracted.data?.field ?? "contribution",
+                operation: extracted.data?.operation,
               }))
             })
           }

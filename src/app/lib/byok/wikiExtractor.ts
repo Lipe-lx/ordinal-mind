@@ -18,6 +18,7 @@ import { CANONICAL_FIELDS } from "./wikiCompleteness"
 export interface WikiExtractData {
   field: CanonicalField
   value: string
+  operation?: "add" | "delete"
   confidence: "stated_by_user" | "inferred" | "correcting_existing"
   verifiable: boolean
   collection_slug: string
@@ -93,8 +94,11 @@ function validateExtractData(data: unknown): WikiExtractData | null {
   // field must be a known canonical field
   if (!isCanonicalField(d.field)) return null
 
-  // value must be a non-empty string
-  if (typeof d.value !== "string" || !d.value.trim()) return null
+  // operation defaults to 'add'
+  const operation = d.operation === "delete" ? "delete" : "add"
+
+  // value must be a non-empty string for 'add' operation
+  if (operation === "add" && (typeof d.value !== "string" || !d.value.trim())) return null
 
   // confidence must be one of the valid values
   const confidence = d.confidence
@@ -114,7 +118,8 @@ function validateExtractData(data: unknown): WikiExtractData | null {
 
   return {
     field: d.field,
-    value: (d.value as string).trim(),
+    value: typeof d.value === "string" ? (d.value as string).trim() : "",
+    operation,
     confidence,
     verifiable: Boolean(d.verifiable),
     collection_slug: (d.collection_slug as string).trim(),
