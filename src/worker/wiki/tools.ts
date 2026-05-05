@@ -2,6 +2,7 @@ import { cacheGet } from "../cache"
 import type { Env } from "../index"
 import { getWikiSchemaFailure, isMissingWikiSchemaError, toWikiToolUnavailable } from "./schema"
 import { isInscriptionId } from "./contribute"
+import { performWebSearch } from "../agents/webResearch"
 
 export async function handleWikiTool(toolName: string, request: Request, env: Env): Promise<Response> {
   let payload: Record<string, unknown>
@@ -22,6 +23,10 @@ export async function handleWikiTool(toolName: string, request: Request, env: En
       case "get_collection":
       case "get_collection_context":
         return json(await getCollectionContext(payload, env))
+      case "web_search":
+        return json(await performWebSearchTool(payload, env))
+      case "deep_research":
+        return json(await performWebSearchTool(payload, env, true))
       default:
         return json({ ok: false, error: "unknown_tool", tool: toolName }, 404)
     }
@@ -274,6 +279,24 @@ async function getCollectionContext(input: Record<string, unknown>, env: Env): P
     inscription_id: inscriptionId,
     collection_context: chronicle.collection_context,
     source_catalog: chronicle.source_catalog,
+  }
+}
+
+async function performWebSearchTool(input: Record<string, unknown>, env: Env, deep = false): Promise<Record<string, unknown>> {
+  const query = extractString(input.query)
+  if (!query) return { ok: false, error: "query_required" }
+
+  const result = await performWebSearch(query, {
+    deepResearch: deep,
+    maxResults: deep ? 8 : 5,
+    sourceLabel: deep ? "deep_research_tool" : "web_search_tool"
+  })
+
+  if (!result) return { ok: false, error: "no_results_found" }
+
+  return {
+    ok: true,
+    ...result
   }
 }
 

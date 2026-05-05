@@ -127,7 +127,37 @@ export class ToolExecutor {
     }
 
     if (!provider) {
-      const error = `Unknown tool: ${toolName}`
+      // If no client-side provider matches (likely because of missing keys), 
+      // try to use the Worker-based resilient fallback tools.
+      if (toolName === "web_search" || toolName === "deep_research") {
+        try {
+          const payload = (await executeWikiTool(toolName, sanitizedArgs)) as {
+            ok: boolean;
+            results?: Array<{ title: string; url: string; content?: string; snippet?: string }>;
+          }
+          if (payload.ok) {
+            const summary = `resilient search ok: ${toolName}`
+            const result = {
+              tool_name: toolName,
+              results: (payload.results || []).map((r) => ({
+                title: r.title,
+                url: r.url,
+                content: r.content || r.snippet || ""
+              })),
+              summary,
+              data: payload as Record<string, unknown>,
+              partial: false,
+            }
+            this.onLog?.({ id, tool: toolName, args: sanitizedArgs, status: "done", result: summary })
+            this.storeToolResult(cacheKey, toolName, sanitizedArgs, result)
+            return cloneToolResult(result)
+          }
+        } catch {
+          // Fall through to error
+        }
+      }
+
+      const error = `Unknown tool or missing API key: ${toolName}`
       this.onLog?.({ id, tool: toolName, args, status: "error", error })
       return { tool_name: toolName, results: [], summary: error, error, partial: false }
     }

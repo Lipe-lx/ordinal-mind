@@ -9,48 +9,79 @@ interface WikipediaResult {
 
 export async function fetchLoreContext(collectionName: string): Promise<WebResearchContext | null> {
   if (!collectionName) return null
+  return performWebSearch(`${collectionName} Ordinals lore`, { 
+    maxResults: 3, 
+    sourceLabel: "lore_discovery",
+    preferWikipedia: true 
+  })
+}
 
-  const query = `${collectionName} Ordinals lore`
+export interface SearchOptions {
+  maxResults?: number
+  sourceLabel?: string
+  preferWikipedia?: boolean
+  deepResearch?: boolean
+}
+
+export async function performWebSearch(query: string, options: SearchOptions = {}): Promise<WebResearchContext | null> {
+  if (!query) return null
+
   const results: WebResearchItem[] = []
   const fetchedAt = new Date().toISOString()
+  const maxResults = options.maxResults ?? (options.deepResearch ? 8 : 5)
+  const sourceLabel = options.sourceLabel ?? "web_search"
 
-  console.log(`[WebResearch] Searching lore for "${collectionName}"...`)
+  console.log(`[WebResearch][${sourceLabel}] Searching for "${query}"...`)
 
-  // 1. Try Wikipedia first (API-based, very stable)
-  let searchResults = await searchWikipedia(collectionName)
-  let source = "wikipedia"
+  let searchResults: Array<{ title: string; url: string; content: string }> = []
+  let sourceUsed = "unknown"
 
-  // 2. Fallback to DuckDuckGo Lite (Resilient scraping)
-  if (!searchResults || searchResults.length === 0) {
-    searchResults = await searchDuckDuckGoLite(query)
-    source = "duckduckgo"
+  if (options.preferWikipedia) {
+    searchResults = await searchWikipedia(query)
+    sourceUsed = "wikipedia"
   }
 
-  if (!searchResults || searchResults.length === 0) {
-    console.log("[WebResearch] No results found on Wikipedia or DuckDuckGo.")
+  if (searchResults.length === 0) {
+    searchResults = await searchDuckDuckGoLite(query)
+    sourceUsed = "duckduckgo"
+  }
+
+  // Fallback to Wikipedia if DDG failed and we haven't tried it yet
+  if (searchResults.length === 0 && !options.preferWikipedia) {
+    searchResults = await searchWikipedia(query)
+    sourceUsed = "wikipedia"
+  }
+
+  if (searchResults.length === 0) {
+    console.log(`[WebResearch][${sourceLabel}] No results found.`)
     return null
   }
 
-  // 3. Select top 3 relevant results (excluding marketplaces)
+  // Filter out common noise (marketplaces, etc. for lore, but maybe keep for general search?)
+  const isLore = sourceLabel === "lore_discovery"
   const candidates = searchResults
-    .filter(r => !r.url.includes("magiceden.io") && !r.url.includes("okx.com") && !r.url.includes("ordinalswallet.com"))
-    .slice(0, 3)
+    .filter(r => {
+      if (isLore) {
+        return !r.url.includes("magiceden.io") && !r.url.includes("okx.com") && !r.url.includes("ordinalswallet.com")
+      }
+      return true
+    })
+    .slice(0, maxResults)
 
-  // 4. Extract content for each candidate
   for (const candidate of candidates) {
-    const content = await extractContent(candidate.url)
+    const content = options.deepResearch ? await extractContent(candidate.url) : null
     results.push({
       title: candidate.title,
       url: candidate.url,
       snippet: candidate.content,
       content: content || undefined,
-      source,
+      source: sourceUsed,
     })
   }
 
   if (results.length === 0) return null
 
-  console.log(`[WebResearch] Found ${results.length} results from ${source}.`)
+  console.log(`[WebResearch][${sourceLabel}] Found ${results.length} results from ${sourceUsed}.`)
 
   return {
     query,
