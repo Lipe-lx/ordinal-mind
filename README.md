@@ -118,5 +118,5 @@ npm run typecheck
 ---
 
 <p align="center">
-  <i>Engineered for truth, auditability, and decentralization.</i>
+  <i>Ordinals is forever.</i>
 </p>
