@@ -41,7 +41,7 @@ export function Layout() {
   }, [])
 
   return (
-    <div className="layout">
+    <div className={`layout ${isHome ? "is-home" : ""}`}>
       <header className="layout-header">
         <div className="layout-header-left">
           {!isHome && (

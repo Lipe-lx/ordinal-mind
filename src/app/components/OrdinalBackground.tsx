@@ -11,7 +11,7 @@ export function OrdinalBackground() {
       const particles: Particle[] = []
       let accentColor: p5.Color
       const particleCount = Math.min(window.innerWidth / 20, 80)
-      const connectionDistance = 150
+      const connectionDistance = 180
 
       class Particle {
         pos: p5.Vector
@@ -22,8 +22,8 @@ export function OrdinalBackground() {
         constructor() {
           this.pos = p.createVector(p.random(p.width), p.random(p.height))
           this.vel = p.createVector(p.random(-0.5, 0.5), p.random(-0.5, 0.5))
-          this.size = p.random(1, 3)
-          this.alpha = p.random(50, 150)
+          this.size = p.random(1.5, 4)
+          this.alpha = p.random(120, 220)
         }
 
         update() {
@@ -84,8 +84,8 @@ export function OrdinalBackground() {
             )
 
             if (d < connectionDistance) {
-              const opacity = p.map(d, 0, connectionDistance, 100, 0)
-              p.stroke(247, 147, 26, opacity * 0.4)
+              const opacity = p.map(d, 0, connectionDistance, 180, 0)
+              p.stroke(247, 147, 26, opacity * 0.8)
               p.strokeWeight(1)
               p.line(
                 particles[i].pos.x,
@@ -119,7 +119,7 @@ export function OrdinalBackground() {
         inset: 0,
         zIndex: 0,
         pointerEvents: "none",
-        opacity: 0.6
+        opacity: 0.9
       }}
     />
   )

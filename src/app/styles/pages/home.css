@@ -10,6 +10,16 @@
   overflow: hidden;
 }
 
+.layout.is-home {
+  --grid-color: rgba(247, 147, 26, 0.1);
+  --grid-color-strong: rgba(247, 147, 26, 0.18);
+  --scanline-opacity: 0.08;
+}
+
+.layout.is-home::before {
+  opacity: 1.0;
+}
+
 .home-content {
   position: relative;
   z-index: 10;
@@ -40,8 +50,8 @@
   height: 400px;
   background: radial-gradient(
     circle,
-    rgba(247, 147, 26, 0.08) 0%,
-    rgba(247, 147, 26, 0.03) 40%,
+    rgba(247, 147, 26, 0.15) 0%,
+    rgba(247, 147, 26, 0.05) 40%,
     transparent 70%
   );
   filter: blur(80px);
