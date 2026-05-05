@@ -86,15 +86,6 @@
   animation: shine 5s linear infinite;
 }
 
-/* Hide header logo on home page */
-body.is-home .layout-logo {
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  transform: translateY(-20px);
-  transition: all var(--duration-normal) var(--ease-smooth);
-}
-
 @keyframes shine {
   to {
     background-position: 200% center;
@@ -106,7 +97,7 @@ body.is-home .layout-logo {
   color: var(--text-secondary);
   max-width: 700px;
   line-height: 1.5;
-  margin: 0;
+  margin: -3.25rem 0 2.5rem 0;
   text-shadow: 0 0 20px rgba(247, 147, 26, 0.05);
   animation: subtitle-glow 10s infinite ease-in-out;
 }

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react"
-import { Outlet, Link } from "react-router"
+import { Outlet, Link, useLocation } from "react-router"
 import { BYOKModal } from "./BYOKModal"
 import { PortalTooltip } from "./Tooltip"
 import { KeyStore } from "../lib/byok"
@@ -16,6 +16,8 @@ export interface LayoutOutletContext {
 }
 
 export function Layout() {
+  const location = useLocation()
+  const isHome = location.pathname === "/"
   const [showBYOK, setShowBYOK] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
@@ -42,10 +44,12 @@ export function Layout() {
     <div className="layout">
       <header className="layout-header">
         <div className="layout-header-left">
-          <Link to="/" className="layout-logo">
-            <LogoIcon className="layout-logo-icon" />
-            Ordinal Mind
-          </Link>
+          {!isHome && (
+            <Link to="/" className="layout-logo">
+              <LogoIcon className="layout-logo-icon" />
+              Ordinal Mind
+            </Link>
+          )}
         </div>
 
         {/* Center slot: Title + Badge */}

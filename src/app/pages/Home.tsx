@@ -1,4 +1,4 @@
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition } from "react"
 import { useLocation, useNavigate } from "react-router"
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react"
 import { OrdinalBackground } from "../components/OrdinalBackground"
@@ -90,11 +90,7 @@ export function Home() {
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
 
-  // Hide header logo on home
-  useEffect(() => {
-    document.body.classList.add("is-home")
-    return () => document.body.classList.remove("is-home")
-  }, [])
+  // Mouse move handlers for dynamic hero effects
 
   function handleHeroMouseMove(e: React.MouseEvent) {
     const rect = e.currentTarget.getBoundingClientRect()
