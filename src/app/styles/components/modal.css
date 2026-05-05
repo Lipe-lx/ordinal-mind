@@ -14,6 +14,7 @@
   max-width: 480px;
   padding: var(--space-2xl);
   margin: var(--space-lg);
+  background: var(--bg-modal-elevated);
 }
 
 .byok-modal h2 {
