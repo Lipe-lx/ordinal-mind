@@ -1,168 +1,262 @@
-.scan-progress {
-  padding: var(--space-xl);
-  text-align: left;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    0 10px 40px -10px rgba(0, 0, 0, 0.5),
-    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+.scan-progress.engine-card {
+  padding: var(--space-2xl);
+  background: rgba(10, 10, 15, 0.8);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-glass), 0 0 40px rgba(0, 0, 0, 0.4);
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .scan-progress-header {
-  margin-bottom: var(--space-xl);
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: var(--space-2xl);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.scan-progress-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.scan-progress-id-badge {
+.scan-progress-label {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
   color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-bottom: var(--space-xs);
+}
+
+.scan-progress-main-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.scan-progress-id-box {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.id-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.1em;
+}
+
+.id-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .scan-progress-steps {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-xl);
+  gap: var(--space-sm);
+  margin-bottom: var(--space-2xl);
 }
 
 .scan-progress-step {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-md);
-  font-size: 0.9375rem;
   transition: all var(--duration-normal) var(--ease-smooth);
-  position: relative;
   border: 1px solid transparent;
 }
 
-.scan-progress-step.complete {
-  opacity: 0.6;
-  color: var(--text-secondary);
+.scan-progress-step.current {
+  background: rgba(247, 147, 26, 0.05);
+  border-color: rgba(247, 147, 26, 0.15);
 }
 
-.scan-progress-step.current {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(var(--accent-primary-rgb), 0.2);
-  color: var(--text-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.scan-progress-step.complete {
+  opacity: 0.7;
 }
 
 .scan-progress-step.future {
-  opacity: 0.25;
-  color: var(--text-tertiary);
+  opacity: 0.3;
 }
 
-.scan-progress-step-icon {
-  font-size: 1rem;
-  flex-shrink: 0;
-  width: 1.5rem;
-  height: 1.5rem;
+.step-indicator {
+  width: 12px;
+  height: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.indicator-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
 }
 
-.scan-progress-step.current .scan-progress-step-icon {
-  background: rgba(var(--accent-primary-rgb), 0.1);
-  color: var(--accent-primary);
-  animation: pulse-glow 2s infinite ease-in-out;
+.indicator-dot.done {
+  background: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
 }
 
-.scan-progress-step.complete .scan-progress-step-icon {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+.indicator-dot.pending {
+  background: var(--text-tertiary);
 }
 
-.scan-progress-step-label {
-  font-weight: 500;
+.indicator-pulse {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  position: relative;
+}
+
+.indicator-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-primary);
+  animation: ripple 1.5s infinite ease-out;
+}
+
+@keyframes ripple {
+  from { transform: scale(0.5); opacity: 1; }
+  to { transform: scale(2.5); opacity: 0; }
+}
+
+.step-content {
   display: flex;
-  align-items: center;
-  gap: var(--space-xs);
+  flex-direction: column;
 }
 
-.scan-progress-step-detail {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
+.step-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.step-detail {
   font-family: var(--font-mono);
-  margin-left: auto;
-  text-align: right;
-  opacity: 0.8;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.step-status {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-tertiary);
+}
+
+.step-status.active {
+  background: var(--accent-glow);
+  color: var(--accent-primary);
+  animation: flicker 2s infinite linear;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.scan-progress-visualization {
+  margin-bottom: var(--space-xl);
+}
+
+.bar-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-sm);
+  letter-spacing: 0.1em;
 }
 
 .scan-progress-bar-container {
-  position: relative;
-  margin-bottom: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }
 
 .scan-progress-bar-track {
-  width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
   overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .scan-progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-  border-radius: 3px;
+  background: linear-gradient(90deg, #f7931a, #ffab40);
   position: relative;
 }
 
-.scan-progress-bar-fill::after {
-  content: "";
+.fill-glow {
   position: absolute;
   top: 0;
-  left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.2),
-    transparent
-  );
-  animation: shimmer 2s infinite linear;
+  width: 20px;
+  background: white;
+  filter: blur(10px);
+  opacity: 0.5;
+}
+
+.bar-percentage {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 3.5rem;
+  text-align: right;
 }
 
 .scan-progress-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
+  padding-top: var(--space-md);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.footer-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
 }
 
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.status-bit {
+  width: 6px;
+  height: 6px;
+  background: #f7931a;
+  animation: blink 1s infinite step-start;
 }
 
-@keyframes pulse-glow {
-  0% { box-shadow: 0 0 0 0 rgba(var(--accent-primary-rgb), 0.4); }
-  70% { box-shadow: 0 0 0 8px rgba(var(--accent-primary-rgb), 0); }
-  100% { box-shadow: 0 0 0 0 rgba(var(--accent-primary-rgb), 0); }
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.footer-meta {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
 }

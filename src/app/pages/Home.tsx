@@ -66,11 +66,24 @@ export function Home() {
         <motion.p 
           className="home-subtitle"
           initial={{ opacity: 0 }}
-          animate={{ opacity: 0.9 }}
-          transition={{ delay: 0.4, duration: 0.8 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
         >
-          Recover the provenance, traces, and cultural consensus of any digital artifact.
-          Factual, public, and immutable — just like the chain.
+          {["Every", "Inscription", "has", "a", "history.", "Find Yours."].map((word, i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0, y: 5, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={{ 
+                duration: 0.4, 
+                delay: 0.5 + (i * 0.08),
+                ease: "easeOut"
+              }}
+              style={{ display: "inline-block", marginRight: "0.25rem" }}
+            >
+              {word}
+            </motion.span>
+          ))}
         </motion.p>
 
         <motion.form 
@@ -101,7 +114,7 @@ export function Home() {
             type="submit"
             disabled={isPending}
           >
-            {isPending ? "Scanning..." : "Scan Chronicle"}
+            {isPending ? "Scanning..." : "Explore History"}
           </button>
         </motion.form>
 

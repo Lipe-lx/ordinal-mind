@@ -7,6 +7,7 @@ import { ChronicleSidebar } from "../components/ChronicleSidebar"
 import { ScanProgress } from "../components/ScanProgress"
 import { OwnershipWidget } from "../components/widgets/OwnershipWidget"
 import { CollectionContextWidget } from "../components/widgets/CollectionContextWidget"
+import { OrdinalBackground } from "../components/OrdinalBackground"
 import { useChronicleNarrativeChat } from "../lib/byok/useChronicleNarrativeChat"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ChronicleResponse, ScanProgress as ScanProgressType } from "../lib/types"
@@ -197,34 +198,46 @@ export function Chronicle() {
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
     return (
-      <div className="fade-in" style={{ maxWidth: "480px", margin: "0 auto" }}>
-        <div className="chronicle-header" style={{ marginBottom: "1.5rem" }}>
-          <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
-        </div>
-        {progress ? (
-          <ScanProgress progress={progress} inscriptionId={id} />
-        ) : (
-          <div className="scan-progress glass-card" style={{ textAlign: "center", padding: "3rem var(--space-xl)", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-md)" }}>
-            <motion.div 
-              animate={{ 
-                rotate: 360,
-                scale: [1, 1.1, 1],
-              }}
-              transition={{ 
-                rotate: { repeat: Infinity, duration: 2, ease: "linear" },
-                scale: { repeat: Infinity, duration: 2, ease: "easeInOut" }
-              }}
-              style={{ fontSize: "2rem", marginBottom: "0.5rem" }}
-            >
-              ⏳
-            </motion.div>
-            <h3 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>Initializing Engine</h3>
-            <p style={{ color: "var(--text-tertiary)", fontSize: "0.875rem", maxWidth: "240px", margin: 0 }}>
-              Establishing connection to the Bitcoin temporal index...
-            </p>
+      <div className="home fade-in" style={{ justifyContent: "center", minHeight: "85vh" }}>
+        <OrdinalBackground />
+        
+        <div className="home-content" style={{ width: "100%", maxWidth: "600px" }}>
+          <div className="chronicle-header" style={{ marginBottom: "2rem", alignSelf: "flex-start" }}>
+            <button onClick={() => navigate(homePath)} className="btn btn-ghost" style={{ paddingLeft: 0 }}>
+              <span style={{ marginRight: "0.5rem" }}>←</span> Back to Search
+            </button>
           </div>
 
-        )}
+          {progress ? (
+            <ScanProgress progress={progress} inscriptionId={id} />
+          ) : (
+            <motion.div 
+              className="scan-progress engine-card"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-lg)" }}
+            >
+              <div className="scan-progress-header" style={{ border: "none", marginBottom: 0, justifyContent: "center" }}>
+                <div className="scan-progress-title-group" style={{ alignItems: "center" }}>
+                  <div className="scan-progress-label">Temporal Index</div>
+                  <h2 className="scan-progress-main-title">Initializing Engine</h2>
+                </div>
+              </div>
+              
+              <div className="initialization-visual">
+                <motion.div 
+                  className="indicator-pulse active"
+                  animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                />
+              </div>
+
+              <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", maxWidth: "300px", margin: 0, fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Establishing encrypted tunnel to the Bitcoin temporal ledger...
+              </p>
+            </motion.div>
+          )}
+        </div>
       </div>
     )
   }

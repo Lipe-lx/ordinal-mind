@@ -77,7 +77,13 @@
   max-width: 700px;
   line-height: 1.5;
   margin: 0;
-  opacity: 0.9;
+  text-shadow: 0 0 20px rgba(247, 147, 26, 0.05);
+  animation: subtitle-glow 10s infinite ease-in-out;
+}
+
+@keyframes subtitle-glow {
+  0%, 100% { opacity: 0.85; text-shadow: 0 0 20px rgba(247, 147, 26, 0.05); }
+  50% { opacity: 1; text-shadow: 0 0 30px rgba(247, 147, 26, 0.15); }
 }
 
 .home-search {
