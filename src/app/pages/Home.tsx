@@ -11,61 +11,34 @@ function isValidInput(v: string): boolean {
   return TAPROOT_RE.test(v) || HEX_ID_RE.test(v) || NUMBER_RE.test(v)
 }
 
-function DynamicLogo() {
-  const mouseX = useMotionValue(0)
-  const mouseY = useMotionValue(0)
+function DynamicLogo({ mouseX, mouseY }: { mouseX: any, mouseY: any }) {
+  const springConfig = { stiffness: 250, damping: 15, mass: 0.8 }
+  const x = useSpring(useTransform(mouseX, [-200, 200], [-60, 60]), springConfig)
+  const y = useSpring(useTransform(mouseY, [-200, 200], [-60, 60]), springConfig)
 
-  const springConfig = { stiffness: 150, damping: 20 }
-  const x = useSpring(useTransform(mouseX, [-100, 100], [-30, 30]), springConfig)
-  const y = useSpring(useTransform(mouseY, [-100, 100], [-30, 30]), springConfig)
-
-  const rotateX = useTransform(y, [-30, 30], [15, -15])
-  const rotateY = useTransform(x, [-30, 30], [-15, 15])
-
-  function handleMouseMove(e: React.MouseEvent) {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-    // Limit and set relative position
-    mouseX.set(e.clientX - centerX)
-    mouseY.set(e.clientY - centerY)
-  }
-
-  function handleMouseLeave() {
-    mouseX.set(0)
-    mouseY.set(0)
-  }
+  const rotateX = useTransform(y, [-60, 60], [25, -25])
+  const rotateY = useTransform(x, [-60, 60], [-25, 25])
 
   return (
-    <div 
-      className="home-hero-logo-zone"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        padding: "40px",
-        margin: "-40px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 20
+    <motion.div 
+      className="home-hero-logo"
+      style={{ 
+        x, y, rotateX, rotateY, 
+        perspective: 1200,
+        cursor: "pointer",
+      }}
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      whileHover={{ 
+        scale: 1.2,
+        filter: "drop-shadow(0 0 40px var(--accent-glow-strong))"
+      }}
+      whileTap={{ scale: 0.9 }}
+      transition={{ 
+        scale: { type: "spring", stiffness: 400, damping: 20 },
+        opacity: { duration: 1.2 }
       }}
     >
-      <motion.div 
-        className="home-hero-logo"
-        style={{ 
-          x, y, rotateX, rotateY, 
-          perspective: 1000,
-          cursor: "pointer",
-        }}
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-        transition={{ 
-          scale: { type: "spring", stiffness: 400, damping: 20 },
-          opacity: { duration: 1.2 }
-        }}
-      >
       <svg width="120" height="120" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="heroFlowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -104,7 +77,6 @@ function DynamicLogo() {
         </circle>
       </svg>
     </motion.div>
-    </div>
   )
 }
 
@@ -115,11 +87,27 @@ export function Home() {
   const navigate = useNavigate()
   const location = useLocation()
 
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
   // Hide header logo on home
   useEffect(() => {
     document.body.classList.add("is-home")
     return () => document.body.classList.remove("is-home")
   }, [])
+
+  function handleHeroMouseMove(e: React.MouseEvent) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+    mouseX.set(e.clientX - centerX)
+    mouseY.set(e.clientY - centerY)
+  }
+
+  function handleHeroMouseLeave() {
+    mouseX.set(0)
+    mouseY.set(0)
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -155,16 +143,30 @@ export function Home() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
       >
-        <div className="home-hero">
-          <DynamicLogo />
-          <motion.h1 
-            className="home-title"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          >
-            Ordinal Mind
-          </motion.h1>
+        <div 
+          className="home-hero-zone"
+          onMouseMove={handleHeroMouseMove}
+          onMouseLeave={handleHeroMouseLeave}
+          style={{
+            padding: "80px",
+            margin: "-80px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            zIndex: 20
+          }}
+        >
+          <div className="home-hero">
+            <DynamicLogo mouseX={mouseX} mouseY={mouseY} />
+            <motion.h1 
+              className="home-title"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            >
+              Ordinal Mind
+            </motion.h1>
+          </div>
         </div>
 
         <motion.p 
