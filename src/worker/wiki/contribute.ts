@@ -12,10 +12,11 @@ import type { Env } from "../index"
 import { verifyJWT } from "../auth/jwt"
 import type { OGTier } from "../auth/jwt"
 
-/** The 9 canonical fields for a collection wiki page. */
+/** The 11 canonical fields for a collection wiki page. */
 export const CANONICAL_FIELDS = [
   "founder",
   "artist",
+  "inscriber",
   "launch_date",
   "launch_context",
   "origin_narrative",

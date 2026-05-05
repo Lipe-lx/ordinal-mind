@@ -26,7 +26,7 @@ Summary: ${wikiPage.summary}
 ${wikiPage.sections.length > 0 ? `Archive Sections:\n${wikiPage.sections.map(s => `- ${s.heading}: ${s.body}`).join("\n")}` : ""}
 ` : ""}
 
-${wikiCompletenessInfo ? `[Consolidated Collection Knowledge]
+${wikiCompletenessInfo ? `
 ${wikiCompletenessInfo}
 ` : ""}
 `.trim()
@@ -138,7 +138,7 @@ Summary: ${wikiPage.summary}
 ${wikiPage.sections.length > 0 ? `Archive Sections:\n${wikiPage.sections.map(s => `- ${s.heading}: ${s.body}`).join("\n")}` : ""}
 ` : ""}
 
-${wikiCompletenessInfo ? `[Consolidated Collection Knowledge]
+${wikiCompletenessInfo ? `
 ${wikiCompletenessInfo}
 ` : ""}
 
@@ -194,8 +194,9 @@ Wiki Builder Mode:
 - MANDATORY TAG RULE: You MUST generate a <wiki_contribution> block with the structured data for ANY new information provided by the user. The UI relies on this tag to update the database.
 - Format: <wiki_contribution>{"field":"founder","value":"...","confidence":"stated_by_user","verifiable":true,"collection_slug":"..."}</wiki_contribution>
 - Use the "collection_slug" found in the [Metadata] section above.
-- Field must be one of: founder, artist, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
-- NOTE: The 'founder' field should be used for all founders and co-founders. The 'artist' field should be used for the artist(s) behind the collection. If a collection has multiple founders or artists, include all of them in their respective fields.
+- Field must be one of: founder, artist, inscriber, launch_date, launch_context, origin_narrative, technical_details, notable_moments, community_culture, connections, current_status.
+- NOTE: The 'founder' field should be used for the creators/founders of the collection. The 'artist' field is for the artist(s). The 'inscriber' field is specifically for the person/entity that performed the on-chain inscription of the asset (this may differ from the collection founder, especially for historical or aggregated collections).
+- SLUG RULE: For collection-level facts (e.g., founder of sub10k), use the collection_slug from [Metadata]. For inscription-level facts (e.g., Rodamor inscribed Inscription 0), use the inscription_id from [Metadata] as the "collection_slug".
 - If the user provides multiple facts, you may emit multiple <wiki_contribution> blocks, one for each field.
 ${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_contribution> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
 - If user has no Discord connected, mention gently that contributions enter review.
@@ -214,7 +215,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: This is the initial narrative generatio
 - Keep strict factual precision and explicit uncertainty when data is partial.
 - For event-level facts, prioritize tool evidence from get_raw_events/get_timeline.
 - Use wiki search/context as secondary support, not as sole source for precise event claims.
-${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidated Collection Knowledge] contains names of founders, co-founders, or artists, you MUST integrate this information directly into the first paragraph of the initial Chronicle narrative. Ensure the creators and their roles in the collection's origin are mentioned as established foundation context." : ""}
+${hasWikiContext ? "- IMPORTANT: If the [Wiki Archive Knowledge] or [Consolidated Collection Knowledge] contains names of founders, co-founders, artists, or inscribers, you MUST integrate this information directly into the first paragraph of the initial Chronicle narrative. Ensure the creators and their roles in the collection's origin are mentioned as established foundation context." : ""}
 - CRITICAL TAG RULE: You MUST start your response immediately with <thought>. Do not write any text before the <thought> tag.
 - Put the user-visible answer between these exact tags: <final_answer> and </final_answer>.
 - Keep internal <thought> blocks brief and focused on evidence evaluation.

@@ -315,26 +315,37 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
       autoTurnRef.current = null
 
       const collectionSlug = chronicle?.collection_context.market.match?.collection_slug ?? chronicle?.collection_context.registry.match?.slug
-      if (collectionSlug) {
+      const targetInscriptionId = chronicle?.meta.inscription_id
+
+      if (collectionSlug || targetInscriptionId) {
         setWikiCompletenessStatus("loading")
-        fetchConsolidated(collectionSlug).then(collection => {
+        
+        Promise.all([
+          collectionSlug ? fetchConsolidated(collectionSlug) : Promise.resolve(null),
+          targetInscriptionId ? fetchConsolidated(targetInscriptionId) : Promise.resolve(null)
+        ]).then(([collection, inscription]) => {
+          let mergedInfo = ""
           if (collection) {
-            setWikiCompletenessInfo(formatConsolidatedForPrompt(collection))
-            setWikiCompletenessStatus("loaded")
-          } else {
-            setWikiCompletenessStatus("error")
+            mergedInfo += `[Consolidated Collection Knowledge]\n${formatConsolidatedForPrompt(collection)}\n\n`
           }
+          if (inscription) {
+            mergedInfo += `[Consolidated Inscription Knowledge]\n${formatConsolidatedForPrompt(inscription)}\n`
+          }
+          
+          setWikiCompletenessInfo(mergedInfo.trim())
+          setWikiCompletenessStatus("loaded")
         }).catch(() => {
           setWikiCompletenessStatus("error")
         })
       } else {
-        setWikiCompletenessStatus("loaded") // No collection context to wait for
+        setWikiCompletenessStatus("loaded") 
       }
     }, 0)
 
     return () => window.clearTimeout(timeoutId)
   }, [
     inscriptionId,
+    chronicle?.meta.inscription_id,
     chronicle?.collection_context.market.match?.collection_slug,
     chronicle?.collection_context.registry.match?.slug,
   ])
