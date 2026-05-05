@@ -152,7 +152,6 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const children = useMemo(() => protocol.children?.items ?? [], [protocol.children?.items])
   const grandchildren = useMemo(() => protocol.grandchildren?.items ?? [], [protocol.grandchildren?.items])
   const totalChildren = protocol.children?.total_count ?? 0
-  const totalGrandchildren = protocol.grandchildren?.total_count ?? 0
   const visibleChildren = useMemo(
     () => children.slice(0, GENEALOGY_VISIBLE_LIMITS.children),
     [children]
@@ -642,7 +641,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               <button className="node-detail-close" onClick={() => setSelectedNode(null)}>✕</button>
               <div className="node-detail-content">
                 <div className="node-detail-image">
-                  <InscriptionMedia inscription={selectedNode} showMeta={false} />
+                  <InscriptionMedia inscription={selectedNode} showMeta={false} preferPreviewForHtml />
                 </div>
                 <div className="node-detail-info">
                   <div className="node-detail-header">

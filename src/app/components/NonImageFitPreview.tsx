@@ -195,7 +195,7 @@ export function NonImageFitPreview({
   showMeta = true,
   title,
   isFullscreen = false,
-  preferPreviewForHtml = false,
+  preferPreviewForHtml = true,
 }: Props) {
   const [state, setState] = useState<RenderState>(() =>
     createInitialRenderState({ kind, mode, contentUrl, previewUrl, preferPreviewForHtml })

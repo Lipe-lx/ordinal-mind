@@ -244,6 +244,7 @@ export function InscriptionPreview({
         isFullscreen={fullscreen}
         title={`Inscription #${meta.inscription_number} preview`}
         className={fullscreen ? "non-image-fit-preview--fullscreen" : undefined}
+        preferPreviewForHtml={true}
       />
     )
   }
