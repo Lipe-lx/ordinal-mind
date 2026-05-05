@@ -24,7 +24,7 @@ let lastDiscoveryTime = 0
 const DISCOVERY_CACHE_TTL = 1000 * 60 * 60 * 12 // 12 hours
 const deadInstances = new Set<string>()
 let lastBlacklistClear = Date.now()
-const BLACKLIST_TTL = 1000 * 60 * 30 // 30 minutes
+const BLACKLIST_TTL = 1000 * 60 * 60 // 1 hour (increased for 2026 resilience)
 
 interface SearXNGInstanceInfo {
   http?: {
@@ -196,9 +196,10 @@ async function searchSearXNG(query: string): Promise<SearXNGResult[]> {
       
       const errors = (e as AggregateError).errors || [e]
       const statuses = errors.map((err: Error | unknown) => (err instanceof Error ? err.message : String(err))).join(", ")
-      console.warn(`[WebResearch] Batch ${i / batchSize + 1} failed (marking ${batch.length} instances as dead): ${statuses}`)
+      // Log as debug to avoid cluttering the main console with transient external failures
+      console.debug(`[WebResearch] Batch ${i / batchSize + 1} transient failure: ${statuses}`)
       
-      await new Promise(resolve => setTimeout(resolve, 300))
+      await new Promise(resolve => setTimeout(resolve, 500)) // Increased jitter for 2026
       continue
     }
   }

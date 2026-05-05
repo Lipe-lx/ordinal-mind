@@ -1,6 +1,7 @@
 import { cacheGet } from "../cache"
 import type { Env } from "../index"
 import { getWikiSchemaFailure, isMissingWikiSchemaError, toWikiToolUnavailable } from "./schema"
+import { isInscriptionId } from "./contribute"
 
 export async function handleWikiTool(toolName: string, request: Request, env: Env): Promise<Response> {
   let payload: Record<string, unknown>
@@ -209,14 +210,35 @@ async function getCollectionContext(input: Record<string, unknown>, env: Env): P
       .bind(wikiSlug)
       .first<Record<string, unknown>>()
 
-    const stats = await env.DB.prepare(`
-      SELECT COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
-      FROM raw_chronicle_events
-      WHERE event_type = 'genesis'
-        AND metadata_json LIKE ?
-    `)
-      .bind(`%${collectionSlug}%`)
-      .first<{ count: number; first_seen: string | null; last_seen: string | null }>()
+    let stats: { count: number; first_seen: string | null; last_seen: string | null } | null
+
+    if (isInscriptionId(collectionSlug)) {
+      stats = await env.DB.prepare(`
+        SELECT 1 as count, timestamp as first_seen, timestamp as last_seen
+        FROM raw_chronicle_events
+        WHERE inscription_id = ? AND event_type = 'genesis'
+        LIMIT 1
+      `)
+        .bind(collectionSlug)
+        .first()
+    } else {
+      stats = await env.DB.prepare(`
+        SELECT COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
+        FROM raw_chronicle_events
+        WHERE event_type = 'genesis'
+          AND inscription_id IN (
+            SELECT inscription_id 
+            FROM raw_chronicle_events 
+            WHERE event_type = 'collection_link' 
+              AND (
+                json_extract(metadata_json, '$.name') = ?
+                OR json_extract(metadata_json, '$.parent_inscription_id') = ?
+              )
+          )
+      `)
+        .bind(collectionSlug, collectionSlug)
+        .first()
+    }
 
     return {
       ok: true,
