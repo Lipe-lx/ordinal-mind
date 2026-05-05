@@ -15,6 +15,7 @@ import type { OGTier } from "../auth/jwt"
 /** The 9 canonical fields for a collection wiki page. */
 export const CANONICAL_FIELDS = [
   "founder",
+  "artist",
   "launch_date",
   "launch_context",
   "origin_narrative",

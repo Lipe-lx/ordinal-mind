@@ -10,6 +10,7 @@ import { CANONICAL_FIELDS, type CanonicalField } from "./contribute"
 
 export interface CollectionCanonicalFields {
   founder: string | null
+  artist: string | null
   launch_date: string | null
   launch_context: string | null
   origin_narrative: string | null
@@ -32,6 +33,7 @@ export interface CompletenessMap {
 function emptyFields(): CollectionCanonicalFields {
   return {
     founder: null,
+    artist: null,
     launch_date: null,
     launch_context: null,
     origin_narrative: null,

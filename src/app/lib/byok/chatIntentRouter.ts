@@ -57,7 +57,7 @@ const CHRONICLE_HINTS = [
   "parent", "parents", "pai", "mae", "mãe", "filho", "filha", "child", "children", "ancestral", "ancestrais",
   "genealogia", "genealogy", "mint", "minted", "mintado", "mintada", "cunhado", "cunhada", "cunhou", "bloco",
   "colecao", "coleção", "fundador", "founder", "criador", "creator", "supply", "launch", "lancamento", "lançamento",
-  "wiki", "record", "records", "update", "atualizar", "registro", "registros",
+  "wiki", "record", "records", "update", "atualizar", "registro", "registros", "artista", "artist",
 ]
 
 // --- Knowledge Contribution Detection ---
@@ -69,7 +69,7 @@ const CONTRIBUTION_PATTERNS = [
   /\b(eu (estava|vi|participei|lembro|sei|sei que|estava|fiz|criei))\b/u,
   /\b(i (was|saw|remember|know|witnessed|created|made|did))\b/u,
   /\b(na verdade|actually|correcting|corrigindo|na real)\b/u,
-  /\b(o fundador|the founder|criador|creator|quem criou|who created|quem fez|who made)\b/u,
+  /\b(o fundador|the founder|criador|creator|quem criou|who created|quem fez|who made|artista|artist)\b/u,
   /\b(o supply|the supply|o total|total supply|quantos ao todo)\b/u,
   /\b(update|atualizar|corrigir|correct|fix|records|registros|wiki)\b/u,
 ]
@@ -99,6 +99,7 @@ const PROTOTYPES: Record<ChatIntent, string[]> = {
     "o fundador é o fulano", "essa coleção foi lançada em janeiro",
     "eu estava lá quando mintou", "the creator is known as",
     "na verdade o supply é 10000", "actually the mint was free",
+    "o artista dessa coleção é o fulano", "the artist is",
     "eu comprei quando lançou", "a gente criou essa coleção",
     "quem criou foi o", "o criador da coleção",
     "i was there when it dropped", "we minted this collection",

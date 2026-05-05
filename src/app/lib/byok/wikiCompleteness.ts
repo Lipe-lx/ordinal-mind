@@ -9,6 +9,7 @@ import type { ConsolidatedCollection } from "../types"
 
 export type CanonicalField =
   | "founder"
+  | "artist"
   | "launch_date"
   | "launch_context"
   | "origin_narrative"
@@ -20,6 +21,7 @@ export type CanonicalField =
 
 export const CANONICAL_FIELDS: CanonicalField[] = [
   "founder",
+  "artist",
   "launch_date",
   "launch_context",
   "origin_narrative",
@@ -32,6 +34,7 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
 
 export interface CollectionCanonicalFields {
   founder: string | null
+  artist: string | null
   launch_date: string | null
   launch_context: string | null
   origin_narrative: string | null
