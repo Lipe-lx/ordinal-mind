@@ -9,7 +9,7 @@
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-md) var(--space-xl);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -80,7 +80,7 @@
 .layout-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  gap: 1.25rem;
   flex-shrink: 0;
 }
 

@@ -1,6 +1,6 @@
 @media (max-width: 640px) {
   .layout-header {
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
   }
 
   .layout-main {
