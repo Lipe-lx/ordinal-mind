@@ -48,12 +48,33 @@
   animation: pulse-glow 8s infinite ease-in-out;
 }
 
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+.home-hero-logo {
+  filter: drop-shadow(0 0 30px var(--accent-glow-strong));
+  transition: transform 0.3s var(--ease-smooth);
+}
+
+.home-hero-logo:hover {
+  transform: scale(1.05);
+}
+
 .home-title {
-  font-size: clamp(2.5rem, 8vw, 4.5rem);
-  font-weight: 800;
+  font-size: clamp(3rem, 10vw, 5.5rem);
+  font-weight: 900;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   margin: 0;
+  background: linear-gradient(135deg, var(--text-primary) 0%, #a1a1aa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .home-title-accent {
@@ -63,6 +84,15 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: shine 5s linear infinite;
+}
+
+/* Hide header logo on home page */
+body.is-home .layout-logo {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateY(-20px);
+  transition: all var(--duration-normal) var(--ease-smooth);
 }
 
 @keyframes shine {
