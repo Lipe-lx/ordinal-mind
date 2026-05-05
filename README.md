@@ -1,96 +1,122 @@
-# 📜 Ordinal Mind
+# Ordinal Mind
 
-> **A Factual Chronicle Engine for Bitcoin Ordinals.**
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Ordinal Mind is a verifiable memory engine for Bitcoin Ordinals. It transforms an inscription ID or taproot address into a temporal tree of events, backed by public on-chain data and enhanced by optional, client-side AI synthesis.
+**Ordinal Mind** is a high-performance factual resolution engine for Bitcoin Ordinals. It architectures a verifiable temporal tree of assets by orchestrating multi-source on-chain data with client-side AI synthesis.
 
 ---
 
-## ✨ Product Soul
+## 🏗️ System Architecture
 
-- 🔍 **Factual First**: Timeline events are source-backed, chronologically deterministic, and verifiable.
-- 🛡️ **Public Data Only**: Core functionality requires no login. Optional Discord Identity enables community consensus and OG contributions.
-- 🔑 **BYOK AI (Client-Side)**: Your LLM keys stay in your browser. Authenticated users benefit from AES-256-GCM encrypted persistence.
-- 📉 **Graceful Degradation**: If AI synthesis fails or is missing, the core factual timeline remains perfectly functional.
+Ordinal Mind operates on a **Stateless Data Plane** coupled with a **Client-Side Synthesis Layer**, ensuring that sensitive credentials (LLM keys) never touch the server runtime.
+
+```mermaid
+graph LR
+    subgraph "Public Data Plane (Worker)"
+        R[Resolver] --> A[Agents]
+        A --> KV[(KV Cache)]
+        A --> D1[(D1 Wiki)]
+    end
+    
+    subgraph "Security Layer"
+        OAuth[Discord PKCE] --> JWT[Stateless JWT]
+    end
+    
+    subgraph "Client Runtime (Browser)"
+        UI[React UI] --> BYOK[BYOK LLM Adapter]
+        BYOK --> AES[AES-256-GCM Storage]
+        UI --> Graph[Neural Wiki Atlas]
+    end
+
+    R -.-> UI
+    JWT -.-> UI
+```
+
+---
+
+## 🛠️ Technical Stack
+
+| Category | Technology |
+| :--- | :--- |
+| **Compute** | Cloudflare Workers (Edge Runtime) |
+| **Storage** | Cloudflare D1 (SQL), Cloudflare KV (Cache) |
+| **Frontend** | React 19, Motion 12, Cytoscape.js (Neural Graph) |
+| **Identity** | Discord OAuth2 (PKCE), HMAC-SHA256 JWT |
+| **AI/LLM** | Client-side BYOK (OpenAI, Anthropic, Gemini) |
+| **Tooling** | Vite 6, Vitest, Wrangler |
+
+---
+
+## ⛓️ Resolution Pipeline (L0-L3)
+
+Ordinal Mind resolves assets through a tiered verification pipeline:
+
+- **Layer 0 (Factual)**: Atomic event resolution from `ordinals.com`, `mempool.space`, and `UniSat`.
+- **Layer 1 (Consensus)**: Human-contributed knowledge via the **Wiki Engine**, weighted by Discord Collector Tiers (`Genesis` > `OG` > `Community`).
+- **Layer 2 (Narrative)**: Deterministic prompt construction for client-side LLM synthesis.
+- **Layer 3 (Discovery)**: Heuristic web signal discovery and X (Twitter) mention scraping.
 
 ---
 
 ## 🚀 Key Features
 
-- **🌐 Multi-Source Chronicle**: Aggregates data from Ordinals.com, Mempool.space, UniSat, and web discovery.
-- **🌳 Genealogical Tree**: Visualizes the ancestry and provenance of any inscription.
-- **💬 Chronicle Narrative**: Interactive BYOK chat for deep research, intent-aware and QA-optimized.
-- **🧠 Wiki Atlas**: **New** neural, force-directed graph visualization of collection relationships and history.
-- **📚 Wiki & Consensus (L0-L2)**: Tiered knowledge base (Genesis/OG/Community) where contributors earn identity badges.
-- **🆔 Discord Identity**: Secure PKCE-based OAuth with automated tier calculation based on server membership.
-- **⚡ Real-time Scan**: SSE-powered progress tracking with integrated **Activity Monitoring** for deep asset resolution.
-
----
-
-## 🛠️ Technology Stack
-
-![React](https://img.shields.io/badge/React-19-blue?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)
-![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare)
-![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020?logo=cloudflare)
-![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?logo=vite)
-![Motion](https://img.shields.io/badge/Motion-12-black)
+- **🌐 Multi-Source Orchestration**: Deterministic merging of disparate indexer data into a single chronology.
+- **🧠 Wiki Atlas**: Force-directed neural graph visualization (`cytoscape-fcose`) of asset relationships.
+- **💬 Intent-Aware Chat**: Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction.
+- **🛡️ Sealed Security**: LLM keys are encrypted at-rest in `localStorage` using **AES-256-GCM** derived from the user's JWT.
+- **⚡ SSE-Powered Progress**: Real-time resolution status and research activity monitoring via Server-Sent Events.
 
 ---
 
 ## 🏁 Quick Start
 
-### 1. Prerequisites
-- **Node.js**: 20+
-- **npm**: 10+
-
-### 2. Installation
+### Development Environment
 ```bash
+# 1. Install dependencies
 npm install
-```
 
-### 3. Local Development
-```bash
-# Initialize local database
+# 2. Initialize local D1 database
 npm run db:migrate:local
 
-# Start dev server
+# 3. Start the edge-runtime dev server
 npm run dev
 ```
 
-### 4. Testing & Quality
+### Quality Assurance
 ```bash
-# Run all tests
+# Execution of the 40+ unit and integration tests
 npm run test
 
-# Typecheck
+# Static type analysis
 npm run typecheck
 ```
 
 ---
 
-## 📡 API Surface
+## 📡 API Interface
 
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/chronicle` | `GET` | Resolve inscription metadata and events. |
-| `/api/wiki/collection/:slug/consolidated` | `GET` | Retrieve the consensus-driven wiki for a collection. |
-| `/api/wiki/collection/:slug/graph` | `GET` | Retrieve graph data for the Wiki Atlas. |
-| `/api/wiki/contribute` | `POST` | Submit a knowledge contribution (requires Discord JWT). |
-| `/api/auth/discord` | `GET` | Initiate Discord OAuth PKCE flow. |
-| `/api/auth/me` | `GET` | Verify session and return identity profile. |
+| Endpoint | Method | Scope | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/chronicle` | `GET` | Public | SSE stream of inscription metadata and events. |
+| `/api/wiki/collection/:slug/consolidated` | `GET` | Public | Merged L0/L1 consensus-driven data. |
+| `/api/wiki/collection/:slug/graph` | `GET` | Public | Neural graph nodes and edges. |
+| `/api/wiki/contribute` | `POST` | Auth | Submit structured knowledge updates. |
+| `/api/auth/discord` | `GET` | Public | Initiate Discord PKCE handshake. |
 
 ---
 
-## 📖 Internal Documentation
+## 📖 Technical Documentation
 
-- 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Runtime flow and data layer.
-- 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Detailed file-by-file directory.
-- 🤖 [**AGENTS.md**](./AGENTS.md): Core product rules and implementation constraints.
-- 🗺️ [**ROADMAP.md**](./ROADMAP.md): Implementation status and history.
+- 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Deep dive into data flow and consensus.
+- 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Responsibility map and directory structure.
+- 🤖 [**AGENTS.md**](./AGENTS.md): Product thesis and implementation constraints.
+- 🗺️ [**ROADMAP.md**](./ROADMAP.md): Sprint history and future milestones.
 
 ---
 
 <p align="center">
-  <i>Built for the Ordinals collector who values truth over hype.</i>
+  <i>Engineered for truth, auditability, and decentralization.</i>
 </p>
