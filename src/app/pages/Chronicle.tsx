@@ -201,8 +201,8 @@ export function Chronicle() {
       <div className="home fade-in" style={{ justifyContent: "center", minHeight: "85vh" }}>
         <OrdinalBackground />
         
-        <div className="home-content" style={{ width: "100%", maxWidth: "600px" }}>
-          <div className="chronicle-header" style={{ marginBottom: "2rem", alignSelf: "flex-start" }}>
+        <div className="home-content" style={{ width: "100%", maxWidth: "600px", gap: "var(--space-md)" }}>
+          <div className="chronicle-header" style={{ marginBottom: 0, alignSelf: "flex-start" }}>
             <button onClick={() => navigate(homePath)} className="btn btn-ghost" style={{ paddingLeft: 0 }}>
               <span style={{ marginRight: "0.5rem" }}>←</span> Back to Search
             </button>
@@ -246,7 +246,7 @@ export function Chronicle() {
   if (error && !chronicle) {
     return (
       <div className="fade-in" style={{ textAlign: "center" }}>
-        <div className="chronicle-header" style={{ marginBottom: "1.5rem" }}>
+        <div className="chronicle-header" style={{ marginBottom: "var(--space-md)" }}>
           <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
         </div>
         <div className="glass-card" style={{ padding: "2rem" }}>

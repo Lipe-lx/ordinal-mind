@@ -1,6 +1,6 @@
 import { useState, useTransition } from "react"
 import { useLocation, useNavigate } from "react-router"
-import { motion, useMotionValue, useSpring, useTransform } from "motion/react"
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react"
 import { OrdinalBackground } from "../components/OrdinalBackground"
 
 const TAPROOT_RE = /^bc1p[a-z0-9]{38,62}$/i
@@ -11,7 +11,7 @@ function isValidInput(v: string): boolean {
   return TAPROOT_RE.test(v) || HEX_ID_RE.test(v) || NUMBER_RE.test(v)
 }
 
-function DynamicLogo({ mouseX, mouseY }: { mouseX: any, mouseY: any }) {
+function DynamicLogo({ mouseX, mouseY }: { mouseX: MotionValue<number>, mouseY: MotionValue<number> }) {
   const springConfig = { stiffness: 250, damping: 15, mass: 0.8 }
   const x = useSpring(useTransform(mouseX, [-200, 200], [-60, 60]), springConfig)
   const y = useSpring(useTransform(mouseY, [-200, 200], [-60, 60]), springConfig)
@@ -171,7 +171,7 @@ export function Home() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
         >
-          {["Every", "Inscription", "has", "a", "history.", "Find Yours."].map((word, i) => (
+          {["Every", "Inscription", "has", "a", "history.", "Find it."].map((word, i) => (
             <motion.span
               key={i}
               initial={{ opacity: 0, y: 5, filter: "blur(4px)" }}
@@ -216,7 +216,7 @@ export function Home() {
             type="submit"
             disabled={isPending}
           >
-            {isPending ? "Scanning..." : "Explore History"}
+            {isPending ? "Scanning..." : "Trace the Chronicle"}
           </button>
         </motion.form>
 
