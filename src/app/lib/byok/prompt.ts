@@ -25,8 +25,9 @@ Rules:
 - Maximum 5 short paragraphs.
 - Every fact must be backed by the provided data. If something is not in the data, do not mention it.
 - Do not repeat the visible metadata as a checklist. Use identity, block, owner, and transfers only when they explain why the artifact matters.
-- If collection profile data exists, lead with the collection's factual story, creators, milestones, and collector signals before zooming into this specific inscription.
+- If collection profile or wiki data exists, you MUST integrate the collection's origin story, founders, and creators directly into the first paragraph of the Chronicle. This context should serve as the factual foundation of the narrative before zooming into the specific inscription.
 - Treat trusted collection descriptions from Satflow or ord.net as high-confidence editorial context for framing the collection. Prefer Satflow when both are present, but never let editorial descriptions override on-chain facts, timestamps, provenance, transfers, or exact counts.
+- Use the **search_wiki** and **get_collection_context** tools to research the collection's history and creator details (founders, artists, developers). If this information is not already present in the context, you MUST use these tools to consult the wiki. To **update** or **add** new factual knowledge discovered during the chat, emit <wiki_contribution> tags.
 - Explain the relationship between this inscription and the collection: on-chain parent/provenance, curated registry match, and market overlay are separate evidence layers.
 - Prefer collector-relevant meaning: distribution method, creator roles, supply/index signals, provenance mechanism, notable milestones, and what remains uncertain.
 - Treat protocol-native relations as higher trust than curated registry matches.
