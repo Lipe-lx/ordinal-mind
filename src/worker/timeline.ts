@@ -141,7 +141,7 @@ export function buildTimeline(
       event_type: t.is_sale ? "sale" : "transfer",
       source: { type: "onchain", ref: t.tx_id },
       description: t.is_sale
-        ? `Sold for ${t.value ? (t.value / 1e8).toFixed(8) : "—"} BTC · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`
+        ? `${t.is_heuristic ? "Probable sale" : "Sold"} for ${t.value ? (t.value / 1e8).toFixed(8) : "—"} BTC · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`
         : `Transferred · ${truncAddr(t.from_address)} → ${truncAddr(t.to_address)}`,
       metadata: {
         from: t.from_address,

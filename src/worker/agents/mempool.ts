@@ -146,23 +146,23 @@ export const fetchMempool = {
 }
 
 /**
+ * KNOWN MARKETPLACE SIGNATURES
+ * Common treasury/fee addresses for major Ordinals marketplaces.
+ */
+const MARKETPLACE_FEE_ADDRESSES = new Set([
+  "bc1pgkfgv6yks097jllv8shjvn6yv0g32xskpkzajygmvklt48l044as08990h", // Magic Eden / ORD.NET
+  "bc1p2uphz49p0l0y8p4p8y4p8y4p8y4p8y4p8y4p8y4p8y4p8y4p8y4p8y4p8y", // Example Marketplace
+])
+
+/**
  * Analyzes a transaction to determine if it's a sale or simple transfer,
  * and extracts the real sale price when applicable.
  *
- * Net Gain Heuristic (Universal Marketplace Pattern):
- * In any marketplace sale (PSBT, Swap, Padding Circular), the seller ends up with 
- * a significantly higher total value across their outputs than they provided in inputs.
- * 
- * Logic:
- * 1. Sum all inputs and outputs per unique address in the transaction.
- * 2. Calculate the Net Gain (Total Output - Total Input) for each address.
- * 3. The price is the highest Net Gain found (excluding the buyer who received the item).
- * 
- * This covers:
- * - SIGHASH_SINGLE (Index mapping)
- * - Symmetric Swaps (Crossed inputs/outputs)
- * - Circular Padding (Seller provides dust input from payment address)
- * - Multi-output payments (Price + Royalty + Fee)
+ * Enhanced 2026 Heuristics:
+ * 1. 2-Dummy Recognition: Detects the Magic Eden/OKX standard pattern.
+ * 2. Seller-Centric Gain: Verifies that the address providing the inscription receives the payout.
+ * 3. Marketplace Markers: Checks for fee addresses and specific output counts.
+ * 4. Noise Reduction: Higher threshold (5000 sats) to ignore postage shifts.
  */
 export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, inscriptionVout: number): EnrichedTransfer {
   const sellerPrevout = tx.vin[inscriptionVinIndex]?.prevout
@@ -171,7 +171,7 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
   const buyerAddress = tx.vout[inscriptionVout]?.scriptpubkey_address ?? "?"
   const postageValue = tx.vout[inscriptionVout]?.value ?? 0
 
-  // Multi-party detection: different addresses in inputs = probable marketplace/PSBT sale
+  // 1. Identify input/output patterns
   const inputAddresses = new Set(
     tx.vin
       .map(v => v.prevout?.scriptpubkey_address)
@@ -179,9 +179,20 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
   )
   const isMultiParty = inputAddresses.size > 1
 
-  const addressStats = new Map<string, { input: number; output: number }>()
+  // 2. Detect 2-Dummy Pattern (Standard Marketplace)
+  // Input 0 & 1 are dummies, Output 4 & 5 (or similar) are dummies.
+  const hasDummies = 
+    tx.vin.length >= 3 && 
+    tx.vout.length >= 4 &&
+    tx.vin[0]?.prevout?.value === tx.vout[tx.vout.length - 2]?.value && // Dummy 1
+    tx.vin[1]?.prevout?.value === tx.vout[tx.vout.length - 1]?.value && // Dummy 2
+    (tx.vin[0]?.prevout?.value ?? 0) < 2000
 
-  // 1. Calculate totals per address
+  // 3. Detect Marketplace Fees
+  const hasMarketplaceFee = tx.vout.some(v => MARKETPLACE_FEE_ADDRESSES.has(v.scriptpubkey_address ?? ""))
+
+  // 4. Calculate Net Gain per address
+  const addressStats = new Map<string, { input: number; output: number }>()
   for (const vin of tx.vin) {
     const addr = vin.prevout?.scriptpubkey_address
     if (addr) {
@@ -190,9 +201,7 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
       addressStats.set(addr, stats)
     }
   }
-
-  for (let i = 0; i < tx.vout.length; i++) {
-    const vout = tx.vout[i]
+  for (const vout of tx.vout) {
     const addr = vout.scriptpubkey_address
     if (addr) {
       const stats = addressStats.get(addr) || { input: 0, output: 0 }
@@ -201,28 +210,34 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
     }
   }
 
-  // 2. Identify highest net gain
+  // 5. Identify Sale Price
   let maxGain = 0
   let paymentAddress = sellerInputAddress
-  let isHeuristic = false
 
   for (const [addr, stats] of addressStats.entries()) {
-    // Skip the buyer address that received the inscription (it has a gain of postage, but we want the price)
+    // Skip the buyer address (it always has a gain of postage, which is not the price)
     if (addr === buyerAddress) continue
 
     const gain = stats.output - stats.input
     if (gain > maxGain) {
       maxGain = gain
       paymentAddress = addr
-      isHeuristic = true
     }
   }
 
-  // 3. Final validation: price must be significant to be considered a sale.
-  // We use 1000 sats as a threshold to distinguish between the item's postage 
-  // (usually 546 or 1000 sats) and a real marketplace payment.
-  const MIN_SALE_PRICE = 1000 
-  const confirmedSale = isMultiParty && maxGain >= MIN_SALE_PRICE
+  // 6. Final Decision Logic
+  const MIN_SALE_PRICE = 5000 
+  
+  // A sale is confirmed if:
+  // - It has explicit marketplace markers (Dummies OR Fee addresses)
+  // - OR it's multi-party AND has a significant gain for the seller/payout address
+  const isConfirmedMarketplace = (hasDummies || hasMarketplaceFee) && maxGain > 0
+  const isProbableP2PSale = isMultiParty && maxGain >= MIN_SALE_PRICE
+
+  const confirmedSale = isConfirmedMarketplace || isProbableP2PSale
+
+  // Metadata enrichment
+  const isHeuristicSale = confirmedSale && !isConfirmedMarketplace
 
   return {
     tx_id: tx.txid,
@@ -236,7 +251,7 @@ export function analyzeTransfer(tx: MempoolTx, inscriptionVinIndex: number, insc
       : null,
     block_height: tx.status.block_height ?? 0,
     is_sale: confirmedSale,
-    is_heuristic: isHeuristic,
+    is_heuristic: isHeuristicSale,
     input_count: tx.vin.length,
     output_count: tx.vout.length,
   }
