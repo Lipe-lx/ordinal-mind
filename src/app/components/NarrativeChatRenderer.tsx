@@ -150,8 +150,9 @@ export function NarrativeChatRenderer({
                 : "Configure BYOK to unlock Chronicle chat. The factual timeline remains fully available."}
             </p>
             {!hasKey && (
-              <button className="btn btn-primary btn-sm" onClick={onOpenBYOK}>
-                🔑 Configure BYOK
+              <button className="btn-premium" onClick={onOpenBYOK}>
+                <span className="byok-icon icon-premium">🔑</span>
+                <span>Configure BYOK</span>
               </button>
             )}
           </div>
@@ -421,8 +422,9 @@ export function NarrativeChatRenderer({
           </div>
           <div className="narrative-chat-actions">
             {!hasKey ? (
-              <button type="button" className="btn btn-primary btn-sm" onClick={onOpenBYOK}>
-                🔑 Configure BYOK
+              <button type="button" className="btn-premium" onClick={onOpenBYOK}>
+                <span className="byok-icon icon-premium">🔑</span>
+                <span>Configure BYOK</span>
               </button>
             ) : (
               <>

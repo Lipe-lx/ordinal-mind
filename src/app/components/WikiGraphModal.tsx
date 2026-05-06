@@ -544,7 +544,7 @@ export function WikiGraphModal({
                       {resolveNavigationTarget(selectedNode) && (
                         <button
                           type="button"
-                          className="btn btn-primary btn-block btn-sm"
+                          className="btn-premium btn-block"
                           onClick={() => {
                             const target = resolveNavigationTarget(selectedNode)
                             if (target) navigate(target)

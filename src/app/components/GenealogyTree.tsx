@@ -672,8 +672,8 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                     </div>
                   </div>
                   <div className="node-detail-actions">
-                    <a href={`/chronicle/${selectedNode.inscription_id}`} className="btn btn-primary" style={{ width: "100%" }}>
-                      Explore Chronicle ↗
+                    <a href={`/chronicle/${selectedNode.inscription_id}`} className="btn-premium" style={{ width: "100%" }}>
+                      <span>Explore Chronicle ↗</span>
                     </a>
                   </div>
                 </div>
