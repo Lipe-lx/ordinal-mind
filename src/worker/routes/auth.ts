@@ -314,7 +314,7 @@ async function handleAuthExchange(request: Request, env: Env): Promise<Response>
 
   await env.CHRONICLES_KV.delete(key)
 
-  let token = ""
+  let token: string
   try {
     const parsed = JSON.parse(raw) as { jwt?: string }
     token = typeof parsed.jwt === "string" ? parsed.jwt : ""
@@ -346,7 +346,9 @@ async function handleAuthExchange(request: Request, env: Env): Promise<Response>
 async function handleAuthMe(request: Request, env: Env): Promise<Response> {
   const auth = await requireSessionUser(request, env)
   if (!auth.ok) {
-    return json({ ok: false, error: auth.error }, auth.status)
+    // Quietly return 200 for missing tokens to avoid console noise for guests
+    const status = auth.error === "missing_auth_token" ? 200 : auth.status
+    return json({ ok: false, error: auth.error }, status)
   }
 
   return json({

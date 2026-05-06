@@ -46,11 +46,17 @@ function clearLegacyJWT(): void {
 
 function setConnectedMarker(connected: boolean): void {
   try {
-    localStorage.setItem(DISCORD_CONNECTED_STORAGE_KEY, connected ? "1" : "0")
+    const key = DISCORD_CONNECTED_STORAGE_KEY
+    const newVal = connected ? "1" : "0"
+    const oldVal = localStorage.getItem(key)
+    
+    if (oldVal === newVal) return
+    
+    localStorage.setItem(key, newVal)
+    broadcastAuthSync()
   } catch {
     // noop
   }
-  broadcastAuthSync()
 }
 
 function captureAndCleanAuthParams(): { code: string | null; error: string | null } {
