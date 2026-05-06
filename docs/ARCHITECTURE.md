@@ -20,7 +20,7 @@ graph TD
   A --> U2_2[UniSat: Enrichment optional]
   A --> T[Timeline + Validation + Rarity]
   T --> KV[(Cloudflare KV)]
-  W -->|JSON (Address List) or SSE (Timeline)| C
+  W -->|"JSON (Address List) or SSE (Timeline)"| C
 
   C -->|BYOK key in browser| LLM[OpenAI/Anthropic/Gemini/OpenRouter]
   C --> Chat[Chronicle Narrative Chat]
