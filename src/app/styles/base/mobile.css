@@ -52,7 +52,8 @@
 
 @media (max-width: 899px) {
   .layout {
-    overflow: visible;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .layout-header {
@@ -144,26 +145,63 @@
 
   .chronicle-page,
   .chronicle {
-    height: auto;
+    height: 100%;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .chronicle {
     display: flex;
     flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
     gap: var(--space-md);
+    width: 100%;
+    padding-bottom: var(--space-xl);
+    scrollbar-width: none;
   }
 
-  .chronicle-sidebar-left,
-  .chronicle-card,
-  .chronicle-sidebar-right,
+  .chronicle::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chronicle-sidebar-left {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    flex: none;
+  }
+
+  .chronicle-card {
+    height: auto;
+    min-height: 380px; /* Base height for readability */
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .chronicle-sidebar-right {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    flex: none;
+  }
+
   .timeline-panel,
   .chronicle-layout-panel {
     height: auto;
     max-height: none;
     min-height: 0;
     overflow: visible;
+  }
+
+  .chronicle-card-content-preview {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    max-height: 30vh;
+    width: 100%;
   }
 
   .chronicle-card {
