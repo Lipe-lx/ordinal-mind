@@ -142,11 +142,11 @@ export function attachSecurityHeaders(
       "base-uri 'self'",
       "frame-ancestors 'none'",
       "form-action 'self'",
-      isDev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
+      isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:" : "script-src 'self'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https:",
-      isDev ? "connect-src 'self' https: ws: wss:" : "connect-src 'self' https:",
+      isDev ? "connect-src 'self' http: https: ws: wss:" : "connect-src 'self' https:",
       "object-src 'none'",
     ].join("; ")
     headers.set("Content-Security-Policy", csp)
