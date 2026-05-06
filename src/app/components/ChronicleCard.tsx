@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useMemo, useState } from "react"
 import { KeyStore, getModelDisplayName } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
@@ -79,14 +79,14 @@ export function ChronicleCard({
 
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
-  const [layoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
+  const [rawLayoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
   const [showWikiGraph, setShowWikiGraph] = useState(false)
 
-  useEffect(() => {
-    if (isMobile && layoutMode === "split") {
-      setLayoutMode("narrative")
-    }
-  }, [isMobile, layoutMode])
+
+  // On mobile, "split" layout is not supported; we default to "genealogy"
+  // but allow the user to switch to "narrative".
+  const layoutMode = (isMobile && rawLayoutMode === "split") ? "genealogy" : rawLayoutMode
+
 
   const handleModelChange = (model: string) => {
     const current = KeyStore.get()

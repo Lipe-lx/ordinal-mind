@@ -255,3 +255,87 @@
   font-size: 0.65rem;
   color: var(--text-dim);
 }
+
+@media (max-width: 768px) {
+  .scan-progress.engine-card {
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    margin: 0 auto;
+    width: calc(100% - var(--space-lg));
+    max-width: calc(100% - var(--space-lg));
+  }
+
+  .scan-progress-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+  }
+
+  .scan-progress-main-title {
+    font-size: 1.5rem;
+  }
+
+  .scan-progress-id-box {
+    text-align: left;
+    padding: var(--space-xs) var(--space-sm);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .scan-progress-steps {
+    gap: var(--space-xs);
+    margin-bottom: var(--space-xl);
+  }
+
+  .scan-progress-step {
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+  }
+
+  .step-label {
+    font-size: 0.85rem;
+  }
+
+  .step-detail {
+    font-size: 0.65rem;
+  }
+
+  .step-status {
+    font-size: 0.6rem;
+    padding: 1px 4px;
+  }
+
+  .scan-progress-bar-container {
+    gap: var(--space-sm);
+  }
+
+  .bar-percentage {
+    font-size: 0.8rem;
+    min-width: 2.5rem;
+  }
+
+  .scan-progress-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .scan-progress.engine-card {
+    padding: var(--space-md);
+  }
+
+  .step-status {
+    display: none;
+  }
+
+  .scan-progress-main-title {
+    font-size: 1.25rem;
+  }
+}
+
+
