@@ -21,6 +21,12 @@
   cursor: not-allowed;
 }
 
+.btn-sm {
+  min-height: 32px;
+  padding: 0 var(--space-md);
+  font-size: 0.75rem;
+}
+
 .btn-primary {
   background: var(--accent-primary);
   color: #000;
