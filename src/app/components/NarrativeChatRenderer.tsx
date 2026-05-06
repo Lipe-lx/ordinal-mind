@@ -78,7 +78,6 @@ export function NarrativeChatRenderer({
   const [showLogs, setShowLogs] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showModelSelector, setShowModelSelector] = useState(false)
-  const [localInputError, setLocalInputError] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
   const transcriptRef = useRef<HTMLDivElement | null>(null)
@@ -111,12 +110,8 @@ export function NarrativeChatRenderer({
 
   const sendCurrentPrompt = async () => {
     const nextPrompt = prompt.trim()
-    if (!nextPrompt) {
-      setLocalInputError("Enter a prompt before sending.")
-      return
-    }
+    if (!nextPrompt) return
 
-    setLocalInputError(null)
     setPrompt("")
     await onSend(nextPrompt)
   }
@@ -323,12 +318,12 @@ export function NarrativeChatRenderer({
         </details>
       )}
 
-      {(error || inputError || localInputError) && (
+      {(error || inputError) && (
         <p className="narrative-chat-error" role="status" aria-live="polite">
-          {error ?? inputError ?? localInputError}
+          {error ?? inputError}
         </p>
       )}
-      {!error && !inputError && !localInputError && wikiStatusError && (
+      {!error && !inputError && wikiStatusError && (
         <p className="narrative-chat-error" role="status" aria-live="polite">
           {wikiStatusError}
         </p>
@@ -340,7 +335,6 @@ export function NarrativeChatRenderer({
           value={prompt}
           onChange={(event) => {
             setPrompt(event.target.value)
-            setLocalInputError(null)
           }}
           onKeyDown={(event) => {
             if (event.key !== "Enter") return
@@ -353,7 +347,7 @@ export function NarrativeChatRenderer({
           placeholder={hasKey ? "Ask about this inscription's history, provenance, transfers, or collection context..." : "Configure BYOK to start chatting"}
           disabled={!hasKey || isLoading}
           rows={3}
-          aria-invalid={Boolean(inputError || localInputError)}
+          aria-invalid={Boolean(inputError)}
         />
         <div className="narrative-chat-footer">
           <div className="narrative-chat-meta">
@@ -475,6 +469,7 @@ export function NarrativeChatRenderer({
                   <button
                     type="submit"
                     className="btn btn-sm narrative-icon-btn narrative-send-btn"
+                    disabled={!prompt.trim()}
                     aria-label="Send message"
                     title="Send"
                   >
