@@ -73,14 +73,16 @@ function DynamicLogo({
           strokeLinejoin="round" 
           fill="none"
           filter="url(#heroGlow)"
-          animate={reduceMotion ? undefined : {
-            d: [
-              "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z",
-              "M 45,155 A 85,85 0 1,1 195,155 C 195,115 175,95 160,95 C 145,95 130,130 120,130 C 110,130 95,95 80,95 C 65,95 45,115 45,155 Z",
-              "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z"
-            ]
+          animate={{
+            d: reduceMotion 
+              ? "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z" 
+              : [
+                "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z",
+                "M 45,155 A 85,85 0 1,1 195,155 C 195,115 175,95 160,95 C 145,95 130,130 120,130 C 110,130 95,95 80,95 C 65,95 45,115 45,155 Z",
+                "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z"
+              ]
           }}
-          transition={reduceMotion ? undefined : {
+          transition={reduceMotion ? { duration: 0 } : {
             duration: 8,
             repeat: Infinity,
             ease: "easeInOut"
@@ -104,7 +106,7 @@ export function Home() {
   const location = useLocation()
   const isMobile = useMediaQuery("(max-width: 899px)")
   const hasFinePointer = useMediaQuery("(hover: hover) and (pointer: fine)")
-  const reduceMotion = useReducedMotion()
+  const reduceMotion = Boolean(useReducedMotion())
 
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)

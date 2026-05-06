@@ -6,7 +6,7 @@
 // Legacy compatibility:
 //   - Keeps readStoredDiscordJWT export for transitional code paths.
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useLocation } from "react-router"
 
 export interface DiscordIdentity {
@@ -44,10 +44,10 @@ function clearLegacyJWT(): void {
   }
 }
 
-function setConnectedMarker(connected: boolean): void {
+function setConnectedMarker(discordId: string | null): void {
   try {
     const key = DISCORD_CONNECTED_STORAGE_KEY
-    const newVal = connected ? "1" : "0"
+    const newVal = discordId || "0"
     const oldVal = localStorage.getItem(key)
     
     if (oldVal === newVal) return
@@ -123,6 +123,8 @@ export function useDiscordIdentity() {
   const [authError, setAuthError] = useState<string | null>(null)
   const [syncTick, setSyncTick] = useState(0)
 
+  const handlingCodeRef = useRef(false)
+
   useEffect(() => {
     function handleAuthSync() {
       setSyncTick((value) => value + 1)
@@ -147,26 +149,33 @@ export function useDiscordIdentity() {
     let cancelled = false
 
     async function init() {
-      setIsLoading(true)
+      if (handlingCodeRef.current) return
+      
+      if (!identity) {
+        setIsLoading(true)
+      }
       const { code, error } = captureAndCleanAuthParams()
 
       if (error) {
         if (!cancelled) {
           setAuthError(error)
           setIdentity(null)
-          setConnectedMarker(false)
+          setConnectedMarker(null)
           setIsLoading(false)
         }
         return
       }
 
       if (code) {
+        handlingCodeRef.current = true
         const exchanged = await exchangeAuthCode(code)
+        handlingCodeRef.current = false
+        
         if (!exchanged.ok) {
           if (!cancelled) {
             setAuthError(exchanged.error)
             setIdentity(null)
-            setConnectedMarker(false)
+            setConnectedMarker(null)
             setIsLoading(false)
           }
           return
@@ -174,14 +183,22 @@ export function useDiscordIdentity() {
       }
 
       const validated = await validateWithServer()
-      if (cancelled) return
+      // We don't return on cancelled here because if we just exchanged a code,
+      // we MUST update the state even if the URL cleanup triggered a re-render.
+      
+      const identityChanged = (validated?.discordId !== identity?.discordId)
 
       if (!validated) {
-        setIdentity(null)
-        setConnectedMarker(false)
+        if (identity !== null) {
+          setIdentity(null)
+          setConnectedMarker(null)
+        }
       } else {
-        setIdentity(validated)
-        setConnectedMarker(true)
+        if (identityChanged) {
+          setIdentity(validated)
+          setConnectedMarker(validated.discordId)
+        }
+        
         setAuthError(null)
         try {
           const { KeyStore } = await import("./byok/index")
@@ -199,7 +216,7 @@ export function useDiscordIdentity() {
     return () => {
       cancelled = true
     }
-  }, [location.search, location.hash, syncTick])
+  }, [location.search, location.hash, syncTick, identity])
 
   const connect = useCallback(() => {
     setAuthError(null)
@@ -209,7 +226,7 @@ export function useDiscordIdentity() {
   const disconnect = useCallback(async () => {
     setAuthError(null)
     setIdentity(null)
-    setConnectedMarker(false)
+    setConnectedMarker(null)
     clearLegacyJWT()
 
     try {

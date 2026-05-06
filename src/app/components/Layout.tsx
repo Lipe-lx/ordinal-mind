@@ -127,7 +127,7 @@ export function Layout() {
               )
             )}
 
-            {!identity && (
+            {!identity && !identityLoading && (
               <>
                 <button
                   ref={byokRef}

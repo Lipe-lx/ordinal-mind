@@ -18,6 +18,16 @@ import { InscriptionMedia } from "./InscriptionMedia"
  * Calculates a smooth cubic bezier path between two points in local coordinate space.
  */
 function calculateBezierPath(startX: number, startY: number, endX: number, endY: number): string {
+  // Guard against invalid inputs that could cause "M undefined undefined" errors
+  if (
+    typeof startX !== "number" || isNaN(startX) ||
+    typeof startY !== "number" || isNaN(startY) ||
+    typeof endX !== "number" || isNaN(endX) ||
+    typeof endY !== "number" || isNaN(endY)
+  ) {
+    return ""
+  }
+
   // Prevent SVG gradient zero-width/height bounding box clipping bug on perfectly straight lines
   const safeEndX = Math.abs(startX - endX) < 0.1 ? endX + 0.1 : endX
   const safeEndY = Math.abs(startY - endY) < 0.1 ? endY + 0.1 : endY
@@ -42,6 +52,7 @@ const Connection = memo(({ startId, endId, nodePositions }: ConnectionProps) => 
   if (!start || !end) return null
 
   const pathData = calculateBezierPath(start.x, start.y, end.x, end.y)
+  if (!pathData) return null
 
   return (
     <path 
@@ -211,7 +222,8 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
       const treeRect = treeRef.current.getBoundingClientRect()
       // Calculate the ACTUAL rendered scale from DOM to be independent of spring state
-      const actualScale = treeRect.width / treeRef.current.offsetWidth || 1
+      const offsetWidth = treeRef.current.offsetWidth || 1
+      const actualScale = treeRect.width / offsetWidth || 1
       
       const positions: Record<string, { x: number, y: number }> = {}
       
