@@ -19,7 +19,7 @@ export interface DiscordIdentity {
   badges?: DiscordBadge[]
 }
 
-const JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
+export const DISCORD_JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
 const AUTH_TOKEN_PARAM = "auth_token"
 const AUTH_ERROR_PARAM = "auth_error"
 const AUTH_SYNC_EVENT = "ordinal-mind:auth-sync"
@@ -29,9 +29,9 @@ function broadcastAuthSync(): void {
   window.dispatchEvent(new Event(AUTH_SYNC_EVENT))
 }
 
-function readStoredJWT(): string | null {
+export function readStoredDiscordJWT(): string | null {
   try {
-    return localStorage.getItem(JWT_STORAGE_KEY)
+    return localStorage.getItem(DISCORD_JWT_STORAGE_KEY)
   } catch {
     return null
   }
@@ -39,14 +39,14 @@ function readStoredJWT(): string | null {
 
 function storeJWT(token: string): void {
   try {
-    localStorage.setItem(JWT_STORAGE_KEY, token)
+    localStorage.setItem(DISCORD_JWT_STORAGE_KEY, token)
   } catch { /* noop */ }
   broadcastAuthSync()
 }
 
 function clearJWT(): void {
   try {
-    localStorage.removeItem(JWT_STORAGE_KEY)
+    localStorage.removeItem(DISCORD_JWT_STORAGE_KEY)
   } catch { /* noop */ }
   broadcastAuthSync()
 }
@@ -122,7 +122,7 @@ export function useDiscordIdentity() {
     }
 
     function handleStorage(event: StorageEvent) {
-      if (event.key === null || event.key === JWT_STORAGE_KEY) {
+      if (event.key === null || event.key === DISCORD_JWT_STORAGE_KEY) {
         handleAuthSync()
       }
     }
@@ -168,7 +168,7 @@ export function useDiscordIdentity() {
         }
       } else {
         // 2. Check existing localStorage JWT
-        token = readStoredJWT()
+        token = readStoredDiscordJWT()
       }
 
       if (!token) {

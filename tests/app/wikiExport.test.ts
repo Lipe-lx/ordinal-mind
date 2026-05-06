@@ -1,0 +1,152 @@
+import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  buildSuggestedExportFilename,
+  downloadWikiExport,
+  parseDownloadFilename,
+} from "../../src/app/lib/wikiExport"
+
+describe("wikiExport", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it("uses showSaveFilePicker when available", async () => {
+    const chunks: Uint8Array[] = []
+    const writable = new WritableStream<Uint8Array>({
+      write(chunk) {
+        chunks.push(chunk)
+      },
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("zip-bytes"))
+          controller.close()
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Disposition": `attachment; filename="ordinal-mind-wiki-export-2026-05-06.zip"`,
+        },
+      }
+    ))
+
+    const pickerMock = vi.fn().mockResolvedValue({
+      createWritable: vi.fn().mockResolvedValue(writable),
+    })
+
+    const result = await downloadWikiExport({
+      fetchImpl: fetchMock,
+      token: "jwt-token",
+      windowLike: {
+        showSaveFilePicker: pickerMock,
+      },
+      now: new Date("2026-05-06T00:00:00.000Z"),
+    })
+
+    expect(result.status).toBe("success")
+    expect(result.filename).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: "Bearer jwt-token" })
+    expect(pickerMock).toHaveBeenCalledTimes(1)
+    expect(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))).toEqual(Buffer.from("zip-bytes"))
+  })
+
+  it("falls back to blob download when save picker is unavailable", async () => {
+    const clickMock = vi.fn()
+    const removeMock = vi.fn()
+    const appendChildMock = vi.fn()
+    const createObjectURLMock = vi.fn().mockReturnValue("blob:ordinalmind-export")
+    const revokeObjectURLMock = vi.fn()
+
+    vi.stubGlobal("URL", {
+      createObjectURL: createObjectURLMock,
+      revokeObjectURL: revokeObjectURLMock,
+    })
+
+    const documentLike = {
+      body: {
+        appendChild: appendChildMock,
+      },
+      createElement: vi.fn().mockReturnValue({
+        href: "",
+        download: "",
+        click: clickMock,
+        remove: removeMock,
+      }),
+    } as unknown as Document
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response("zip-fallback", {
+      status: 200,
+      headers: {
+        "Content-Disposition": `attachment; filename*=UTF-8''ordinal-mind-wiki-export-2026-05-06.zip`,
+      },
+    }))
+
+    const result = await downloadWikiExport({
+      fetchImpl: fetchMock,
+      token: "jwt-token",
+      windowLike: {},
+      documentLike,
+      now: new Date("2026-05-06T00:00:00.000Z"),
+    })
+
+    expect(result.status).toBe("success")
+    expect(result.filename).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
+    expect(clickMock).toHaveBeenCalledTimes(1)
+    expect(removeMock).toHaveBeenCalledTimes(1)
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:ordinalmind-export")
+  })
+
+  it("treats picker cancellation as a silent cancel", async () => {
+    const fetchMock = vi.fn()
+    const pickerMock = vi.fn().mockRejectedValue(new DOMException("cancelled", "AbortError"))
+
+    const result = await downloadWikiExport({
+      fetchImpl: fetchMock,
+      token: "jwt-token",
+      windowLike: {
+        showSaveFilePicker: pickerMock,
+      },
+    })
+
+    expect(result).toEqual({ status: "cancelled" })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("returns an inline error when the export endpoint fails", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: "invalid_auth_token",
+    }), {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }))
+
+    const result = await downloadWikiExport({
+      fetchImpl: fetchMock,
+      token: "jwt-token",
+      windowLike: {},
+      documentLike: {
+        body: {
+          appendChild: vi.fn(),
+        },
+        createElement: vi.fn(),
+      } as unknown as Document,
+    })
+
+    expect(result.status).toBe("error")
+    expect(result.message).toBe("invalid_auth_token")
+  })
+
+  it("builds predictable filenames and parses content disposition", () => {
+    expect(buildSuggestedExportFilename(new Date("2026-05-06T12:30:00.000Z"))).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
+    expect(parseDownloadFilename(`attachment; filename="wiki.zip"`)).toBe("wiki.zip")
+    expect(parseDownloadFilename(`attachment; filename*=UTF-8''wiki%20export.zip`)).toBe("wiki export.zip")
+  })
+})

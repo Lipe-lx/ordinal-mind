@@ -13,6 +13,7 @@ import { handleCompleteness } from "../wiki/completeness"
 import { handleConsolidated } from "../wiki/consolidateEndpoint"
 import { handleCollectionGraph } from "../wiki/graph"
 import { handlePendingReviews, handleReviewDecision } from "../wiki/reviews"
+import { handleWikiExport } from "../wiki/export"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
   try {
@@ -29,6 +30,10 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
       if (schemaFailure) return json(schemaFailure, 503)
       const report = await runWikiLint(env)
       return json(report)
+    }
+
+    if (request.method === "GET" && path === "/api/wiki/export") {
+      return handleWikiExport(request, env)
     }
 
     if (request.method === "POST" && path === "/api/wiki/ingest") {
@@ -158,7 +163,7 @@ function json(data: unknown, status = 200): Response {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   })
 }

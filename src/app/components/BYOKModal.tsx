@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react"
 import { KeyStore, detectProvider, PROVIDERS, MODELS, type Provider, type ByokConfig } from "../lib/byok"
 import type { ResearchKeys } from "../lib/byok/toolExecutor"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
+import { downloadWikiExport } from "../lib/wikiExport"
 
 interface Props {
   onClose: () => void
@@ -12,8 +13,10 @@ export function BYOKModal({ onClose }: Props) {
   const [config, setConfig] = useState<ByokConfig>(
     KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
   )
-  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity">("identity")
+  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity" | "wiki-export">("identity")
   const { identity, isLoading: identityLoading, connect, disconnect } = useDiscordIdentity()
+  const [wikiExportState, setWikiExportState] = useState<"idle" | "loading" | "success" | "error">("idle")
+  const [wikiExportMessage, setWikiExportMessage] = useState("")
 
   function handleProviderChange(e: ChangeEvent<HTMLSelectElement>) {
     const newProvider = e.target.value as Provider
@@ -59,6 +62,30 @@ export function BYOKModal({ onClose }: Props) {
   function handleClear() {
     KeyStore.clear()
     setConfig({ provider: "unknown", model: "", key: "", researchKeys: {} })
+  }
+
+  async function handleWikiExport() {
+    if (!identity || wikiExportState === "loading") return
+
+    setWikiExportState("loading")
+    setWikiExportMessage("Preparing public wiki snapshot...")
+
+    const result = await downloadWikiExport()
+
+    if (result.status === "success") {
+      setWikiExportState("success")
+      setWikiExportMessage(result.filename ? `Saved ${result.filename}` : "Public wiki export saved.")
+      return
+    }
+
+    if (result.status === "cancelled") {
+      setWikiExportState("idle")
+      setWikiExportMessage("")
+      return
+    }
+
+    setWikiExportState("error")
+    setWikiExportMessage(result.message ?? "Could not export the public wiki.")
   }
 
   return (
@@ -115,6 +142,12 @@ export function BYOKModal({ onClose }: Props) {
               onClick={() => setActiveTab("research")}
             >
               Research Tools
+            </button>
+            <button
+              className={`byok-tab-btn ${activeTab === "wiki-export" ? "active" : ""}`}
+              onClick={() => setActiveTab("wiki-export")}
+            >
+              Public Wiki Export
             </button>
           </div>
 
@@ -319,10 +352,57 @@ export function BYOKModal({ onClose }: Props) {
                   )}
                 </motion.div>
               )}
+
+              {activeTab === "wiki-export" && (
+                <motion.div
+                  key="wiki-export"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="identity-tab-content"
+                >
+                  <div className={`identity-export-panel ${identity ? "" : "is-disabled"}`}>
+                    <div className="identity-export-copy">
+                      <span className="identity-export-label">Public Wiki Export</span>
+                      <p className="identity-export-description">
+                        Download the full public wiki as a portable ZIP with structured JSON and readable Markdown.
+                      </p>
+                    </div>
+
+                    <div className="identity-export-meta">
+                      <span className="identity-export-meta-chip">ZIP snapshot</span>
+                      <span className="identity-export-meta-chip">JSON + Markdown</span>
+                      <span className="identity-export-meta-chip">Public data only</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`identity-export-btn ${wikiExportState === "success" ? "is-success" : ""}`}
+                      onClick={() => void handleWikiExport()}
+                      disabled={!identity || wikiExportState === "loading"}
+                      id="wiki-export-btn"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 3v11" />
+                        <path d="M7 10.5 12 15.5l5-5" />
+                        <path d="M5 19h14" />
+                      </svg>
+                      <span>{wikiExportState === "loading" ? "Exporting..." : "Download Wiki"}</span>
+                    </button>
+
+                    <p className={`identity-export-status state-${wikiExportState}`}>
+                      {identity
+                        ? (wikiExportMessage || "Includes explicit canonical, draft, disputed, and unverified status markers.")
+                        : "Login is required for this export action, even though the snapshot itself contains only public data."}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
             </AnimatePresence>
           </div>
 
-          {activeTab !== "identity" && (
+          {(activeTab === "llm" || activeTab === "research") && (
             <div className="byok-actions" style={{ marginTop: "1.5rem" }}>
               <button className="btn btn-ghost" onClick={handleClear}>
                 Clear

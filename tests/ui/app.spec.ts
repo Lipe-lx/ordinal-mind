@@ -60,6 +60,66 @@ async function installApiMocks(page: Page, options?: { delayStreamMs?: number })
       }),
     })
   })
+
+  await page.route("**/api/wiki/export", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/zip",
+      headers: {
+        "Content-Disposition": `attachment; filename="ordinal-mind-wiki-export-2026-05-06.zip"`,
+      },
+      body: "fake-zip",
+    })
+  })
+}
+
+function buildIdentityToken(payload: Record<string, unknown>) {
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "")
+  const body = btoa(JSON.stringify(payload))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "")
+  const sig = btoa("sig").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+  return `${header}.${body}.${sig}`
+}
+
+async function installIdentityMocks(page: Page) {
+  const token = buildIdentityToken({
+    sub: "discord-id-1",
+    username: "collector42",
+    avatar: null,
+    tier: "og",
+    iat: 1700000000,
+    exp: 4102444800,
+  })
+
+  await page.addInitScript((jwt) => {
+    window.localStorage.setItem("ordinal-mind_discord_jwt", jwt)
+    Object.defineProperty(window, "showSaveFilePicker", {
+      value: undefined,
+      configurable: true,
+    })
+  }, token)
+
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        user: {
+          discordId: "discord-id-1",
+          username: "collector42",
+          avatar: null,
+          tier: "og",
+          badges: [],
+        },
+      }),
+    })
+  })
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -127,6 +187,39 @@ test("byok modal visual baseline", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Configuration" })).toBeVisible()
   await settlePage(page)
   await expect(page).toHaveScreenshot("byok-modal.png", { fullPage: true, animations: "disabled" })
+  await expectNoHorizontalOverflow(page)
+})
+
+test("identity wiki export is enabled for authenticated users and prevents double click", async ({ page }) => {
+  let exportRequests = 0
+
+  await installIdentityMocks(page)
+  await installApiMocks(page)
+  await page.route("**/api/wiki/export", async (route) => {
+    exportRequests += 1
+    await page.waitForTimeout(250)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/zip",
+      headers: {
+        "Content-Disposition": `attachment; filename="ordinal-mind-wiki-export-2026-05-06.zip"`,
+      },
+      body: "fake-zip",
+    })
+  })
+
+  await page.goto("/")
+  await page.locator('[title="collector42 (og)"]').click()
+  await page.getByRole("button", { name: "Public Wiki Export" }).click()
+  const exportButton = page.locator("#wiki-export-btn")
+  await expect(exportButton).toBeEnabled()
+
+  await exportButton.click()
+  await expect(exportButton).toBeDisabled()
+  await exportButton.click({ force: true })
+
+  await expect(page.getByText("Saved ordinal-mind-wiki-export-2026-05-06.zip")).toBeVisible()
+  expect(exportRequests).toBe(1)
   await expectNoHorizontalOverflow(page)
 })
 
