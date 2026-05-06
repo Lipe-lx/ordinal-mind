@@ -92,6 +92,7 @@ graph TD
 
 - **No Server Secrets**: LLM keys are never seen by the server.
 - **Sealed Storage**: Authenticated users have their LLM keys encrypted with AES-256-GCM in `localStorage`.
+- **Content Security Policy (CSP)**: Strict `script-src 'self'` in production. Automatically relaxes to include `'unsafe-inline'` and `ws:`/`wss:` in local development to support Vite Fast Refresh and HMR.
 - **Public Data Only**: The Worker only scrapes public, cacheable data.
 - **Stateless Identity**: Session state is carried by signed JWTs.
 

@@ -71,6 +71,7 @@ This is the current structure and responsibility map of the repository.
 - `validation.ts`: cross-checks data between indexers to ensure factuality.
 - `rarity.ts`: calculates satoshi rarity and provenance markers.
 - `db.ts`: shared D1 database interface and helpers.
+- `security.ts`: CSP headers, rate limiting, and origin validation.
 
 ### Entry and Routing
 
