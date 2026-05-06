@@ -689,3 +689,47 @@
   animation: energy-flow 3s linear infinite;
   will-change: stroke-dashoffset;
 }
+
+@media (max-width: 899px) {
+  .node-detail-overlay {
+    padding: var(--space-md);
+    /* Respect both site header (~64px) and mobile navigation bar (~48px) */
+    top: calc(112px + var(--safe-area-top));
+    height: calc(100dvh - 112px - var(--safe-area-top) - var(--safe-area-bottom));
+    align-items: center;
+    justify-content: center;
+  }
+
+  .node-detail-card {
+    padding: var(--space-lg);
+    max-height: 100%;
+    overflow-y: auto;
+    gap: var(--space-md);
+  }
+
+  .node-detail-content {
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+  }
+
+  .node-detail-image {
+    max-width: 200px;
+    margin: 0 auto;
+  }
+
+  .node-detail-info {
+    text-align: center;
+  }
+
+  .node-detail-header {
+    flex-direction: column;
+    gap: var(--space-xs);
+    align-items: center;
+  }
+
+  .node-detail-stats {
+    grid-template-columns: 1fr;
+    text-align: left;
+    gap: var(--space-sm);
+  }
+}
