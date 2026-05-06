@@ -52,8 +52,8 @@
 }
 
 @keyframes card-glow {
-  from { opacity: 0.1; transform: scale(0.9); }
-  to { opacity: 0.4; transform: scale(1.1); }
+  from { opacity: 0.05; transform: scale(0.95); }
+  to { opacity: 0.2; transform: scale(1.05); }
 }
 
 .chronicle-card::-webkit-scrollbar {
@@ -263,6 +263,7 @@
   color: var(--text-primary);
   display: -webkit-box;
   -webkit-line-clamp: 18;
+  line-clamp: 18;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -280,6 +281,7 @@
   font-weight: 700;
   line-height: 1.25;
   -webkit-line-clamp: 6;
+  line-clamp: 6;
   color: var(--text-primary);
 }
 

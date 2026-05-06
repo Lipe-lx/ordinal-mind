@@ -126,12 +126,12 @@
   inset: -4px;
   border-radius: 50%;
   border: 2px solid var(--accent-primary);
-  animation: ripple 1.5s infinite ease-out;
+  animation: ripple 2s infinite var(--ease-smooth);
 }
 
 @keyframes ripple {
-  from { transform: scale(0.5); opacity: 1; }
-  to { transform: scale(2.5); opacity: 0; }
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
 
 .step-content {
@@ -165,13 +165,10 @@
 .step-status.active {
   background: var(--accent-glow);
   color: var(--accent-primary);
-  animation: flicker 2s infinite linear;
+  opacity: 0.9;
 }
 
-@keyframes flicker {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
+/* flicker animation removed to prevent layout noise */
 
 .scan-progress-visualization {
   margin-bottom: var(--space-xl);
@@ -248,12 +245,10 @@
   width: 6px;
   height: 6px;
   background: #f7931a;
-  animation: blink 1s infinite step-start;
+  opacity: 0.8;
 }
 
-@keyframes blink {
-  50% { opacity: 0; }
-}
+/* blink animation removed to prevent layout noise */
 
 .footer-meta {
   font-family: var(--font-mono);

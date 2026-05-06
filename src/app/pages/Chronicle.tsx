@@ -198,7 +198,7 @@ export function Chronicle() {
   // Scanning phase: show progress
   if (isScanning && !chronicle) {
     return (
-      <div className="home fade-in" style={{ justifyContent: "center", minHeight: "85vh" }}>
+      <div key="scanning" className="home fade-in" style={{ justifyContent: "center", minHeight: "85vh" }}>
         <OrdinalBackground />
         
         <div className="home-content" style={{ width: "100%", maxWidth: "600px", gap: "var(--space-md)" }}>
@@ -225,11 +225,7 @@ export function Chronicle() {
               </div>
               
               <div className="initialization-visual">
-                <motion.div 
-                  className="indicator-pulse active"
-                  animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
-                  transition={{ repeat: Infinity, duration: 2 }}
-                />
+                <div className="indicator-pulse active" />
               </div>
 
               <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", maxWidth: "300px", margin: 0, fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -245,7 +241,7 @@ export function Chronicle() {
   // Error state
   if (error && !chronicle) {
     return (
-      <div className="fade-in" style={{ textAlign: "center" }}>
+      <div key="error" className="fade-in" style={{ textAlign: "center" }}>
         <div className="chronicle-header" style={{ marginBottom: "var(--space-md)" }}>
           <button onClick={() => navigate(homePath)} className="btn btn-ghost">← Back</button>
         </div>
@@ -266,7 +262,7 @@ export function Chronicle() {
 
   // Chronicle loaded — render 3-column layout
   return (
-    <div className="chronicle-page fade-in">
+    <div key="loaded" className="chronicle-page fade-in">
       <div className="chronicle">
         {/* Left Sidebar: Inscription preview + metadata + rarity (unified hierarchy state) */}
         <ChronicleSidebar key={chronicle.meta.inscription_id} chronicle={chronicle} />
