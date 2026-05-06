@@ -1,5 +1,6 @@
 import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
+import { createPortal } from "react-dom"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
 import {
   buildGenealogyConnections,
@@ -112,6 +113,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number, y: number }>>({})
   const [viewMode, setViewMode] = useState<GenealogyViewMode>("grouped")
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   const containerRef = useRef<HTMLDivElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
@@ -315,7 +317,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         treeElement.removeEventListener(eventName, mediaLifecycleHandler, true)
       })
     }
-  }, [syncTreeLayout])
+  }, [syncTreeLayout, isFullscreen])
 
   // Initial settle window: keep syncing while media and animated nodes finish mounting.
   useEffect(() => {
@@ -335,7 +337,20 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   useEffect(() => {
     hasUserInteracted.current = false
     syncTreeLayout(true)
-  }, [syncTreeLayout, viewMode])
+  }, [syncTreeLayout, viewMode, isFullscreen])
+
+  useEffect(() => {
+    if (!isFullscreen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsFullscreen(false)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [isFullscreen])
 
   // Handle Zoom
   useEffect(() => {
@@ -353,7 +368,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
     container.addEventListener("wheel", onWheel, { passive: false })
     return () => container.removeEventListener("wheel", onWheel)
-  }, [markUserInteracted, scale])
+  }, [markUserInteracted, scale, isFullscreen])
 
   // Note: We removed the springScale.on("change") listener here because the SVG 
   // is nested within the scaled container. Connections remain stable during zoom.
@@ -421,15 +436,38 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     syncTreeLayout(false)
   }, [applyAutoFit, deterministicRendering, markUserInteracted, syncTreeLayout, x, y])
 
-  return (
-    <div 
-      className="genealogy-container" 
+  const content = (
+    <motion.div 
+      className={`genealogy-container ${isFullscreen ? "is-fullscreen" : ""}`} 
       ref={containerRef}
       style={{ touchAction: "none" }}
       onDoubleClick={handleDoubleClick}
+      onPanStart={deterministicRendering ? undefined : markUserInteracted}
+      onPan={deterministicRendering ? undefined : (_e, info) => {
+        const s = renderedScale.get()
+        x.set(x.get() + info.delta.x / s)
+        y.set(y.get() + info.delta.y / s)
+      }}
     >
       <GenealogyBackground x={bgX} y={bgY} />
       <div className="genealogy-toolbar">
+        <button
+          type="button"
+          className={`genealogy-toolbar-btn ${isFullscreen ? "is-active" : ""}`}
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        >
+          {isFullscreen ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 3 6 6-6 6M9 21 3 15l6-6"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          )}
+        </button>
         <div className="genealogy-view-toggle" role="tablist" aria-label="Genealogy view mode">
           <button
             type="button"
@@ -453,9 +491,6 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       <motion.div 
         className="genealogy-tree" 
         ref={treeRef}
-        drag={!deterministicRendering}
-        dragMomentum={false}
-        onDragStart={markUserInteracted}
         style={{ x, y, scale: renderedScale }}
       >
         {/* SVG Connections Layer */}
@@ -683,8 +718,14 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         )}
       </AnimatePresence>
       
-    </div>
+    </motion.div>
   )
+
+  if (isFullscreen && typeof document !== "undefined") {
+    return createPortal(content, document.body)
+  }
+
+  return content
 })
 
 GenealogyTree.displayName = "GenealogyTree"

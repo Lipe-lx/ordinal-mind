@@ -78,12 +78,6 @@ export function BYOKModal({ onClose }: Props) {
       return
     }
 
-    if (result.status === "cancelled") {
-      setWikiExportState("idle")
-      setWikiExportMessage("")
-      return
-    }
-
     setWikiExportState("error")
     setWikiExportMessage(result.message ?? "Could not export the public wiki.")
   }

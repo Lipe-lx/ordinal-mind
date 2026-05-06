@@ -1,31 +1,11 @@
 import { readStoredDiscordJWT } from "./useDiscordIdentity"
 
-export type WikiExportStatus = "success" | "cancelled" | "error"
+export type WikiExportStatus = "success" | "error"
 
 export interface WikiExportOutcome {
   status: WikiExportStatus
   filename?: string
   message?: string
-}
-
-interface SavePickerWindowLike {
-  showSaveFilePicker?: (options?: {
-    suggestedName?: string
-    excludeAcceptAllOption?: boolean
-    types?: Array<{
-      description?: string
-      accept: Record<string, string[]>
-    }>
-  }) => Promise<FileSystemFileHandleLike>
-}
-
-interface FileSystemFileHandleLike {
-  createWritable: () => Promise<FileSystemWritableFileStreamLike>
-}
-
-type FileSystemWritableFileStreamLike = WritableStream<Uint8Array> & {
-  write: (data: Blob | BufferSource | string) => Promise<void>
-  close: () => Promise<void>
 }
 
 interface AnchorLike {
@@ -37,7 +17,6 @@ interface AnchorLike {
 
 interface WikiExportDependencies {
   fetchImpl?: typeof fetch
-  windowLike?: (Window & SavePickerWindowLike) | SavePickerWindowLike
   documentLike?: Document
   token?: string | null
   now?: Date
@@ -49,7 +28,6 @@ export async function downloadWikiExport(
   dependencies: WikiExportDependencies = {}
 ): Promise<WikiExportOutcome> {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const windowLike = dependencies.windowLike ?? (typeof window !== "undefined" ? window : undefined)
   const documentLike = dependencies.documentLike ?? (typeof document !== "undefined" ? document : undefined)
   const token = dependencies.token ?? readStoredDiscordJWT()
 
@@ -61,36 +39,8 @@ export async function downloadWikiExport(
   }
 
   const suggestedName = buildSuggestedExportFilename(dependencies.now ?? new Date())
-  const savePicker = resolveSavePicker(windowLike)
 
   try {
-    if (savePicker) {
-      const fileHandle = await savePicker({
-        suggestedName,
-        excludeAcceptAllOption: false,
-        types: [
-          {
-            description: "ZIP archive",
-            accept: { "application/zip": [".zip"] },
-          },
-        ],
-      })
-
-      const response = await fetchExportArchive(fetchImpl, token)
-      const writable = await fileHandle.createWritable()
-      if (response.body) {
-        await response.body.pipeTo(writable)
-      } else {
-        await writable.write(await response.blob())
-        await writable.close()
-      }
-
-      return {
-        status: "success",
-        filename: parseDownloadFilename(response.headers.get("Content-Disposition")) ?? suggestedName,
-      }
-    }
-
     if (!documentLike || !globalThis.URL) {
       return {
         status: "error",
@@ -119,10 +69,6 @@ export async function downloadWikiExport(
       filename,
     }
   } catch (error) {
-    if (isAbortError(error)) {
-      return { status: "cancelled" }
-    }
-
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Could not export the public wiki.",
@@ -177,18 +123,4 @@ async function fetchExportArchive(fetchImpl: typeof fetch, token: string): Promi
   }
 
   return response
-}
-
-function resolveSavePicker(windowLike: WikiExportDependencies["windowLike"]) {
-  const maybePicker = windowLike?.showSaveFilePicker
-  return typeof maybePicker === "function" ? maybePicker.bind(windowLike) : null
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException
-    ? error.name === "AbortError"
-    : typeof error === "object"
-      && error !== null
-      && "name" in error
-      && (error as { name?: unknown }).name === "AbortError"
 }

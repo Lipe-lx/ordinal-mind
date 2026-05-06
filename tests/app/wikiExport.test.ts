@@ -11,51 +11,7 @@ describe("wikiExport", () => {
     vi.unstubAllGlobals()
   })
 
-  it("uses showSaveFilePicker when available", async () => {
-    const chunks: Uint8Array[] = []
-    const writable = new WritableStream<Uint8Array>({
-      write(chunk) {
-        chunks.push(chunk)
-      },
-    })
-
-    const fetchMock = vi.fn().mockResolvedValue(new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("zip-bytes"))
-          controller.close()
-        },
-      }),
-      {
-        status: 200,
-        headers: {
-          "Content-Disposition": `attachment; filename="ordinal-mind-wiki-export-2026-05-06.zip"`,
-        },
-      }
-    ))
-
-    const pickerMock = vi.fn().mockResolvedValue({
-      createWritable: vi.fn().mockResolvedValue(writable),
-    })
-
-    const result = await downloadWikiExport({
-      fetchImpl: fetchMock,
-      token: "jwt-token",
-      windowLike: {
-        showSaveFilePicker: pickerMock,
-      },
-      now: new Date("2026-05-06T00:00:00.000Z"),
-    })
-
-    expect(result.status).toBe("success")
-    expect(result.filename).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: "Bearer jwt-token" })
-    expect(pickerMock).toHaveBeenCalledTimes(1)
-    expect(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))).toEqual(Buffer.from("zip-bytes"))
-  })
-
-  it("falls back to blob download when save picker is unavailable", async () => {
+  it("uses the browser download flow via blob and anchor", async () => {
     const clickMock = vi.fn()
     const removeMock = vi.fn()
     const appendChildMock = vi.fn()
@@ -89,33 +45,18 @@ describe("wikiExport", () => {
     const result = await downloadWikiExport({
       fetchImpl: fetchMock,
       token: "jwt-token",
-      windowLike: {},
       documentLike,
       now: new Date("2026-05-06T00:00:00.000Z"),
     })
 
     expect(result.status).toBe("success")
     expect(result.filename).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: "Bearer jwt-token" })
     expect(clickMock).toHaveBeenCalledTimes(1)
     expect(removeMock).toHaveBeenCalledTimes(1)
     expect(createObjectURLMock).toHaveBeenCalledTimes(1)
     expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:ordinalmind-export")
-  })
-
-  it("treats picker cancellation as a silent cancel", async () => {
-    const fetchMock = vi.fn()
-    const pickerMock = vi.fn().mockRejectedValue(new DOMException("cancelled", "AbortError"))
-
-    const result = await downloadWikiExport({
-      fetchImpl: fetchMock,
-      token: "jwt-token",
-      windowLike: {
-        showSaveFilePicker: pickerMock,
-      },
-    })
-
-    expect(result).toEqual({ status: "cancelled" })
-    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("returns an inline error when the export endpoint fails", async () => {
@@ -131,7 +72,6 @@ describe("wikiExport", () => {
     const result = await downloadWikiExport({
       fetchImpl: fetchMock,
       token: "jwt-token",
-      windowLike: {},
       documentLike: {
         body: {
           appendChild: vi.fn(),

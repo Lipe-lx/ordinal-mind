@@ -98,10 +98,6 @@ async function installIdentityMocks(page: Page) {
 
   await page.addInitScript((jwt) => {
     window.localStorage.setItem("ordinal-mind_discord_jwt", jwt)
-    Object.defineProperty(window, "showSaveFilePicker", {
-      value: undefined,
-      configurable: true,
-    })
   }, token)
 
   await page.route("**/api/auth/me", async (route) => {
