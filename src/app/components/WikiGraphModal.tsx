@@ -33,6 +33,9 @@ interface ColaLayoutOptions extends cytoscape.ShapedLayoutOptions {
   edgeLength?: number | ((edge: cytoscape.EdgeSingular) => number)
   infinite?: boolean
   alphaTest?: number
+  initialUnconstrainedIterations?: number
+  initialUserConstraintIterations?: number
+  initialAllConstraintsIterations?: number
 }
 
 interface Props {
@@ -150,9 +153,14 @@ export function WikiGraphModal({
       container,
       elements: toCytoscapeElements(filteredPayload),
       layout: buildGraphLayout(filters.viewMode, true),
-      wheelSensitivity: 0.8,
-      minZoom: 0.1,
-      maxZoom: 18.0,
+      wheelSensitivity: 0.35,
+      minZoom: 0.02,
+      maxZoom: 10.0,
+      zoomingEnabled: true,
+      userZoomingEnabled: true,
+      panningEnabled: true,
+      userPanningEnabled: true,
+      boxSelectionEnabled: false,
       style: buildGraphStylesheet(filters.viewMode),
     })
 
@@ -189,7 +197,7 @@ export function WikiGraphModal({
 
 
     cy.on("dbltap", "node", (event) => {
-      const node = filteredPayload.nodes.find((item) => item.id === event.target.id())
+      const node = filteredPayload?.nodes.find((item) => item.id === event.target.id())
       if (!node) return
       const target = resolveNavigationTarget(node)
       if (target) navigate(target)
@@ -204,9 +212,8 @@ export function WikiGraphModal({
       })
 
       cy.on("free", "node", () => {
-        if (layout) {
-          layout.stop()
-        }
+        // No need to stop if we are in infinite mode, 
+        // but if we were using a temporary layout for grab, we'd stop it here.
       })
     }
 
@@ -216,7 +223,7 @@ export function WikiGraphModal({
       }
     })
 
-    const initialFocus = filteredPayload.focus_node_id ?? filteredPayload.nodes[0]?.id ?? null
+    const initialFocus = filteredPayload?.focus_node_id ?? filteredPayload?.nodes[0]?.id ?? null
     if (initialFocus) {
       const focusNode = cy.getElementById(initialFocus)
       if (focusNode.length) {
@@ -231,6 +238,11 @@ export function WikiGraphModal({
       cy.fit(elements, 72)
     }
 
+    const onLayoutReady = () => {
+      fitGraph()
+    }
+
+    cy.one("layoutready", onLayoutReady)
     cy.one("layoutstop", fitGraph)
 
     cyRef.current = cy
@@ -385,7 +397,7 @@ export function WikiGraphModal({
               </div>
             </div>
 
-            <div className="wiki-graph-body">
+            <div className={`wiki-graph-body view-${filters.viewMode}`}>
               <section className="wiki-graph-canvas-panel">
                 {loading && (
                   <div className="wiki-graph-state">
@@ -470,16 +482,19 @@ function buildGraphLayout(mode: "tree" | "neural", randomize = false): cytoscape
       refresh: 1,
       maxSimulationTime: 4000,
       ungrabifyWhileSimulating: false,
-      fit: randomize,
+      fit: false,
       padding: 100,
       randomize,
       nodeSpacing: (node: cytoscape.NodeSingular) => {
         const kind = node.data("kind")
-        return kind === "collection" ? 50 : 15
+        return kind === "collection" ? 60 : 25
       },
-      edgeLength: 70,
-      infinite: false,
-      alphaTest: 0.04,
+      edgeLength: 85,
+      infinite: true,
+      alphaTest: 0.02,
+      initialUnconstrainedIterations: 200,
+      initialUserConstraintIterations: 100,
+      initialAllConstraintsIterations: 100,
     } as ColaLayoutOptions
   }
 
@@ -510,8 +525,6 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
       selector: "node",
       style: {
         "background-color": "#334155",
-        "border-width": 1.5,
-        "border-color": "rgba(255,255,255,0.16)",
         "label": isNeural ? "" : "data(label)",
         "text-wrap": "wrap",
         "text-max-width": "160",
@@ -524,35 +537,47 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "text-outline-width": 2.5,
         "shape": isNeural ? "ellipse" : "round-rectangle",
         "padding": isNeural ? "0px" : "10px",
-        "width": isNeural ? 14 : "label",
-        "height": isNeural ? 14 : "label",
-        "transition-property": "background-color, border-color, border-width, width, height, opacity, shadow-blur",
-        "transition-duration": 250,
+        "width": isNeural ? 16 : "label",
+        "height": isNeural ? 16 : "label",
+        "transition-property": "background-color, border-color, border-width, width, height, opacity, shadow-blur, shadow-opacity, shadow-color",
+        "transition-duration": 300,
+        ...(isNeural ? {
+          "background-fill": "radial-gradient",
+          "background-gradient-stop-colors": "#e2e8f0 #94a3b8 #475569",
+          "background-gradient-stop-positions": "0 40 100",
+          "shadow-blur": 18,
+          "shadow-color": "rgba(148, 163, 184, 0.45)",
+          "shadow-opacity": 0.7,
+          "border-width": 0,
+        } : {
+          "border-width": 1.5,
+          "border-color": "rgba(255,255,255,0.16)",
+        })
       },
     },
     {
       selector: "node:selected",
       style: {
         "border-color": "#f7931a",
-        "border-width": 3,
+        "border-width": isNeural ? 0 : 3,
         "label": "data(label)",
-        "width": isNeural ? 24 : "label",
-        "height": isNeural ? 24 : "label",
-        "shadow-blur": 15,
-        "shadow-color": "rgba(247, 147, 26, 0.45)",
-        "shadow-opacity": 0.8,
+        "width": isNeural ? 28 : "label",
+        "height": isNeural ? 28 : "label",
+        "shadow-blur": isNeural ? 35 : 15,
+        "shadow-color": isNeural ? "rgba(247, 147, 26, 0.85)" : "rgba(247, 147, 26, 0.45)",
+        "shadow-opacity": 1,
         "z-index": 100,
-      } as cytoscape.Css.Node,
+      },
     },
     {
       selector: "node.is-highlighted",
       style: {
         "label": "data(label)",
-        "width": isNeural ? 20 : "label",
-        "height": isNeural ? 20 : "label",
-        "shadow-blur": 10,
-        "shadow-color": "rgba(255, 255, 255, 0.25)",
-      } as cytoscape.Css.Node,
+        "width": isNeural ? 24 : "label",
+        "height": isNeural ? 24 : "label",
+        "shadow-blur": isNeural ? 25 : 10,
+        "shadow-color": isNeural ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.25)",
+      },
     },
     {
       selector: "node.kind-collection",
@@ -561,11 +586,19 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "border-color": "rgba(255,255,255,0.4)",
         "font-size": 16,
         "font-weight": 800,
-        "width": isNeural ? 36 : "label",
-        "height": isNeural ? 36 : "label",
-        "shadow-blur": 20,
-        "shadow-color": "rgba(247, 147, 26, 0.4)",
-      } as cytoscape.Css.Node,
+        "width": isNeural ? 42 : "label",
+        "height": isNeural ? 42 : "label",
+        ...(isNeural ? {
+          "background-gradient-stop-colors": "#fef9c3 #f7931a #ea580c",
+          "shadow-blur": 45,
+          "shadow-color": "rgba(247, 147, 26, 0.65)",
+          "shadow-opacity": 0.9,
+        } : {
+          "shadow-blur": 20,
+          "shadow-color": "rgba(247, 147, 26, 0.65)",
+          "shadow-opacity": 0.4,
+        })
+      },
     },
     {
       selector: "node.kind-field",
@@ -574,6 +607,10 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "border-color": "rgba(148, 163, 184, 0.22)",
         "font-size": 12,
         "font-weight": 700,
+        ...(isNeural ? {
+          "background-gradient-stop-colors": "#cffafe #06b6d4 #0891b2",
+          "shadow-color": "rgba(6, 182, 212, 0.6)",
+        } : {})
       },
     },
     {
@@ -581,6 +618,10 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
       style: {
         "shape": "round-rectangle",
         "font-size": 10,
+        ...(isNeural ? {
+          "background-gradient-stop-colors": "#fbcfe8 #ec4899 #db2777",
+          "shadow-color": "rgba(236, 72, 153, 0.6)",
+        } : {})
       },
     },
     {
@@ -588,6 +629,10 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
       style: {
         "background-color": "rgba(14, 116, 144, 0.92)",
         "border-color": "rgba(103, 232, 249, 0.28)",
+        ...(isNeural ? {
+          "background-gradient-stop-colors": "#dbeafe #3b82f6 #2563eb",
+          "shadow-color": "rgba(59, 130, 246, 0.6)",
+        } : {})
       },
     },
     {
@@ -596,6 +641,10 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "background-color": "rgba(71, 85, 105, 0.92)",
         "border-color": "rgba(148, 163, 184, 0.22)",
         "font-size": 10,
+        ...(isNeural ? {
+          "background-gradient-stop-colors": "#dcfce7 #22c55e #16a34a",
+          "shadow-color": "rgba(34, 197, 94, 0.6)",
+        } : {})
       },
     },
     {
@@ -604,46 +653,55 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "background-color": "rgba(69, 26, 3, 0.92)",
         "border-style": "dashed",
         "border-color": "rgba(251, 191, 36, 0.32)",
+        ...(isNeural ? {
+          "background-gradient-stop-colors": "#fef3c7 #fbbf24 #d97706",
+          "shadow-color": "rgba(251, 191, 36, 0.6)",
+        } : {})
       },
     },
     {
       selector: "node.status-canonical",
       style: {
         "border-color": "#4ade80",
-        "border-width": 2,
+        "border-width": isNeural ? 0 : 2,
+        ...(isNeural ? {
+          "underlay-color": "#4ade80",
+          "underlay-padding": 2,
+          "underlay-opacity": 0.15,
+        } : {})
       },
     },
     {
       selector: "node.status-draft",
       style: {
         "border-color": "#60a5fa",
-        "border-width": 2,
+        "border-width": isNeural ? 0 : 2,
       },
     },
     {
       selector: "node.status-disputed",
       style: {
         "border-color": "#fbbf24",
-        "border-width": 2,
+        "border-width": isNeural ? 0 : 2,
       },
     },
     {
       selector: "node.status-partial",
       style: {
         "border-color": "#fb7185",
-        "border-width": 2,
+        "border-width": isNeural ? 0 : 2,
       },
     },
     {
       selector: "edge",
       style: {
-        "curve-style": isNeural ? "bezier" : "taxi",
+        "curve-style": isNeural ? "unbundled-bezier" : "taxi",
         "taxi-direction": "rightward",
-        "line-color": isNeural ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.34)",
-        "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.28)" : "rgba(148, 163, 184, 0.42)",
-        "target-arrow-shape": "triangle",
-        "arrow-scale": isNeural ? 0.6 : 0.8,
-        "width": isNeural ? 1.2 : 1.4,
+        "line-color": isNeural ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.34)",
+        "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.42)",
+        "target-arrow-shape": isNeural ? "none" : "triangle",
+        "arrow-scale": isNeural ? 0.5 : 0.8,
+        "width": isNeural ? 1.0 : 1.4,
         "font-size": 9,
         "color": "#cbd5e1",
         "label": isNeural ? "" : "data(label)",
@@ -651,15 +709,15 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "text-background-color": "rgba(10,10,15,0.82)",
         "text-background-padding": "2",
         "transition-property": "line-color, width, opacity, target-arrow-color",
-        "transition-duration": 250,
+        "transition-duration": 300,
       },
     },
     {
       selector: "edge.is-highlighted",
       style: {
-        "line-color": "#f7931a",
-        "target-arrow-color": "#f7931a",
-        "width": 2.5,
+        "line-color": isNeural ? "rgba(247, 147, 26, 0.7)" : "#f7931a",
+        "target-arrow-color": isNeural ? "rgba(247, 147, 26, 0.8)" : "#f7931a",
+        "width": isNeural ? 2.0 : 2.5,
         "opacity": 1,
         "label": "data(label)",
         "z-index": 50,
@@ -697,7 +755,7 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
     {
       selector: ".is-faded",
       style: {
-        "opacity": 0.14,
+        "opacity": isNeural ? 0.08 : 0.14,
       },
     },
     {
@@ -706,5 +764,5 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "opacity": 1,
       },
     },
-  ]
+  ] as unknown as cytoscape.StylesheetJson
 }
