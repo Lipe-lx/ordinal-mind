@@ -209,9 +209,25 @@ export function BYOKModal({ onClose }: Props) {
                   transition={{ duration: 0.2 }}
                   style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
                 >
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: "0 0 0.5rem 0" }}>
-                    Provide keys for specialized search tools to enable the autonomous research phase.
-                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{ 
+                      alignSelf: "flex-start",
+                      fontSize: "0.65rem", 
+                      fontWeight: "700", 
+                      color: "var(--bitcoin-orange)", 
+                      backgroundColor: "rgba(247, 147, 26, 0.1)", 
+                      padding: "2px 6px", 
+                      borderRadius: "4px", 
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      border: "1px solid rgba(247, 147, 26, 0.2)"
+                    }}>
+                      Optional
+                    </span>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+                      Provide keys for specialized search tools to enable the autonomous research phase.
+                    </p>
+                  </div>
                   
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                     <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Brave Search API Key</label>
