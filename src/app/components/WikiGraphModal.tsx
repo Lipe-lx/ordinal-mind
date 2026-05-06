@@ -291,7 +291,6 @@ export function WikiGraphModal({
     }
   }, [filteredPayload, filters.viewMode, navigate])
 
-  const visibleWarnings = filteredPayload?.warnings.slice(0, 2) ?? []
 
   const content = (
     <AnimatePresence>
@@ -465,13 +464,7 @@ export function WikiGraphModal({
                       <span>{filteredPayload.counts.edges} edges</span>
                     </div>
                     <div ref={containerRef} className="wiki-graph-canvas" />
-                    {visibleWarnings.length > 0 && (
-                      <div className="wiki-graph-inline-warnings">
-                        {visibleWarnings.map((warning) => (
-                          <span key={warning}>{warning}</span>
-                        ))}
-                      </div>
-                    )}
+
                   </>
                 )}
               </section>
@@ -849,6 +842,8 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
       selector: "edge",
       style: {
         "curve-style": isNeural ? "unbundled-bezier" : "taxi",
+        "control-point-distances": isNeural ? 30 : undefined,
+        "control-point-weights": isNeural ? 0.5 : undefined,
         "taxi-direction": "rightward",
         "line-color": isNeural ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.34)",
         "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.42)",
