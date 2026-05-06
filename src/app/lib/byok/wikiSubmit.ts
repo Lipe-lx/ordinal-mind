@@ -41,13 +41,10 @@ export async function submitWikiContribution(params: {
   activeThreadId: string | null
   prompt: string
 }): Promise<WikiSubmitResult | WikiSubmitError> {
-  const jwt = typeof localStorage !== "undefined"
-    ? (localStorage.getItem("ordinal-mind_discord_jwt") ?? undefined)
-    : undefined
-
   try {
     const response = await fetch("/api/wiki/contribute", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contribution: {
@@ -55,7 +52,6 @@ export async function submitWikiContribution(params: {
           session_id: params.activeThreadId,
           source_excerpt: params.prompt,
         },
-        jwt: jwt || undefined,
       }),
     })
 

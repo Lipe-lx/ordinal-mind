@@ -3,8 +3,25 @@ import type { Env } from "../index"
 import { getWikiSchemaFailure, isMissingWikiSchemaError, toWikiToolUnavailable } from "./schema"
 import { isInscriptionId } from "./contribute"
 import { performWebSearch } from "../agents/webResearch"
+import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 
 export async function handleWikiTool(toolName: string, request: Request, env: Env): Promise<Response> {
+  const requestUrl = new URL(request.url)
+  if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
+    console.warn(JSON.stringify({ at: new Date().toISOString(), event: "security.write_origin_blocked", route: "/api/wiki/tools/*" }))
+    return json({ ok: false, error: "untrusted_origin" }, 403)
+  }
+
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_tools",
+    limit: 45,
+    windowSeconds: 60,
+    alertThreshold: 30,
+  })
+  if (!rate.ok) {
+    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+  }
+
   let payload: Record<string, unknown>
   try {
     payload = (await request.json()) as Record<string, unknown>

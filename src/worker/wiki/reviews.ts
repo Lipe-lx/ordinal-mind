@@ -1,5 +1,7 @@
 import type { Env } from "../index"
-import { verifyJWT, type OGTier } from "../auth/jwt"
+import type { OGTier } from "../auth/jwt"
+import { requireSessionUser } from "../auth/session"
+import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 
 interface ReviewActor {
   discordId: string
@@ -37,29 +39,19 @@ function json(data: unknown, status = 200): Response {
 }
 
 async function requireGenesisReviewer(request: Request, env: Env): Promise<ReviewActor | Response> {
-  if (!env.JWT_SECRET) {
-    return json({ ok: false, error: "auth_not_configured" }, 503)
+  const auth = await requireSessionUser(request, env)
+  if (!auth.ok) {
+    return json({ ok: false, error: auth.error }, auth.status)
   }
 
-  const authHeader = request.headers.get("Authorization")
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
-  if (!token) {
-    return json({ ok: false, error: "missing_auth_token" }, 401)
-  }
-
-  const payload = await verifyJWT(token, env.JWT_SECRET)
-  if (!payload) {
-    return json({ ok: false, error: "invalid_auth_token" }, 401)
-  }
-
-  if (payload.tier !== "genesis") {
+  if (auth.payload.tier !== "genesis") {
     return json({ ok: false, error: "genesis_review_required" }, 403)
   }
 
   return {
-    discordId: payload.sub,
-    username: payload.username,
-    tier: payload.tier,
+    discordId: auth.payload.sub,
+    username: auth.payload.username,
+    tier: auth.payload.tier,
   }
 }
 
@@ -166,6 +158,21 @@ async function queryPendingRows(env: Env, limit: number): Promise<PendingReviewR
 }
 
 export async function handlePendingReviews(request: Request, env: Env): Promise<Response> {
+  const requestUrl = new URL(request.url)
+  if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
+    return json({ ok: false, error: "untrusted_origin" }, 403)
+  }
+
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_reviews_pending",
+    limit: 90,
+    windowSeconds: 60,
+    alertThreshold: 70,
+  })
+  if (!rate.ok) {
+    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+  }
+
   const reviewer = await requireGenesisReviewer(request, env)
   if (reviewer instanceof Response) return reviewer
 
@@ -214,6 +221,21 @@ export async function handleReviewDecision(
   env: Env,
   reviewId: string
 ): Promise<Response> {
+  const requestUrl = new URL(request.url)
+  if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
+    return json({ ok: false, error: "untrusted_origin" }, 403)
+  }
+
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_review_decision",
+    limit: 50,
+    windowSeconds: 60,
+    alertThreshold: 30,
+  })
+  if (!rate.ok) {
+    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+  }
+
   const reviewer = await requireGenesisReviewer(request, env)
   if (reviewer instanceof Response) return reviewer
 

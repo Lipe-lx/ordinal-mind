@@ -1,11 +1,37 @@
 import type { Env } from "../index"
 import { getWikiSchemaFailure } from "./schema"
 import type { WikiPageDraft, WikiSection } from "./types"
+import { requireSessionUser } from "../auth/session"
+import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
   const schemaFailure = await getWikiSchemaFailure(env)
   if (schemaFailure) return json(schemaFailure, 503)
   if (!env.DB) return json({ ok: false, error: "wiki_db_unavailable", phase: "fail_soft" }, 503)
+
+  const requestUrl = new URL(request.url)
+  if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
+    console.warn(JSON.stringify({ at: new Date().toISOString(), event: "security.write_origin_blocked", route: "/api/wiki/ingest" }))
+    return json({ ok: false, error: "untrusted_origin" }, 403)
+  }
+
+  const auth = await requireSessionUser(request, env)
+  if (!auth.ok) {
+    return json({ ok: false, error: auth.error }, auth.status)
+  }
+  if (auth.payload.tier !== "og" && auth.payload.tier !== "genesis") {
+    return json({ ok: false, error: "insufficient_tier_for_ingest" }, 403)
+  }
+
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_ingest",
+    limit: 12,
+    windowSeconds: 60,
+    alertThreshold: 8,
+  })
+  if (!rate.ok) {
+    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+  }
 
   let payload: unknown
   try {
@@ -110,9 +136,13 @@ function sanitizeDraft(payload: unknown): WikiPageDraft | null {
   if (!slug || !title || !summary || !generatedAt || !byokProvider) return null
   if (!isEntityType(entityType)) return null
 
+  if (slug.length > 180 || title.length > 240 || summary.length > 3000 || byokProvider.length > 80) {
+    return null
+  }
+
   const sections = asSections(candidate.sections)
-  const crossRefs = asStringArray(candidate.cross_refs)
-  const sourceEventIds = asStringArray(candidate.source_event_ids)
+  const crossRefs = asStringArray(candidate.cross_refs).slice(0, 120)
+  const sourceEventIds = asStringArray(candidate.source_event_ids).slice(0, 240)
 
   return {
     slug,
@@ -132,10 +162,11 @@ function asSections(value: unknown): WikiSection[] {
   const sections: WikiSection[] = []
 
   for (const item of value) {
+    if (sections.length >= 40) break
     if (!item || typeof item !== "object") continue
     const record = item as Record<string, unknown>
-    const heading = asString(record.heading)
-    const body = asString(record.body)
+    const heading = asString(record.heading).slice(0, 180)
+    const body = asString(record.body).slice(0, 6000)
     if (!heading || !body) continue
 
     sections.push({
@@ -156,7 +187,7 @@ function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
     .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
+    .map((item) => item.trim().slice(0, 240))
     .filter(Boolean)
 }
 

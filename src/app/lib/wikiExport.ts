@@ -1,5 +1,3 @@
-import { readStoredDiscordJWT } from "./useDiscordIdentity"
-
 export type WikiExportStatus = "success" | "error"
 
 export interface WikiExportOutcome {
@@ -29,14 +27,7 @@ export async function downloadWikiExport(
 ): Promise<WikiExportOutcome> {
   const fetchImpl = dependencies.fetchImpl ?? fetch
   const documentLike = dependencies.documentLike ?? (typeof document !== "undefined" ? document : undefined)
-  const token = dependencies.token ?? readStoredDiscordJWT()
-
-  if (!token) {
-    return {
-      status: "error",
-      message: "Connect Discord to export the public wiki.",
-    }
-  }
+  const token = dependencies.token ?? null
 
   const suggestedName = buildSuggestedExportFilename(dependencies.now ?? new Date())
 
@@ -101,12 +92,11 @@ export function parseDownloadFilename(contentDisposition: string | null): string
   return asciiMatch?.[1]?.trim() ?? null
 }
 
-async function fetchExportArchive(fetchImpl: typeof fetch, token: string): Promise<Response> {
+async function fetchExportArchive(fetchImpl: typeof fetch, token: string | null): Promise<Response> {
   const response = await fetchImpl(EXPORT_ENDPOINT, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    credentials: "same-origin",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 
   if (!response.ok) {

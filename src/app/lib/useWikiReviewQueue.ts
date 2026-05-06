@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
 
-const DISCORD_JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
 const POLL_INTERVAL_MS = 30000
 
 export interface WikiReviewItem {
@@ -26,18 +25,9 @@ interface PendingReviewsResponse {
   items: WikiReviewItem[]
 }
 
-function readJWT(): string | null {
-  try {
-    return localStorage.getItem(DISCORD_JWT_STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
 async function fetchPendingReviews(): Promise<PendingReviewsResponse> {
-  const jwt = readJWT()
   const response = await fetch("/api/wiki/reviews/pending", {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+    credentials: "same-origin",
   })
 
   const payload = await response.json().catch(() => ({}))
@@ -49,12 +39,11 @@ async function fetchPendingReviews(): Promise<PendingReviewsResponse> {
 }
 
 async function sendReviewAction(reviewId: string, action: "approve" | "reject"): Promise<void> {
-  const jwt = readJWT()
   const response = await fetch(`/api/wiki/reviews/${encodeURIComponent(reviewId)}`, {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
     },
     body: JSON.stringify({ action }),
   })

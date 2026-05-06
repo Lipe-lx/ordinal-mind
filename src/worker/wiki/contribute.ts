@@ -11,6 +11,8 @@
 import type { Env } from "../index"
 import { verifyJWT } from "../auth/jwt"
 import type { OGTier } from "../auth/jwt"
+import { requireSessionUser } from "../auth/session"
+import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 
 /** Fields strictly for collections (origin, founders, etc.) */
 export const COLLECTION_ONLY_FIELDS = [
@@ -145,19 +147,24 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
 }
 
 async function resolveContributor(
+  request: Request,
   jwt: string | undefined,
   env: Env
 ): Promise<{ contributor_id: string | null; tier: OGTier }> {
-  if (!jwt || !env.JWT_SECRET) {
-    return { contributor_id: null, tier: "anon" }
+  const auth = await requireSessionUser(request, env)
+  if (auth.ok) {
+    return { contributor_id: auth.payload.sub, tier: auth.payload.tier }
   }
 
-  const payload = await verifyJWT(jwt, env.JWT_SECRET)
-  if (!payload) {
-    return { contributor_id: null, tier: "anon" }
+  // Backward-compatible fallback for legacy clients/tests that still send jwt in body.
+  if (jwt && env.JWT_SECRET) {
+    const payload = await verifyJWT(jwt, env.JWT_SECRET)
+    if (payload) {
+      return { contributor_id: payload.sub, tier: payload.tier }
+    }
   }
 
-  return { contributor_id: payload.sub, tier: payload.tier }
+  return { contributor_id: null, tier: "anon" }
 }
 
 async function checkDuplicate(
@@ -186,6 +193,22 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     return json({ ok: false, error: "wiki_db_unavailable" }, 503)
   }
 
+  const requestUrl = new URL(request.url)
+  if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
+    console.warn(JSON.stringify({ at: new Date().toISOString(), event: "security.write_origin_blocked", route: "/api/wiki/contribute" }))
+    return json({ ok: false, error: "untrusted_origin" }, 403)
+  }
+
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_contribute",
+    limit: 40,
+    windowSeconds: 60,
+    alertThreshold: 30,
+  })
+  if (!rate.ok) {
+    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -199,7 +222,11 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   }
 
   const { contribution, jwt } = parsed
-  const { contributor_id, tier } = await resolveContributor(jwt, env)
+  const { contributor_id, tier } = await resolveContributor(request, jwt, env)
+
+  if (contribution.collection_slug.length > 140 || contribution.value.length > 2000 || contribution.session_id.length > 120) {
+    return json({ ok: false, error: "payload_too_large" }, 413)
+  }
 
   // Enforce field scope (Inscriber belongs to Inscriptions, Founder to Collections, etc.)
   if (!isFieldAllowedForSlug(contribution.field, contribution.collection_slug)) {

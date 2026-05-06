@@ -274,6 +274,7 @@ async function ingestWikiDraft(draft: WikiPageDraft): Promise<boolean> {
   try {
     const response = await fetch("/api/wiki/ingest", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(draft),
     })

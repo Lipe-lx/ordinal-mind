@@ -137,9 +137,13 @@ export function createAdapter(config: ByokConfig): LLMAdapter | null {
 const SESSION_KEY = "ordinal-mind_byok_config"
 const LOCAL_ENCRYPTED_KEY = "ordinal-mind_byok_encrypted"
 const DISCORD_JWT_KEY = "ordinal-mind_discord_jwt"
+const DISCORD_CONNECTED_KEY = "ordinal-mind_discord_connected"
 
 function hasDiscordJWT(): boolean {
   try {
+    const connected = localStorage.getItem(DISCORD_CONNECTED_KEY)
+    if (connected === "1") return true
+
     const token = localStorage.getItem(DISCORD_JWT_KEY)
     if (!token) return false
     // Quick expiry check without crypto (parse payload middle segment)

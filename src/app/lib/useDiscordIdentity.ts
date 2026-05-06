@@ -1,26 +1,25 @@
 // useDiscordIdentity — React hook for Discord OAuth identity.
-// Handles: JWT capture from OAuth callback, localStorage persistence, /api/auth/me validation.
+// New flow:
+//   callback -> #auth_code=<one_time_code> -> POST /api/auth/exchange -> HttpOnly cookie
+//   then /api/auth/me validates cookie and returns profile.
 //
-// Storage:
-//   - JWT stored in localStorage (persists across sessions)
-//   - On connect: KeyStore.promoteToLocalStorage() encrypts LLM keys in localStorage
-//   - On disconnect: KeyStore.demoteToSessionStorage() moves keys back to sessionStorage
+// Legacy compatibility:
+//   - Keeps readStoredDiscordJWT export for transitional code paths.
 
 import { useState, useEffect, useCallback } from "react"
 import { useLocation } from "react-router"
-import { decodeJWTPayload } from "./byok/jwtClient"
-import type { OGTier, DiscordBadge } from "./byok/jwtClient"
 
 export interface DiscordIdentity {
   discordId: string
   username: string
   avatar: string | null
-  tier: OGTier
-  badges?: DiscordBadge[]
+  tier: "anon" | "community" | "og" | "genesis"
+  badges?: Array<{ name: string; level: number }>
 }
 
 export const DISCORD_JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
-const AUTH_TOKEN_PARAM = "auth_token"
+export const DISCORD_CONNECTED_STORAGE_KEY = "ordinal-mind_discord_connected"
+const AUTH_CODE_PARAM = "auth_code"
 const AUTH_ERROR_PARAM = "auth_error"
 const AUTH_SYNC_EVENT = "ordinal-mind:auth-sync"
 
@@ -37,68 +36,70 @@ export function readStoredDiscordJWT(): string | null {
   }
 }
 
-function storeJWT(token: string): void {
-  try {
-    localStorage.setItem(DISCORD_JWT_STORAGE_KEY, token)
-  } catch { /* noop */ }
-  broadcastAuthSync()
-}
-
-function clearJWT(): void {
+function clearLegacyJWT(): void {
   try {
     localStorage.removeItem(DISCORD_JWT_STORAGE_KEY)
-  } catch { /* noop */ }
-  broadcastAuthSync()
-}
-
-function isJWTExpired(token: string): boolean {
-  const payload = decodeJWTPayload(token)
-  if (!payload) return true
-  const now = Math.floor(Date.now() / 1000)
-  return payload.exp < now
-}
-
-function payloadToIdentity(payload: ReturnType<typeof decodeJWTPayload>): DiscordIdentity | null {
-  if (!payload) return null
-  return {
-    discordId: payload.sub,
-    username: payload.username,
-    avatar: payload.avatar,
-    tier: payload.tier,
-    badges: payload.badges || [],
+  } catch {
+    // noop
   }
 }
 
-/**
- * Capture and clean auth_token / auth_error from URL (OAuth callback redirect).
- * Returns the captured token string or null.
- */
-function captureAndCleanURLParams(): { token: string | null; error: string | null } {
+function setConnectedMarker(connected: boolean): void {
+  try {
+    localStorage.setItem(DISCORD_CONNECTED_STORAGE_KEY, connected ? "1" : "0")
+  } catch {
+    // noop
+  }
+  broadcastAuthSync()
+}
+
+function captureAndCleanAuthParams(): { code: string | null; error: string | null } {
   try {
     const url = new URL(window.location.href)
-    const token = url.searchParams.get(AUTH_TOKEN_PARAM)
-    const error = url.searchParams.get(AUTH_ERROR_PARAM)
+    const hashParams = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash)
 
-    if (token || error) {
-      url.searchParams.delete(AUTH_TOKEN_PARAM)
+    const code = hashParams.get(AUTH_CODE_PARAM) ?? url.searchParams.get(AUTH_CODE_PARAM)
+    const error = hashParams.get(AUTH_ERROR_PARAM) ?? url.searchParams.get(AUTH_ERROR_PARAM)
+
+    if (code || error) {
+      hashParams.delete(AUTH_CODE_PARAM)
+      hashParams.delete(AUTH_ERROR_PARAM)
+      url.searchParams.delete(AUTH_CODE_PARAM)
       url.searchParams.delete(AUTH_ERROR_PARAM)
+
+      const nextHash = hashParams.toString()
+      url.hash = nextHash ? `#${nextHash}` : ""
       window.history.replaceState({}, "", url.toString())
     }
 
-    return { token, error }
+    return { code, error }
   } catch {
-    return { token: null, error: null }
+    return { code: null, error: null }
   }
 }
 
-/**
- * Validate JWT against /api/auth/me and return fresh identity.
- * Returns null if validation fails.
- */
-async function validateWithServer(token: string): Promise<DiscordIdentity | null> {
+async function exchangeAuthCode(code: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch("/api/auth/exchange", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+      credentials: "same-origin",
+    })
+    const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+    if (!res.ok || payload.ok !== true) {
+      return { ok: false, error: typeof payload.error === "string" ? payload.error : "auth_exchange_failed" }
+    }
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "auth_exchange_failed" }
+  }
+}
+
+async function validateWithServer(): Promise<DiscordIdentity | null> {
   try {
     const res = await fetch("/api/auth/me", {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "same-origin",
     })
     if (!res.ok) return null
     const data = (await res.json()) as { ok: boolean; user?: DiscordIdentity }
@@ -122,7 +123,7 @@ export function useDiscordIdentity() {
     }
 
     function handleStorage(event: StorageEvent) {
-      if (event.key === null || event.key === DISCORD_JWT_STORAGE_KEY) {
+      if (event.key === null || event.key === DISCORD_CONNECTED_STORAGE_KEY) {
         handleAuthSync()
       }
     }
@@ -141,99 +142,85 @@ export function useDiscordIdentity() {
 
     async function init() {
       setIsLoading(true)
+      const { code, error } = captureAndCleanAuthParams()
 
-      // 1. Check for OAuth callback redirect params in URL
-      const { token: urlToken, error: urlError } = captureAndCleanURLParams()
-
-      if (urlError) {
-        setAuthError(urlError)
-        setIdentity(null)
-        setIsLoading(false)
-        return
-      }
-
-      setAuthError(null)
-
-      let token: string | null = urlToken
-
-      if (token) {
-        // Fresh from OAuth callback — store and promote LLM keys
-        storeJWT(token)
-        try {
-          // Dynamically import to avoid circular deps (KeyStore uses byok/index)
-          const { KeyStore } = await import("./byok/index")
-          await KeyStore.promoteToLocalStorage()
-        } catch {
-          // Non-blocking: LLM keys stay in sessionStorage if promotion fails
+      if (error) {
+        if (!cancelled) {
+          setAuthError(error)
+          setIdentity(null)
+          setConnectedMarker(false)
+          setIsLoading(false)
         }
-      } else {
-        // 2. Check existing localStorage JWT
-        token = readStoredDiscordJWT()
-      }
-
-      if (!token) {
-        if (!cancelled) setIdentity(null)
-        if (!cancelled) setIsLoading(false)
         return
       }
 
-      // 3. Client-side expiry check (fast path — avoids network if clearly expired)
-      if (isJWTExpired(token)) {
-        clearJWT()
-        if (!cancelled) setIdentity(null)
-        if (!cancelled) setIsLoading(false)
-        return
+      if (code) {
+        const exchanged = await exchangeAuthCode(code)
+        if (!exchanged.ok) {
+          if (!cancelled) {
+            setAuthError(exchanged.error)
+            setIdentity(null)
+            setConnectedMarker(false)
+            setIsLoading(false)
+          }
+          return
+        }
       }
 
-      // 4. Optimistic: set identity from JWT payload immediately (no flicker)
-      const optimisticPayload = decodeJWTPayload(token)
-      if (!cancelled) setIdentity(payloadToIdentity(optimisticPayload))
-
-      // 5. Validate with server for fresh data
-      const validated = await validateWithServer(token)
+      const validated = await validateWithServer()
       if (cancelled) return
 
       if (!validated) {
-        // Server rejected — token invalid or expired server-side
-        clearJWT()
         setIdentity(null)
+        setConnectedMarker(false)
       } else {
         setIdentity(validated)
+        setConnectedMarker(true)
+        setAuthError(null)
+        try {
+          const { KeyStore } = await import("./byok/index")
+          await KeyStore.promoteToLocalStorage()
+        } catch {
+          // Non-blocking; keep factual app fully available.
+        }
       }
 
+      clearLegacyJWT()
       setIsLoading(false)
     }
 
     void init()
-    return () => { cancelled = true }
-  }, [location.search, syncTick])
+    return () => {
+      cancelled = true
+    }
+  }, [location.search, location.hash, syncTick])
 
-  /**
-   * Redirect to Discord OAuth flow.
-   */
-  const connect = useCallback(async () => {
+  const connect = useCallback(() => {
     setAuthError(null)
     window.location.href = "/api/auth/discord"
   }, [])
 
-  /**
-   * Disconnect: clear JWT, demote LLM keys back to sessionStorage.
-   */
   const disconnect = useCallback(async () => {
-    clearJWT()
-    setIdentity(null)
     setAuthError(null)
+    setIdentity(null)
+    setConnectedMarker(false)
+    clearLegacyJWT()
 
-    // Move LLM keys back to ephemeral sessionStorage
+    try {
+      await fetch("/api/auth/disconnect", {
+        method: "POST",
+        credentials: "same-origin",
+      })
+    } catch {
+      // best effort
+    }
+
     try {
       const { KeyStore } = await import("./byok/index")
       await KeyStore.demoteToSessionStorage()
     } catch {
-      // Non-blocking: worst case user needs to re-enter LLM key
+      // Non-blocking
     }
-
-    // Optional: notify server for analytics (fire-and-forget)
-    void fetch("/api/auth/disconnect", { method: "POST" }).catch(() => {})
   }, [])
 
   return {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import worker, { type Env } from "../../src/worker/index"
+import { signJWT } from "../../src/worker/auth/jwt"
 
 type Row = Record<string, unknown>
 
@@ -664,10 +665,21 @@ describe("wiki routes backend", () => {
   it("ingests wiki pages and marks unverified claims", async () => {
     const db = seedDb()
     const env = createEnv({ withDb: true, db })
+    env.JWT_SECRET = "wiki-routes-test-secret"
+    const token = await signJWT(
+      {
+        sub: "discord-user-1",
+        username: "tester",
+        avatar: null,
+        tier: "og",
+        badges: [],
+      },
+      env.JWT_SECRET
+    )
 
     const ingestReq = new Request("https://ordinalmind.local/api/wiki/ingest", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         slug: "inscription:abc123i0",
         entity_type: "inscription",

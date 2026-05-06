@@ -12,6 +12,7 @@ import { persistRawEvents } from "./wiki/persistEvents"
 import { handleWikiRoute } from "./routes/wiki"
 import { handleAuthRoute } from "./routes/auth"
 import { fetchUnisat } from "./agents/unisat"
+import { attachSecurityHeaders } from "./security"
 
 import {
   fetchMetadata,
@@ -36,12 +37,13 @@ export interface Env {
   DISCORD_CLIENT_ID?: string
   DISCORD_CLIENT_SECRET?: string
   JWT_SECRET?: string
+  ALLOWED_ORIGINS?: string
 }
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 }
 
 function newRequestId(): string {
@@ -120,16 +122,18 @@ export default {
 
     // CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: CORS_HEADERS })
+      return attachSecurityHeaders(request, new Response(null, { headers: CORS_HEADERS }))
     }
 
     // API routes
     if (url.pathname.startsWith("/api/")) {
-      return handleApi(request, url, env)
+      const response = await handleApi(request, url, env)
+      return attachSecurityHeaders(request, response)
     }
 
     // Serve static assets (SPA fallback handled by wrangler.jsonc config)
-    return env.ASSETS.fetch(request)
+    const response = await env.ASSETS.fetch(request)
+    return attachSecurityHeaders(request, response)
   },
 }
 

@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from "fflate"
 import type { Env } from "../index"
-import { verifyJWT } from "../auth/jwt"
+import { requireSessionUser } from "../auth/session"
+import { enforceRateLimit } from "../security"
 import { getConsolidatedSnapshot } from "./consolidateEndpoint"
 import { getWikiSchemaFailure } from "./schema"
 import type {
@@ -133,6 +134,16 @@ const EXCLUDED_DATA = [
 ]
 
 export async function handleWikiExport(request: Request, env: Env): Promise<Response> {
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_export",
+    limit: 20,
+    windowSeconds: 60,
+    alertThreshold: 12,
+  })
+  if (!rate.ok) {
+    return jsonError({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+  }
+
   const actor = await requireAuthenticatedExportUser(request, env)
   if (actor instanceof Response) return actor
 
@@ -229,22 +240,12 @@ function buildWikiExportZip(snapshot: WikiExportSnapshot): Uint8Array {
 }
 
 async function requireAuthenticatedExportUser(request: Request, env: Env): Promise<{ discordId: string } | Response> {
-  if (!env.JWT_SECRET) {
-    return jsonError({ ok: false, error: "auth_not_configured" }, 503)
+  const auth = await requireSessionUser(request, env)
+  if (!auth.ok) {
+    return jsonError({ ok: false, error: auth.error }, auth.status)
   }
 
-  const authHeader = request.headers.get("Authorization")
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
-  if (!token) {
-    return jsonError({ ok: false, error: "missing_auth_token" }, 401)
-  }
-
-  const payload = await verifyJWT(token, env.JWT_SECRET)
-  if (!payload) {
-    return jsonError({ ok: false, error: "invalid_auth_token" }, 401)
-  }
-
-  return { discordId: payload.sub }
+  return { discordId: auth.payload.sub }
 }
 
 async function fetchAllWikiPages(env: Env): Promise<ExportableWikiPage[]> {
