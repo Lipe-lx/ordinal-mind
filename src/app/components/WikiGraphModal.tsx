@@ -491,9 +491,9 @@ export function WikiGraphModal({
                 {selectedNode && inspectorData && (
                   <motion.aside
                     className="wiki-graph-inspector glass-card"
-                    initial={deterministicRendering ? false : { x: "100%", opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    exit={deterministicRendering ? undefined : { x: "100%", opacity: 0 }}
+                    initial={deterministicRendering ? false : (isMobile ? { y: "100%", opacity: 0 } : { x: "100%", opacity: 0 })}
+                    animate={{ x: 0, y: 0, opacity: 1 }}
+                    exit={deterministicRendering ? undefined : (isMobile ? { y: "100%", opacity: 0 } : { x: "100%", opacity: 0 })}
                     transition={deterministicRendering ? { duration: 0 } : { type: "spring", damping: 25, stiffness: 200 }}
                   >
                     <header className="wiki-graph-inspector-header">
