@@ -338,72 +338,76 @@ export function WikiGraphModal({
             </header>
 
             <div className="wiki-graph-toolbar">
-              <label className="wiki-graph-search">
-                <input
-                  className="input-field"
-                  value={filters.search}
-                  onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-                  placeholder="Search"
-                />
-              </label>
+              <div className="wiki-graph-toolbar-main">
+                <label className="wiki-graph-search">
+                  <input
+                    className="input-field"
+                    value={filters.search}
+                    onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                    placeholder="Search"
+                  />
+                </label>
 
-              <div className="wiki-graph-view-toggle">
-                <button
-                  type="button"
-                  className={`view-toggle-item ${filters.viewMode === "neural" ? "is-active" : ""}`}
-                  onClick={() => setFilters((current) => ({ ...current, viewMode: "neural" }))}
-                >
-                  Neural
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-item ${filters.viewMode === "tree" ? "is-active" : ""}`}
-                  onClick={() => setFilters((current) => ({ ...current, viewMode: "tree" }))}
-                >
-                  Tree
-                </button>
-                <div className={`view-toggle-slider mode-${filters.viewMode}`} />
-              </div>
-
-              <div className="wiki-graph-filter-group">
-                <div className="wiki-graph-chip-row">
-                  {WIKI_GRAPH_NODE_KINDS.map((kind) => {
-                    const active = filters.nodeKinds.includes(kind)
-                    return (
-                      <button
-                        key={kind}
-                        type="button"
-                        className={`wiki-graph-chip ${active ? "is-active" : ""}`}
-                        onClick={() => setFilters((current) => ({
-                          ...current,
-                          nodeKinds: toggleValue(current.nodeKinds, kind, WIKI_GRAPH_NODE_KINDS),
-                        }))}
-                      >
-                        {formatKindLabel(kind)}
-                      </button>
-                    )
-                  })}
+                <div className="wiki-graph-view-toggle">
+                  <button
+                    type="button"
+                    className={`view-toggle-item ${filters.viewMode === "neural" ? "is-active" : ""}`}
+                    onClick={() => setFilters((current) => ({ ...current, viewMode: "neural" }))}
+                  >
+                    Neural
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-toggle-item ${filters.viewMode === "tree" ? "is-active" : ""}`}
+                    onClick={() => setFilters((current) => ({ ...current, viewMode: "tree" }))}
+                  >
+                    Tree
+                  </button>
+                  <div className={`view-toggle-slider mode-${filters.viewMode}`} />
                 </div>
               </div>
 
-              <div className="wiki-graph-filter-group">
-                <div className="wiki-graph-chip-row">
-                  {WIKI_GRAPH_STATUSES.map((status) => {
-                    const active = filters.statuses.includes(status)
-                    return (
-                      <button
-                        key={status}
-                        type="button"
-                        className={`wiki-graph-chip status-${status} ${active ? "is-active" : ""}`}
-                        onClick={() => setFilters((current) => ({
-                          ...current,
-                          statuses: toggleValue(current.statuses, status, WIKI_GRAPH_STATUSES),
-                        }))}
-                      >
-                        {formatStatusLabel(status)}
-                      </button>
-                    )
-                  })}
+              <div className="wiki-graph-toolbar-filters">
+                <div className="wiki-graph-filter-group">
+                  <div className="wiki-graph-chip-row">
+                    {WIKI_GRAPH_NODE_KINDS.map((kind) => {
+                      const active = filters.nodeKinds.includes(kind)
+                      return (
+                        <button
+                          key={kind}
+                          type="button"
+                          className={`wiki-graph-chip ${active ? "is-active" : ""}`}
+                          onClick={() => setFilters((current) => ({
+                            ...current,
+                            nodeKinds: toggleValue(current.nodeKinds, kind, WIKI_GRAPH_NODE_KINDS),
+                          }))}
+                        >
+                          {formatKindLabel(kind)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="wiki-graph-filter-group">
+                  <div className="wiki-graph-chip-row">
+                    {WIKI_GRAPH_STATUSES.map((status) => {
+                      const active = filters.statuses.includes(status)
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          className={`wiki-graph-chip status-${status} ${active ? "is-active" : ""}`}
+                          onClick={() => setFilters((current) => ({
+                            ...current,
+                            statuses: toggleValue(current.statuses, status, WIKI_GRAPH_STATUSES),
+                          }))}
+                        >
+                          {formatStatusLabel(status)}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
 

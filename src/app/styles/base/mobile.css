@@ -383,22 +383,65 @@
   }
 
   .wiki-graph-toolbar {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
   }
 
-  .wiki-graph-view-toggle,
-  .wiki-graph-search,
-  .wiki-graph-filter-group,
-  .wiki-graph-tool-actions {
+  .wiki-graph-toolbar-main {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
     width: 100%;
   }
 
+  .wiki-graph-search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .wiki-graph-view-toggle {
+    margin: 0;
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+
+  .wiki-graph-toolbar-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .wiki-graph-chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    gap: 0.4rem;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  }
+
+  .wiki-graph-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
   .wiki-graph-tool-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+    width: 100%;
     justify-content: stretch;
   }
 
   .wiki-graph-tool-actions .btn {
-    flex: 1 1 0;
+    flex: 1;
+    font-size: 0.65rem;
+    padding: 0.4rem 0.2rem;
+    min-width: 0;
+    white-space: nowrap;
   }
 
   .wiki-graph-body.is-mobile .wiki-graph-inspector {
