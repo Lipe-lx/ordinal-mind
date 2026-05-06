@@ -404,14 +404,14 @@ export function BYOKModal({ onClose }: Props) {
 
           {(activeTab === "llm" || activeTab === "research") && (
             <div className="byok-actions" style={{ marginTop: "1.5rem" }}>
-              <button className="btn btn-ghost" onClick={handleClear}>
+              <button className="btn btn-secondary" onClick={handleClear}>
                 Clear
               </button>
-              <button className="btn btn-ghost" onClick={onClose}>
+              <button className="btn btn-secondary" onClick={onClose}>
                 Cancel
               </button>
               <button
-                className="btn btn-primary"
+                className="btn btn-premium"
                 onClick={handleSave}
                 disabled={!isValid}
                 id="byok-save-btn"
