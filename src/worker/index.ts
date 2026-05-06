@@ -83,6 +83,8 @@ function initState(
     genesisTxResult: null,
     genesisTxFetched: false,
     transfersFetched: false,
+    skippedTransferCount: 0,
+    headTransferCount: 0,
     mentions: [],
     collectorSignals: emptyCollectorSignals(),
     mentionSourceCatalog: [],

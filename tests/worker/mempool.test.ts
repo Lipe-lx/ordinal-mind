@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { findInscriptionOutputLocation, analyzeTransfer } from "../../src/worker/agents/mempool"
+import { findInscriptionOutputLocation, findInscriptionInputLocation, analyzeTransfer } from "../../src/worker/agents/mempool"
 
 describe("findInscriptionOutputLocation", () => {
   it("tracks the sat into a non-zero vout using FIFO offset accounting", () => {
@@ -22,6 +22,86 @@ describe("findInscriptionOutputLocation", () => {
       vout: 2,
       offset: 350,
     })
+  })
+})
+
+describe("findInscriptionInputLocation", () => {
+  it("is the symmetric reverse of findInscriptionOutputLocation", () => {
+    const tx = {
+      txid: "tx1",
+      status: { confirmed: true, block_height: 1, block_time: 1710000000 },
+      fee: 1000,
+      vin: [
+        { txid: "prev0", vout: 0, prevout: { scriptpubkey_address: "seller", value: 600 } },
+        { txid: "prev1", vout: 1, prevout: { scriptpubkey_address: "buyer-funds", value: 1000 } },
+      ],
+      vout: [
+        { scriptpubkey_address: "change", value: 400 },
+        { scriptpubkey_address: "postage", value: 500 },
+        { scriptpubkey_address: "payment", value: 700 },
+      ],
+    }
+
+    // Forward: vin[1] offset 650 → vout[2] offset 350
+    const fwd = findInscriptionOutputLocation(tx as any, 1, 650)
+    expect(fwd).toEqual({ vout: 2, offset: 350 })
+
+    // Backward: vout[2] offset 350 → vin[1] offset 650
+    const bwd = findInscriptionInputLocation(tx as any, fwd.vout, fwd.offset)
+    expect(bwd).toEqual({ vinIndex: 1, offset: 650 })
+  })
+
+  it("correctly identifies inscription vin in ORD.NET 2-dummy marketplace pattern", () => {
+    // ORD.NET pattern: dummy inputs before the inscription input
+    const tx = {
+      txid: "sale_tx",
+      status: { confirmed: true, block_height: 850000, block_time: 1720000000 },
+      fee: 1000,
+      vin: [
+        { txid: "anchor1", vout: 0, prevout: { scriptpubkey_address: "ordnet", value: 600 } },
+        { txid: "anchor2", vout: 0, prevout: { scriptpubkey_address: "ordnet", value: 600 } },
+        { txid: "passthrough", vout: 0, prevout: { scriptpubkey_address: "passthrough", value: 10000 } },
+        { txid: "buyer_funds", vout: 0, prevout: { scriptpubkey_address: "buyer", value: 100000 } },
+      ],
+      vout: [
+        { scriptpubkey_address: "buyer", value: 10000 },     // inscription to buyer
+        { scriptpubkey_address: "seller", value: 95000 },    // payment
+        { scriptpubkey_address: "marketplace", value: 5000 }, // fee
+        { scriptpubkey_address: "ordnet", value: 600 },      // anchor recycled
+        { scriptpubkey_address: "ordnet", value: 600 },      // anchor recycled
+      ],
+    }
+
+    // The inscription sat is at offset 0 within vout[0] (after dummy sats).
+    // Forward: the inscription entered via vin[2] (passthrough) at offset 0 within that input.
+    // absolutePos = vin[0].value + vin[1].value + 0 = 1200
+    // vout[0] starts at absolutePos 0, covers 0..9999
+    // So inscription sat at absolutePos 1200 lands at vout[0] offset 1200.
+    const fwd = findInscriptionOutputLocation(tx as any, 2, 0)
+    expect(fwd.vout).toBe(0)
+    expect(fwd.offset).toBe(1200)
+
+    // Backward: vout[0] offset 1200 should correctly find vin[2]
+    const bwd = findInscriptionInputLocation(tx as any, 0, 1200)
+    expect(bwd.vinIndex).toBe(2)
+    expect(bwd.offset).toBe(0)
+  })
+
+  it("handles simple single-input transfer", () => {
+    const tx = {
+      txid: "simple",
+      status: { confirmed: true, block_height: 1, block_time: 1710000000 },
+      fee: 200,
+      vin: [
+        { txid: "prev", vout: 0, prevout: { scriptpubkey_address: "A", value: 10000 } },
+      ],
+      vout: [
+        { scriptpubkey_address: "B", value: 9800 },
+      ],
+    }
+
+    const bwd = findInscriptionInputLocation(tx as any, 0, 0)
+    expect(bwd).toEqual({ vinIndex: 0, offset: 0 })
   })
 })
 

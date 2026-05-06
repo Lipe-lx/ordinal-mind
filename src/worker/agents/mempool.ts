@@ -68,6 +68,18 @@ export interface TraceForwardOptions {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
+/**
+ * Result of the combined head + tail trace strategy.
+ * When the inscription has more transfers than the budget allows,
+ * `headTransfers` contains the first few and `tailTransfers` the most recent ones.
+ * `skippedCount` estimates how many transfers were not fetched in between.
+ */
+export interface SplitTraceResult {
+  headTransfers: EnrichedTransfer[]
+  tailTransfers: EnrichedTransfer[]
+  skippedCount: number
+}
+
 export const fetchMempool = {
   async tx(txid: string): Promise<MempoolTx | null> {
     const res = await fetch(`https://mempool.space/api/tx/${txid}`)
@@ -142,6 +154,162 @@ export const fetchMempool = {
     }
 
     return transfers
+  },
+
+  /**
+   * Traces inscription transfers BACKWARD from the current UTXO.
+   *
+   * Starting from the current output (txid:vout:offset), walks backwards
+   * through the vin chain to reconstruct recent transfer history.
+   *
+   * Uses full FIFO sat offset tracking (symmetric to the forward trace):
+   * 1. Fetch current tx
+   * 2. Compute absolute sat position = sum(vout[0..vout-1]) + offset
+   * 3. Find which vin's cumulative sat range contains that position
+   * 4. Record the transfer, then move to prevout (txid:vout)
+   * 5. Compute new offset within the previous output for next step
+   * 6. Repeat until limit reached or genesis hit
+   *
+   * Returns transfers in chronological order (oldest first).
+   */
+  async traceBackward(
+    currentTxid: string,
+    currentVout: number,
+    currentOffset: number,
+    genesisTxid: string,
+    options: TraceForwardOptions = {}
+  ): Promise<EnrichedTransfer[]> {
+    const { limit = 27, delayMs = 150, onProgress } = options
+    const transfers: EnrichedTransfer[] = []
+    let txid = currentTxid
+    let vout = currentVout
+    let offset = currentOffset
+    let depth = 0
+
+    while (depth < limit) {
+      if (depth > 0) {
+        await sleep(delayMs)
+      }
+
+      // 1. Fetch the current tx
+      const tx = await this.tx(txid)
+      if (!tx) break
+
+      // 2. Reverse FIFO: find which vin carried the inscription sat
+      const inputLocation = findInscriptionInputLocation(tx, vout, offset)
+      const inscriptionVinIndex = inputLocation.vinIndex
+
+      const prevTxid = tx.vin[inscriptionVinIndex]?.txid
+      const prevVout = tx.vin[inscriptionVinIndex]?.vout ?? 0
+
+      if (!prevTxid) break
+
+      // 3. Record this transfer (BEFORE genesis check — this tx IS a transfer)
+      const transfer = analyzeTransfer(tx, inscriptionVinIndex, vout)
+      transfers.push(transfer)
+
+      if (onProgress) {
+        onProgress(
+          depth + 1,
+          transfer.is_sale
+            ? `Recent sale: ${transfer.value ? (transfer.value / 1e8).toFixed(4) : "—"} BTC`
+            : `Recent transfer ${depth + 1}: ${truncAddr(transfer.from_address)} → ${truncAddr(transfer.to_address)}`
+        )
+      }
+
+      // 4. Stop AFTER recording if we've reached genesis
+      if (prevTxid === genesisTxid) break
+
+      // 5. Move backwards with the tracked offset
+      txid = prevTxid
+      vout = prevVout
+      offset = inputLocation.offset
+      depth++
+    }
+
+    // Return in chronological order (oldest first)
+    return transfers.reverse()
+  },
+
+  /**
+   * Combined trace: first N transfers from genesis + last M from current position.
+   * Maintains the same total request budget while capturing both the origin
+   * story and recent activity.
+   *
+   * If the forward trace reaches the current output within headLimit,
+   * all transfers are returned in headTransfers with no gap.
+   */
+  async traceSplit(
+    genesisTxid: string,
+    genesisVout: number,
+    currentOutput: string | undefined,
+    satpoint: string | undefined,
+    options: TraceForwardOptions & { headLimit?: number; tailLimit?: number } = {}
+  ): Promise<SplitTraceResult> {
+    const { headLimit = 3, tailLimit = 27, delayMs = 150, onProgress } = options
+
+    // Phase 1: Forward trace from genesis (head)
+    const headTransfers = await this.traceForward(genesisTxid, genesisVout, {
+      limit: headLimit,
+      delayMs,
+      onProgress,
+    })
+
+    // If forward trace ended early (inscription has ≤ headLimit transfers),
+    // or we have no current_output to trace back from, return everything as head.
+    if (headTransfers.length < headLimit || !currentOutput) {
+      return { headTransfers, tailTransfers: [], skippedCount: 0 }
+    }
+
+    // Check if the last forward-traced tx IS the current output
+    const [currentTxid, currentVoutStr] = currentOutput.split(":")
+    const currentVout = parseInt(currentVoutStr ?? "0", 10)
+    const lastHeadTxid = headTransfers[headTransfers.length - 1]?.tx_id
+
+    if (lastHeadTxid === currentTxid) {
+      // Forward trace reached current position — no gap needed
+      return { headTransfers, tailTransfers: [], skippedCount: 0 }
+    }
+
+    // Parse satpoint for offset (format: "txid:vout:offset")
+    let initialOffset = 0
+    if (satpoint) {
+      const parts = satpoint.split(":")
+      if (parts.length >= 3) {
+        initialOffset = parseInt(parts[2], 10) || 0
+      }
+    }
+
+    // Phase 2: Backward trace from current output (tail)
+    if (onProgress) {
+      await onProgress(headLimit + 1, "Scanning recent transfers from current position…")
+    }
+
+    const tailTransfers = await this.traceBackward(
+      currentTxid, currentVout, initialOffset, genesisTxid,
+      {
+        limit: tailLimit,
+        delayMs,
+        onProgress: onProgress ? (step, desc) => onProgress(headLimit + step, desc) : undefined,
+      }
+    )
+
+    // Deduplicate: remove any tail transfers that overlap with head
+    const headTxIds = new Set(headTransfers.map(t => t.tx_id))
+    const dedupedTail = tailTransfers.filter(t => !headTxIds.has(t.tx_id))
+
+    // If after dedup the tail is empty or contiguous with head, no gap
+    if (dedupedTail.length === 0) {
+      return { headTransfers, tailTransfers: [], skippedCount: 0 }
+    }
+
+    // Estimate skipped count:
+    // We know at least head.length + tail.length transfers exist.
+    // The gap is unknown but at least 1 (otherwise dedup would have caught it).
+    // We mark it as -1 (unknown) so the UI shows "..." without a specific number.
+    const skippedCount = -1
+
+    return { headTransfers, tailTransfers: dedupedTail, skippedCount }
   },
 }
 
@@ -283,6 +451,45 @@ export function findInscriptionOutputLocation(
   // Defensive fallback for malformed or incomplete transaction data.
   return {
     vout: Math.max(tx.vout.length - 1, 0),
+    offset: 0,
+  }
+}
+
+/**
+ * Reverse FIFO: given the output vout and the sat offset within that output,
+ * find which vin carried the inscription sat and what offset it had in the
+ * previous output.
+ *
+ * This is the symmetric reverse of findInscriptionOutputLocation:
+ *   Forward:  (vinIndex, inputOffset) → absolutePos → (vout, outputOffset)
+ *   Backward: (vout, outputOffset) → absolutePos → (vinIndex, inputOffset)
+ */
+export function findInscriptionInputLocation(
+  tx: MempoolTx,
+  outputVout: number,
+  outputOffset: number
+): { vinIndex: number; offset: number } {
+  // 1. Compute absolute sat position from the output side
+  const absoluteOffset = tx.vout
+    .slice(0, outputVout)
+    .reduce((sum, o) => sum + o.value, 0) + outputOffset
+
+  // 2. Walk the inputs to find which vin's sat range contains this position
+  let running = 0
+  for (let i = 0; i < tx.vin.length; i++) {
+    const inputValue = tx.vin[i].prevout?.value ?? 0
+    if (absoluteOffset < running + inputValue) {
+      return {
+        vinIndex: i,
+        offset: absoluteOffset - running,
+      }
+    }
+    running += inputValue
+  }
+
+  // Defensive fallback
+  return {
+    vinIndex: 0,
     offset: 0,
   }
 }

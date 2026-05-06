@@ -295,7 +295,7 @@ export function Chronicle() {
           onCancel={cancel}
         />
 
-        {/* Right Sidebar: Collection Context + Temporal Timeline */}
+        {/* Right Sidebar: Collection Context + Timeline */}
         <div className="chronicle-sidebar-right">
           <div style={{ 
             flex: rightSidebarMode === "provenance" ? 1 : 0, 
@@ -321,7 +321,7 @@ export function Chronicle() {
             >
               <div className="timeline-panel-title" style={{ position: "relative" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", gap: "8px" }}>
-                  <span className="timeline-panel-title-text">Temporal Timeline</span>
+                  <span className="timeline-panel-title-text">Timeline</span>
                   <OwnershipWidget
                     events={chronicle.events}
                     genesisAddress={chronicle.meta.genesis_owner_address}
@@ -362,7 +362,8 @@ export function Chronicle() {
               <div className="timeline-scroll-container">
                 <TemporalTree 
                   events={chronicle.events} 
-                  collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug} 
+                  collectionSlug={chronicle.collection_context.market.ord_net_match?.collection_slug ?? chronicle.collection_context.market.satflow_match?.collection_slug}
+                  timelineSplit={chronicle.timeline_split}
                 />
               </div>
             )}

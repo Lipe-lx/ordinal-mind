@@ -209,15 +209,18 @@ export async function parallelFetch(
   await state.onProgress?.("transfers", 0, "Starting forward transfer scan via mempool.space…")
 
   let transferCount = 0
-  const [transfersRes, collectionContextRes, genesisTxRes, unisatInfoRes] =
+  const [splitTraceRes, collectionContextRes, genesisTxRes, unisatInfoRes] =
     await Promise.allSettled([
       state.lite
-        ? Promise.resolve([])
-        : fetchMempool.traceForward(
+        ? Promise.resolve({ headTransfers: [], tailTransfers: [], skippedCount: 0 })
+        : fetchMempool.traceSplit(
             state.meta.genesis_txid,
             state.meta.genesis_vout,
+            state.meta.current_output,
+            state.meta.satpoint,
             {
-              limit: 30,
+              headLimit: 3,
+              tailLimit: 27,
               delayMs: state.diagnostics.route === "stream" ? 150 : 0,
               onProgress: async (step, desc) => {
                 transferCount = step
@@ -233,9 +236,13 @@ export async function parallelFetch(
       fetchUnisatInfo(state.inscriptionId, state.env, state.diagnostics),
     ])
 
-  state.transfers =
-    transfersRes.status === "fulfilled" ? transfersRes.value : []
-  state.transfersFetched = transfersRes.status === "fulfilled"
+  const splitResult = splitTraceRes.status === "fulfilled" ? splitTraceRes.value : null
+  state.transfers = splitResult
+    ? [...splitResult.headTransfers, ...splitResult.tailTransfers]
+    : []
+  state.transfersFetched = splitTraceRes.status === "fulfilled"
+  state.skippedTransferCount = splitResult?.skippedCount ?? 0
+  state.headTransferCount = splitResult?.headTransfers.length ?? 0
   state.collectionData =
     collectionContextRes.status === "fulfilled"
       ? collectionContextRes.value
@@ -256,7 +263,7 @@ export async function parallelFetch(
   }
 
   diagLog(state.diagnostics, "parallel_fetch_status", {
-    transfers: transfersRes.status,
+    transfers: splitTraceRes.status,
     collection_context: collectionContextRes.status,
     genesis_tx: genesisTxRes.status,
     unisat: unisatInfoRes.status,
@@ -563,6 +570,12 @@ export async function buildOutput(
     validation: state.validation || undefined,
     debug_info: state.diagnostics.debug
       ? state.mentionDebugInfo
+      : undefined,
+    timeline_split: state.skippedTransferCount !== 0
+      ? {
+          head_transfer_count: state.headTransferCount,
+          skipped_count: state.skippedTransferCount,
+        }
       : undefined,
   }
 

@@ -286,6 +286,11 @@ export interface Chronicle {
   unisat_enrichment?: UnisatEnrichment
   validation?: DataValidationResult
   debug_info?: ChronicleDebugInfo
+  /** When transfers are split (first N + last M), describes the gap */
+  timeline_split?: {
+    head_transfer_count: number   // number of transfers in the head section
+    skipped_count: number         // -1 = unknown gap, 0 = no gap
+  }
 }
 
 export interface WebResearchItem {

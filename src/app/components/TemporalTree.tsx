@@ -5,6 +5,11 @@ import { formatChronicleText as linkifyBrands } from "../lib/formatters"
 interface Props {
   events: ChronicleEvent[]
   collectionSlug?: string
+  /** When provided, inserts a visual gap divider between head and tail events */
+  timelineSplit?: {
+    head_transfer_count: number
+    skipped_count: number // -1 = unknown
+  }
 }
 
 const EVENT_ICONS: Record<string, string> = {
@@ -57,98 +62,167 @@ function formatBtcPrice(sats: number): string {
   return `${sats.toLocaleString("en-US")} sats`
 }
 
-export function TemporalTree({ events, collectionSlug }: Props) {
+/**
+ * Finds the split point index in the events array.
+ * The split happens after all "head" transfer/sale events.
+ * Non-transfer events (genesis, collection_link, etc.) that precede
+ * the first tail transfer belong to the head section.
+ */
+function findSplitIndex(
+  events: ChronicleEvent[],
+  headTransferCount: number
+): number | null {
+  if (headTransferCount <= 0) return null
+
+  let transfersSeen = 0
+  for (let i = 0; i < events.length; i++) {
+    const type = events[i].event_type
+    if (type === "transfer" || type === "sale") {
+      transfersSeen++
+      if (transfersSeen === headTransferCount) {
+        return i + 1 // split after this event
+      }
+    }
+  }
+  return null
+}
+
+export function TemporalTree({ events, collectionSlug, timelineSplit }: Props) {
   const hasTransfers = events.some(
     (e) => e.event_type === "transfer" || e.event_type === "sale"
   )
 
+  // Determine if we need to render a gap divider
+  const splitIndex = timelineSplit
+    ? findSplitIndex(events, timelineSplit.head_transfer_count)
+    : null
+
+  const renderEvent = (event: ChronicleEvent, index: number) => {
+    const url = sourceUrl(event.source)
+    const isHeuristic = event.metadata?.is_heuristic === true
+    const salePriceSats = event.metadata?.sale_price_sats as number | undefined
+    const platform = typeof event.metadata?.platform === "string" ? event.metadata.platform : undefined
+    const scope = typeof event.metadata?.scope === "string" ? event.metadata.scope : undefined
+
+    return (
+      <motion.div
+        key={event.id}
+        className="timeline-node"
+        data-type={event.event_type}
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{
+          duration: 0.4,
+          delay: index * 0.06,
+          ease: [0.4, 0, 0.2, 1],
+        }}
+        whileHover={{
+          scale: 1.01,
+          transition: { duration: 0.15 },
+        }}
+      >
+        <div className="timeline-node-header">
+          <span className="timeline-node-type">
+            {event.event_type === "social_mention"
+              ? socialIcon(platform)
+              : EVENT_ICONS[event.event_type] ?? "•"}{" "}
+            {event.event_type === "social_mention"
+              ? socialLabel(platform)
+              : linkifyBrands(EVENT_LABELS[event.event_type] ?? event.event_type, collectionSlug)}
+          </span>
+          <span className="timeline-node-time">
+            {formatDate(event.timestamp)}
+          </span>
+        </div>
+
+        <p className="timeline-node-desc">
+          {linkifyBrands(event.description, collectionSlug)}
+          {event.event_type === "social_mention" && scope && (
+            <span
+              className="timeline-node-heuristic"
+              title={scope === "collection_level"
+                ? "This signal matched the collection name more strongly than the specific inscription."
+                : scope === "mixed"
+                  ? "This signal references both the collection and the inscription label."
+                  : "This signal matched inscription-level labels directly."}
+            >
+              {scope === "collection_level"
+                ? "collection-level"
+                : scope === "mixed"
+                  ? "mixed-scope"
+                  : "inscription-level"}
+            </span>
+          )}
+          {event.event_type === "sale" && isHeuristic && (
+            <span
+              className="timeline-node-heuristic"
+              title="Price detected via on-chain heuristic analysis of PSBT transaction structure. Verify on mempool.space for exact details."
+            >
+              estimated
+            </span>
+          )}
+        </p>
+
+        {/* Sale price highlight */}
+        {event.event_type === "sale" && salePriceSats != null && (
+          <div className="timeline-node-price">
+            {formatBtcPrice(salePriceSats)}
+          </div>
+        )}
+
+        {url && (
+          <div className="timeline-node-source">
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              {event.source.type === "onchain"
+                ? "View on mempool.space ↗"
+                : "View source ↗"}
+            </a>
+          </div>
+        )}
+      </motion.div>
+    )
+  }
+
   return (
     <div className="temporal-tree">
-      {events.map((event, index) => {
-        const url = sourceUrl(event.source)
-        const isHeuristic = event.metadata?.is_heuristic === true
-        const salePriceSats = event.metadata?.sale_price_sats as number | undefined
-        const platform = typeof event.metadata?.platform === "string" ? event.metadata.platform : undefined
-        const scope = typeof event.metadata?.scope === "string" ? event.metadata.scope : undefined
+      {splitIndex != null ? (
+        <>
+          {/* Head: first transfers (origin story) */}
+          {events.slice(0, splitIndex).map((event, index) =>
+            renderEvent(event, index)
+          )}
 
-        return (
+          {/* Gap divider */}
           <motion.div
-            key={event.id}
-            className="timeline-node"
-            data-type={event.event_type}
-            initial={{ opacity: 0, y: 20, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="timeline-gap-divider"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
             transition={{
-              duration: 0.4,
-              delay: index * 0.06,
+              duration: 0.5,
+              delay: splitIndex * 0.06,
               ease: [0.4, 0, 0.2, 1],
             }}
-            whileHover={{
-              scale: 1.01,
-              transition: { duration: 0.15 },
-            }}
           >
-            <div className="timeline-node-header">
-              <span className="timeline-node-type">
-                {event.event_type === "social_mention"
-                  ? socialIcon(platform)
-                  : EVENT_ICONS[event.event_type] ?? "•"}{" "}
-                {event.event_type === "social_mention"
-                  ? socialLabel(platform)
-                  : linkifyBrands(EVENT_LABELS[event.event_type] ?? event.event_type, collectionSlug)}
-              </span>
-              <span className="timeline-node-time">
-                {formatDate(event.timestamp)}
-              </span>
+            <div className="timeline-gap-dots">
+              <span className="timeline-gap-dot" />
+              <span className="timeline-gap-dot" />
+              <span className="timeline-gap-dot" />
             </div>
-
-            <p className="timeline-node-desc">
-              {linkifyBrands(event.description, collectionSlug)}
-              {event.event_type === "social_mention" && scope && (
-                <span
-                  className="timeline-node-heuristic"
-                  title={scope === "collection_level"
-                    ? "This signal matched the collection name more strongly than the specific inscription."
-                    : scope === "mixed"
-                      ? "This signal references both the collection and the inscription label."
-                      : "This signal matched inscription-level labels directly."}
-                >
-                  {scope === "collection_level"
-                    ? "collection-level"
-                    : scope === "mixed"
-                      ? "mixed-scope"
-                      : "inscription-level"}
-                </span>
-              )}
-              {event.event_type === "sale" && isHeuristic && (
-                <span
-                  className="timeline-node-heuristic"
-                  title="Price detected via on-chain heuristic analysis of PSBT transaction structure. Verify on mempool.space for exact details."
-                >
-                  estimated
-                </span>
-              )}
-            </p>
-
-            {/* Sale price highlight */}
-            {event.event_type === "sale" && salePriceSats != null && (
-              <div className="timeline-node-price">
-                {formatBtcPrice(salePriceSats)}
-              </div>
-            )}
-
-            {url && (
-              <div className="timeline-node-source">
-                <a href={url} target="_blank" rel="noopener noreferrer">
-                  {event.source.type === "onchain"
-                    ? "View on mempool.space ↗"
-                    : "View source ↗"}
-                </a>
-              </div>
-            )}
+            <div className="timeline-gap-label">
+              Earlier movements omitted
+            </div>
+            <div className="timeline-gap-line" />
           </motion.div>
-        )
-      })}
+
+          {/* Tail: recent transfers */}
+          {events.slice(splitIndex).map((event, index) =>
+            renderEvent(event, splitIndex + index)
+          )}
+        </>
+      ) : (
+        // No split — render all events normally
+        events.map((event, index) => renderEvent(event, index))
+      )}
 
       {/* FIFO Disclosure — shown when transfer/sale events exist */}
       {hasTransfers && (

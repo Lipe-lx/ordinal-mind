@@ -7,6 +7,7 @@
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-glass);
   display: flex;
@@ -40,20 +41,22 @@
 .chronicle-card::after {
   content: "";
   position: absolute;
-  inset: -50%;
+  inset: 1px;
   background: radial-gradient(
     circle at center,
     rgba(255, 255, 255, 0.08) 0%,
     transparent 70%
   );
-  z-index: -1;
+  z-index: 0;
   opacity: 0.3;
   animation: card-glow 8s ease-in-out infinite alternate;
+  pointer-events: none;
+  border-radius: inherit;
 }
 
 @keyframes card-glow {
-  from { opacity: 0.05; transform: scale(0.95); }
-  to { opacity: 0.2; transform: scale(1.05); }
+  from { opacity: 0.05; }
+  to { opacity: 0.2; }
 }
 
 .chronicle-card::-webkit-scrollbar {

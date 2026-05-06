@@ -64,6 +64,9 @@ export interface ChronicleState {
   genesisTxResult: { vout: { scriptpubkey_address?: string; value: number }[] } | null
   genesisTxFetched: boolean
   transfersFetched: boolean
+  skippedTransferCount: number    // -1 = unknown gap, 0 = no gap
+  headTransferCount: number       // how many transfers in the "head" portion
+
 
   // Phase 3: Dependent fetch (mentions + lore)
   mentions: SocialMention[]
