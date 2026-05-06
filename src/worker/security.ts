@@ -123,7 +123,8 @@ export async function enforceRateLimit(
 
 export function attachSecurityHeaders(
   request: Request,
-  response: Response
+  response: Response,
+  isDev = false
 ): Response {
   const headers = new Headers(response.headers)
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -136,21 +137,19 @@ export function attachSecurityHeaders(
 
   const contentType = headers.get("Content-Type") || ""
   if (contentType.includes("text/html")) {
-    headers.set(
-      "Content-Security-Policy",
-      [
-        "default-src 'self'",
-        "base-uri 'self'",
-        "frame-ancestors 'none'",
-        "form-action 'self'",
-        "script-src 'self'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com data:",
-        "img-src 'self' data: blob: https:",
-        "connect-src 'self' https:",
-        "object-src 'none'",
-      ].join("; ")
-    )
+    const csp = [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      isDev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https:",
+      isDev ? "connect-src 'self' https: ws: wss:" : "connect-src 'self' https:",
+      "object-src 'none'",
+    ].join("; ")
+    headers.set("Content-Security-Policy", csp)
   }
 
   // CORS hardening: write routes should not be wildcard.

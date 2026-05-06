@@ -119,21 +119,22 @@ async function runPipeline(state: ChronicleState): Promise<ChronicleState> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+    const isDev = env.ENVIRONMENT === "development" || url.hostname === "localhost" || url.hostname === "127.0.0.1"
 
     // CORS preflight
     if (request.method === "OPTIONS") {
-      return attachSecurityHeaders(request, new Response(null, { headers: CORS_HEADERS }))
+      return attachSecurityHeaders(request, new Response(null, { headers: CORS_HEADERS }), isDev)
     }
 
     // API routes
     if (url.pathname.startsWith("/api/")) {
       const response = await handleApi(request, url, env)
-      return attachSecurityHeaders(request, response)
+      return attachSecurityHeaders(request, response, isDev)
     }
 
     // Serve static assets (SPA fallback handled by wrangler.jsonc config)
     const response = await env.ASSETS.fetch(request)
-    return attachSecurityHeaders(request, response)
+    return attachSecurityHeaders(request, response, isDev)
   },
 }
 
