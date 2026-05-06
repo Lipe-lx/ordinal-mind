@@ -1,6 +1,7 @@
 import { motion, useMotionValue, useTransform, useSpring } from "motion/react"
 import React, { memo, useRef } from "react"
 import type { RelatedInscriptionSummary } from "../lib/types"
+import { useDeterministicRendering } from "../lib/useDeterministicRendering"
 import { InscriptionMedia } from "./InscriptionMedia"
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
  * to ensure smooth 60fps interaction during 3D tilt.
  */
 export const GenealogyNode = memo(({ id, inscription, label, isRoot, compact, isFeatured, onTap }: Props) => {
+  const deterministicRendering = useDeterministicRendering()
   const numberLabel = inscription.inscription_number != null ? `#${inscription.inscription_number}` : "Pending"
 
   const mouseX = useMotionValue(0)
@@ -53,20 +55,20 @@ export const GenealogyNode = memo(({ id, inscription, label, isRoot, compact, is
   }
 
   return (
-    <motion.div
+      <motion.div
       id={id}
       className={`genealogy-node ${isRoot ? "is-root" : ""} ${compact ? "is-compact" : ""} ${isFeatured ? "is-featured" : ""}`}
-      whileHover={{ scale: 1.05, y: -8, transition: { duration: 0.3 } }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={deterministicRendering ? undefined : { scale: 1.05, y: -8, transition: { duration: 0.3 } }}
+      whileTap={deterministicRendering ? undefined : { scale: 0.98 }}
       onTap={onTap}
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      initial={{ opacity: 0, y: 20 }}
+      initial={deterministicRendering ? false : { opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       style={{ 
-        rotateX, 
-        rotateY, 
+        rotateX: deterministicRendering ? 0 : rotateX,
+        rotateY: deterministicRendering ? 0 : rotateY,
         perspective: 1000,
         transformStyle: "preserve-3d",
         cursor: "pointer",
@@ -78,8 +80,8 @@ export const GenealogyNode = memo(({ id, inscription, label, isRoot, compact, is
         {isRoot && (
           <motion.div 
             className="node-root-indicator"
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
+            animate={deterministicRendering ? { scale: 1 } : { scale: [1, 1.1, 1] }}
+            transition={deterministicRendering ? { duration: 0 } : { duration: 2, repeat: Infinity }}
             style={{ 
               transform: "translateZ(40px)", // High depth inside the card
               zIndex: 100,

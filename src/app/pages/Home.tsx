@@ -1,7 +1,8 @@
 import { useState, useTransition } from "react"
 import { useLocation, useNavigate } from "react-router"
-import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react"
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from "motion/react"
 import { OrdinalBackground } from "../components/OrdinalBackground"
+import { useMediaQuery } from "../lib/useMediaQuery"
 
 const TAPROOT_RE = /^bc1p[a-z0-9]{38,62}$/i
 const HEX_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
@@ -11,7 +12,17 @@ function isValidInput(v: string): boolean {
   return TAPROOT_RE.test(v) || HEX_ID_RE.test(v) || NUMBER_RE.test(v)
 }
 
-function DynamicLogo({ mouseX, mouseY }: { mouseX: MotionValue<number>, mouseY: MotionValue<number> }) {
+function DynamicLogo({
+  mouseX,
+  mouseY,
+  enableHover,
+  reduceMotion,
+}: {
+  mouseX: MotionValue<number>
+  mouseY: MotionValue<number>
+  enableHover: boolean
+  reduceMotion: boolean
+}) {
   const springConfig = { stiffness: 250, damping: 15, mass: 0.8 }
   const x = useSpring(useTransform(mouseX, [-200, 200], [-60, 60]), springConfig)
   const y = useSpring(useTransform(mouseY, [-200, 200], [-60, 60]), springConfig)
@@ -23,16 +34,19 @@ function DynamicLogo({ mouseX, mouseY }: { mouseX: MotionValue<number>, mouseY: 
     <motion.div 
       className="home-hero-logo"
       style={{ 
-        x, y, rotateX, rotateY, 
+        x: reduceMotion ? 0 : x,
+        y: reduceMotion ? 0 : y,
+        rotateX: reduceMotion ? 0 : rotateX,
+        rotateY: reduceMotion ? 0 : rotateY,
         perspective: 1200,
         cursor: "pointer",
       }}
-      initial={{ scale: 0.8, opacity: 0 }}
+      initial={reduceMotion ? false : { scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      whileHover={{ 
+      whileHover={enableHover ? {
         scale: 1.2,
         filter: "drop-shadow(0 0 40px var(--accent-glow-strong))"
-      }}
+      } : undefined}
       whileTap={{ scale: 0.9 }}
       transition={{ 
         scale: { type: "spring", stiffness: 400, damping: 20 },
@@ -59,21 +73,23 @@ function DynamicLogo({ mouseX, mouseY }: { mouseX: MotionValue<number>, mouseY: 
           strokeLinejoin="round" 
           fill="none"
           filter="url(#heroGlow)"
-          animate={{
+          animate={reduceMotion ? undefined : {
             d: [
               "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z",
               "M 45,155 A 85,85 0 1,1 195,155 C 195,115 175,95 160,95 C 145,95 130,130 120,130 C 110,130 95,95 80,95 C 65,95 45,115 45,155 Z",
               "M 50,150 A 80,80 0 1,1 190,150 C 190,120 170,100 155,100 C 140,100 135,125 120,125 C 105,125 100,100 85,100 C 70,100 50,120 50,150 Z"
             ]
           }}
-          transition={{
+          transition={reduceMotion ? undefined : {
             duration: 8,
             repeat: Infinity,
             ease: "easeInOut"
           }}
         />
         <circle cx="120" cy="165" r="6" fill="#F7931A">
-          <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite" />
+          {!reduceMotion && (
+            <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite" />
+          )}
         </circle>
       </svg>
     </motion.div>
@@ -86,6 +102,9 @@ export function Home() {
   const [isPending, startTransition] = useTransition()
   const navigate = useNavigate()
   const location = useLocation()
+  const isMobile = useMediaQuery("(max-width: 899px)")
+  const hasFinePointer = useMediaQuery("(hover: hover) and (pointer: fine)")
+  const reduceMotion = useReducedMotion()
 
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
@@ -141,11 +160,11 @@ export function Home() {
       >
         <div 
           className="home-hero-zone"
-          onMouseMove={handleHeroMouseMove}
-          onMouseLeave={handleHeroMouseLeave}
+          onMouseMove={hasFinePointer ? handleHeroMouseMove : undefined}
+          onMouseLeave={hasFinePointer ? handleHeroMouseLeave : undefined}
           style={{
-            padding: "80px",
-            margin: "-80px",
+            padding: hasFinePointer ? "80px" : "24px",
+            margin: hasFinePointer ? "-80px" : "-24px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -153,7 +172,7 @@ export function Home() {
           }}
         >
           <div className="home-hero">
-            <DynamicLogo mouseX={mouseX} mouseY={mouseY} />
+            <DynamicLogo mouseX={mouseX} mouseY={mouseY} enableHover={hasFinePointer} reduceMotion={Boolean(reduceMotion)} />
             <motion.h1 
               className="home-title"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -207,7 +226,7 @@ export function Home() {
               }}
               placeholder="Inscription # · hex ID · bc1p address"
               autoComplete="off"
-              autoFocus
+              autoFocus={!isMobile}
             />
           </div>
           <button

@@ -6,6 +6,8 @@ import cytoscape from "cytoscape"
 import cytoscapeElk from "cytoscape-elk"
 import cytoscapeFcose from "cytoscape-fcose"
 import cytoscapeCola from "cytoscape-cola"
+import { useDeterministicRendering } from "../lib/useDeterministicRendering"
+import { useMediaQuery } from "../lib/useMediaQuery"
 import type { WikiGraphNode } from "../lib/types"
 import {
   buildNodeInspector,
@@ -57,6 +59,8 @@ export function WikiGraphModal({
   onClose,
 }: Props) {
   const navigate = useNavigate()
+  const isMobile = useMediaQuery("(max-width: 899px)")
+  const deterministicRendering = useDeterministicRendering()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -71,7 +75,7 @@ export function WikiGraphModal({
 
   if (open && !prevOpen) {
     setPrevOpen(true)
-    setFilters(createDefaultWikiGraphFilters())
+    setFilters(createModalFilters(isMobile, deterministicRendering))
     setPayload(null)
     if (!collectionSlug) {
       setError("No collection wiki context is available for this inscription yet.")
@@ -165,7 +169,10 @@ export function WikiGraphModal({
     const cy = cytoscape({
       container,
       elements: toCytoscapeElements(filteredPayload),
-      layout: buildGraphLayout(filters.viewMode, true),
+      layout: buildGraphLayout(filters.viewMode, {
+        randomize: !deterministicRendering,
+        deterministic: deterministicRendering,
+      }),
       wheelSensitivity: 0.35,
       minZoom: 0.02,
       maxZoom: 10.0,
@@ -174,7 +181,7 @@ export function WikiGraphModal({
       panningEnabled: true,
       userPanningEnabled: true,
       boxSelectionEnabled: false,
-      style: buildGraphStylesheet(filters.viewMode),
+      style: buildGraphStylesheet(filters.viewMode, deterministicRendering),
     })
 
     // Tracks the node whose full network is persistently highlighted (click-locked).
@@ -289,7 +296,7 @@ export function WikiGraphModal({
       cy.destroy()
       cyRef.current = null
     }
-  }, [filteredPayload, filters.viewMode, navigate])
+  }, [deterministicRendering, filteredPayload, filters.viewMode, navigate])
 
 
   const content = (
@@ -297,23 +304,23 @@ export function WikiGraphModal({
       {open && (
         <motion.div
           className="wiki-graph-overlay"
-          initial={{ opacity: 0 }}
+          initial={deterministicRendering ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          exit={deterministicRendering ? undefined : { opacity: 0 }}
           onClick={(event) => {
             if (event.target === event.currentTarget) onClose()
           }}
         >
           <motion.div
             ref={dialogRef}
-            className="wiki-graph-modal glass-card"
+            className={`wiki-graph-modal glass-card ${isMobile ? "is-mobile-sheet" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="wiki-graph-title"
-            initial={{ opacity: 0, scale: 0.96, y: 24 }}
+            initial={deterministicRendering ? false : { opacity: 0, scale: 0.96, y: 24 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 24 }}
-            transition={{ duration: 0.22 }}
+            exit={deterministicRendering ? undefined : { opacity: 0, scale: 0.96, y: 24 }}
+            transition={{ duration: deterministicRendering ? 0 : 0.22 }}
           >
             <header className="wiki-graph-header">
               <h2 id="wiki-graph-title">Wiki Atlas</h2>
@@ -412,10 +419,14 @@ export function WikiGraphModal({
                     if (!nodeId || !cyRef.current) return
                     const network = collectFullNetwork(cyRef.current, nodeId)
                     if (network.empty()) return
-                    cyRef.current.animate({
-                      fit: { eles: network, padding: 90 },
-                      duration: 260,
-                    })
+                    if (deterministicRendering) {
+                      cyRef.current.fit(network, 90)
+                    } else {
+                      cyRef.current.animate({
+                        fit: { eles: network, padding: 90 },
+                        duration: 260,
+                      })
+                    }
                   }}
                 >
                   Recenter
@@ -428,7 +439,10 @@ export function WikiGraphModal({
                     if (!cy) return
                     // Release all pinned nodes before re-running the layout
                     cy.nodes().unlock()
-                    cy.layout(buildGraphLayout(filters.viewMode, true)).run()
+                    cy.layout(buildGraphLayout(filters.viewMode, {
+                      randomize: !deterministicRendering,
+                      deterministic: deterministicRendering,
+                    })).run()
                   }}
                 >
                   Reset Layout
@@ -436,7 +450,7 @@ export function WikiGraphModal({
               </div>
             </div>
 
-            <div className={`wiki-graph-body view-${filters.viewMode}`}>
+            <div className={`wiki-graph-body view-${filters.viewMode} ${isMobile ? "is-mobile" : ""}`}>
               <section className="wiki-graph-canvas-panel">
                 {loading && (
                   <div className="wiki-graph-state">
@@ -473,10 +487,10 @@ export function WikiGraphModal({
                 {selectedNode && inspectorData && (
                   <motion.aside
                     className="wiki-graph-inspector glass-card"
-                    initial={{ x: "100%", opacity: 0 }}
+                    initial={deterministicRendering ? false : { x: "100%", opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
-                    exit={{ x: "100%", opacity: 0 }}
-                    transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                    exit={deterministicRendering ? undefined : { x: "100%", opacity: 0 }}
+                    transition={deterministicRendering ? { duration: 0 } : { type: "spring", damping: 25, stiffness: 200 }}
                   >
                     <header className="wiki-graph-inspector-header">
                       <div className="wiki-graph-inspector-top">
@@ -551,6 +565,13 @@ export function WikiGraphModal({
   return createPortal(content, document.body)
 }
 
+function createModalFilters(isMobile: boolean, deterministicRendering = false): WikiGraphFilters {
+  return {
+    ...createDefaultWikiGraphFilters(),
+    viewMode: isMobile || deterministicRendering ? "tree" : "neural",
+  }
+}
+
 function toggleValue<T>(current: T[], value: T, fallback: T[]): T[] {
   const uniqueCurrent = Array.from(new Set(current))
   const active = uniqueCurrent.includes(value)
@@ -611,13 +632,19 @@ function collectFullNetwork(cy: cytoscape.Core, rootId: string): cytoscape.Colle
   return result
 }
 
-function buildGraphLayout(mode: "tree" | "neural", randomize = false): cytoscape.LayoutOptions {
+function buildGraphLayout(
+  mode: "tree" | "neural",
+  options?: { randomize?: boolean; deterministic?: boolean }
+): cytoscape.LayoutOptions {
+  const randomize = options?.randomize ?? false
+  const deterministic = options?.deterministic ?? false
+
   if (mode === "neural") {
     return {
       name: "cola",
-      animate: true,
+      animate: !deterministic,
       refresh: 2,
-      maxSimulationTime: 5000,
+      maxSimulationTime: deterministic ? 1500 : 5000,
       ungrabifyWhileSimulating: false,
       fit: false,
       padding: 60,
@@ -634,11 +661,11 @@ function buildGraphLayout(mode: "tree" | "neural", randomize = false): cytoscape
         if (sourceKind === "collection" || targetKind === "collection") return 80
         return 55
       },
-      infinite: true,
+      infinite: false,
       alphaTest: 0.02,
-      initialUnconstrainedIterations: 500,
-      initialUserConstraintIterations: 250,
-      initialAllConstraintsIterations: 250,
+      initialUnconstrainedIterations: deterministic ? 250 : 500,
+      initialUserConstraintIterations: deterministic ? 125 : 250,
+      initialAllConstraintsIterations: deterministic ? 125 : 250,
     } as ColaLayoutOptions
   }
 
@@ -661,7 +688,7 @@ function buildGraphLayout(mode: "tree" | "neural", randomize = false): cytoscape
   } as cytoscape.LayoutOptions
 }
 
-function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson {
+function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): cytoscape.StylesheetJson {
   const isNeural = mode === "neural"
 
   return [
@@ -684,7 +711,7 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
         "width": isNeural ? 16 : "label",
         "height": isNeural ? 16 : "label",
         "transition-property": "background-color, border-color, border-width, width, height, opacity, shadow-blur, shadow-opacity, shadow-color",
-        "transition-duration": 300,
+        "transition-duration": deterministic ? 0 : 300,
         ...(isNeural ? {
           "background-fill": "radial-gradient",
           "background-gradient-stop-colors": "#e2e8f0 #94a3b8 #475569",

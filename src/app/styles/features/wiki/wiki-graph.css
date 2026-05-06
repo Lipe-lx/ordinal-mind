@@ -5,7 +5,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-md);
+  padding:
+    max(var(--space-md), var(--safe-area-top))
+    max(var(--space-md), var(--safe-area-right))
+    max(var(--space-md), var(--safe-area-bottom))
+    max(var(--space-md), var(--safe-area-left));
   background:
     radial-gradient(circle at top left, rgba(247, 147, 26, 0.12), transparent 28%),
     radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.08), transparent 30%),
@@ -15,7 +19,7 @@
 
 .wiki-graph-modal {
   width: min(1380px, 100%);
-  height: min(840px, calc(100vh - 1.5rem));
+  height: min(840px, calc(100dvh - 1.5rem));
   padding: 0.9rem;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -482,7 +486,7 @@
 
 @media (max-width: 940px) {
   .wiki-graph-modal {
-    height: min(920px, calc(100vh - 1.5rem));
+    height: min(920px, calc(100dvh - 1.5rem));
     padding: 0.75rem;
   }
 

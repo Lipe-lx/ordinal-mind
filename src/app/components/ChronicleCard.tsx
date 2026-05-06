@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { KeyStore, getModelDisplayName } from "../lib/byok"
 import type { ResearchLog } from "../lib/byok/toolExecutor"
 import { SourcesWidget, type DataSource } from "./widgets/SourcesWidget"
@@ -9,6 +9,7 @@ import type { WikiActivityStatus } from "../lib/byok/useChronicleNarrativeChat"
 import type { SynthesisMode } from "../lib/byok/context"
 import { GenealogyTree } from "./GenealogyTree"
 import type { ChatMessage, ChatThreadSummary } from "../lib/byok/chatTypes"
+import { useMediaQuery } from "../lib/useMediaQuery"
 
 const LazyWikiGraphModal = lazy(() =>
   import("./WikiGraphModal").then((module) => ({ default: module.WikiGraphModal }))
@@ -74,11 +75,18 @@ export function ChronicleCard({
     ?? chronicle.collection_context.market.satflow_match?.collection_slug
     ?? chronicle.collection_context.market.match?.collection_slug
     ?? chronicle.collection_context.registry.match?.slug
+  const isMobile = useMediaQuery("(max-width: 899px)")
 
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
   const [layoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
   const [showWikiGraph, setShowWikiGraph] = useState(false)
+
+  useEffect(() => {
+    if (isMobile && layoutMode === "split") {
+      setLayoutMode("narrative")
+    }
+  }, [isMobile, layoutMode])
 
   const handleModelChange = (model: string) => {
     const current = KeyStore.get()
@@ -90,6 +98,11 @@ export function ChronicleCard({
   }
 
   const toggleExpand = (target: "narrative" | "genealogy") => {
+    if (isMobile) {
+      setLayoutMode(target)
+      return
+    }
+
     if (layoutMode === target) {
       setLayoutMode("split")
     } else {
@@ -111,7 +124,7 @@ export function ChronicleCard({
         </Suspense>
       )}
 
-      <div className={`chronicle-card glass-card layout-mode-${layoutMode}`}>
+      <div className={`chronicle-card glass-card layout-mode-${layoutMode} ${isMobile ? "is-mobile-card" : ""}`}>
         {chronicle.collector_signals.evidence_count > 0 && (
           <CollectorSignalsPanel chronicle={chronicle} />
         )}

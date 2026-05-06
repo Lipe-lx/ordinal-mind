@@ -24,7 +24,7 @@ export const router = createBrowserRouter([
     element: <Layout />,
     errorElement: <ErrorBoundary />,
     HydrateFallback: () => (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
         Loading...
       </div>
     ),

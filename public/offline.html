@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Ordinal Mind Offline</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0a0f;
+        --surface: rgba(255, 255, 255, 0.05);
+        --border: rgba(255, 255, 255, 0.1);
+        --text: #f0f0f5;
+        --muted: #8b8b9e;
+        --accent: #f7931a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(247, 147, 26, 0.14), transparent 35%),
+          var(--bg);
+        color: var(--text);
+        font-family: "Space Grotesk", system-ui, sans-serif;
+      }
+
+      main {
+        width: min(100%, 32rem);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 24px;
+        background: var(--surface);
+        backdrop-filter: blur(18px);
+      }
+
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(1.5rem, 5vw, 2.2rem);
+      }
+
+      p {
+        margin: 0 0 0.85rem;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      strong {
+        color: var(--text);
+      }
+
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Ordinal Mind is offline</h1>
+      <p><strong>The factual Chronicle needs live public data.</strong> This installable shell is available, but timeline and ownership data are not cached for offline use.</p>
+      <p>Reconnect to load fresh Ordinals, mempool and collection context sources without risking stale provenance.</p>
+      <p><a href="/">Try again</a></p>
+    </main>
+  </body>
+</html>

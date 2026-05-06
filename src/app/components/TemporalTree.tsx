@@ -1,6 +1,7 @@
 import { motion } from "motion/react"
 import type { ChronicleEvent } from "../lib/types"
 import { formatChronicleText as linkifyBrands } from "../lib/formatters"
+import { useDeterministicRendering } from "../lib/useDeterministicRendering"
 
 interface Props {
   events: ChronicleEvent[]
@@ -88,6 +89,7 @@ function findSplitIndex(
 }
 
 export function TemporalTree({ events, collectionSlug, timelineSplit }: Props) {
+  const deterministicRendering = useDeterministicRendering()
   const hasTransfers = events.some(
     (e) => e.event_type === "transfer" || e.event_type === "sale"
   )
@@ -109,17 +111,21 @@ export function TemporalTree({ events, collectionSlug, timelineSplit }: Props) {
         key={event.id}
         className="timeline-node"
         data-type={event.event_type}
-        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        initial={deterministicRendering ? false : { opacity: 0, y: 20, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{
-          duration: 0.4,
-          delay: index * 0.06,
-          ease: [0.4, 0, 0.2, 1],
-        }}
-        whileHover={{
-          scale: 1.01,
-          transition: { duration: 0.15 },
-        }}
+        transition={deterministicRendering
+          ? { duration: 0 }
+          : {
+              duration: 0.4,
+              delay: index * 0.06,
+              ease: [0.4, 0, 0.2, 1],
+            }}
+        whileHover={deterministicRendering
+          ? undefined
+          : {
+              scale: 1.01,
+              transition: { duration: 0.15 },
+            }}
       >
         <div className="timeline-node-header">
           <span className="timeline-node-type">
@@ -195,13 +201,15 @@ export function TemporalTree({ events, collectionSlug, timelineSplit }: Props) {
           {/* Gap divider */}
           <motion.div
             className="timeline-gap-divider"
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={deterministicRendering ? false : { opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{
-              duration: 0.5,
-              delay: splitIndex * 0.06,
-              ease: [0.4, 0, 0.2, 1],
-            }}
+            transition={deterministicRendering
+              ? { duration: 0 }
+              : {
+                  duration: 0.5,
+                  delay: splitIndex * 0.06,
+                  ease: [0.4, 0, 0.2, 1],
+                }}
           >
             <div className="timeline-gap-dots">
               <span className="timeline-gap-dot" />
@@ -228,9 +236,11 @@ export function TemporalTree({ events, collectionSlug, timelineSplit }: Props) {
       {hasTransfers && (
         <motion.div
           className="timeline-disclaimer"
-          initial={{ opacity: 0 }}
+          initial={deterministicRendering ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: events.length * 0.06 + 0.2, duration: 0.4 }}
+          transition={deterministicRendering
+            ? { duration: 0 }
+            : { delay: events.length * 0.06 + 0.2, duration: 0.4 }}
         >
           <span className="timeline-disclaimer-icon">ℹ️</span>
           <span>

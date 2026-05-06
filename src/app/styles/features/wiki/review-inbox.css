@@ -7,11 +7,17 @@
   align-items: center;
   justify-content: center;
   z-index: 1100;
+  overflow: auto;
+  padding:
+    max(var(--space-md), var(--safe-area-top))
+    max(var(--space-md), var(--safe-area-right))
+    max(var(--space-md), var(--safe-area-bottom))
+    max(var(--space-md), var(--safe-area-left));
 }
 
 .wiki-review-modal {
   width: min(900px, calc(100vw - 2rem));
-  max-height: min(82vh, 900px);
+  max-height: min(82dvh, 900px);
   padding: var(--space-xl);
   background: var(--bg-modal-elevated);
   border-color: var(--border-glass-hover);

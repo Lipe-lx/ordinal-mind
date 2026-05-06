@@ -3,6 +3,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
+  min-height: 44px;
   padding: var(--space-sm) var(--space-lg);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -12,6 +13,7 @@
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-smooth);
   outline: none;
+  touch-action: manipulation;
 }
 
 .btn:disabled {
@@ -61,6 +63,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   font-size: 1rem;
   padding: 4px;
   border-radius: var(--radius-full);

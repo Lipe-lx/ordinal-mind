@@ -9,6 +9,7 @@ import {
 } from "../lib/genealogy"
 import { computeGenealogyAutoFitScale, GENEALOGY_LAYOUT_SETTLE_DELAYS_MS } from "../lib/genealogyLayout"
 import { formatContentTypeLabel } from "../lib/media"
+import { useDeterministicRendering } from "../lib/useDeterministicRendering"
 import { GenealogyNode } from "./GenealogyNode"
 import { InscriptionMedia } from "./InscriptionMedia"
 
@@ -107,6 +108,7 @@ interface Props {
 type GenealogyViewMode = "tree" | "grouped"
 
 export const GenealogyTree = memo(({ chronicle }: Props) => {
+  const deterministicRendering = useDeterministicRendering()
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number, y: number }>>({})
   const [viewMode, setViewMode] = useState<GenealogyViewMode>("grouped")
@@ -124,6 +126,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   
   // Spring physics
   const springScale = useSpring(scale, { stiffness: 120, damping: 24 })
+  const renderedScale = deterministicRendering ? scale : springScale
 
   // Parallax effect only when dragging
   const bgX = useTransform(x, (vx) => (vx as number) * 0.1)
@@ -319,14 +322,15 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     hasUserInteracted.current = false
     clearPendingLayoutSync()
 
-    settleTimeoutsRef.current = GENEALOGY_LAYOUT_SETTLE_DELAYS_MS.map((delayMs) =>
+    const settleDelays = deterministicRendering ? [0] : GENEALOGY_LAYOUT_SETTLE_DELAYS_MS
+    settleTimeoutsRef.current = settleDelays.map((delayMs) =>
       window.setTimeout(() => {
         syncTreeLayout(true)
       }, delayMs)
     )
 
     return clearPendingLayoutSync
-  }, [chronicle.meta.inscription_id, clearPendingLayoutSync, syncTreeLayout])
+  }, [chronicle.meta.inscription_id, clearPendingLayoutSync, deterministicRendering, syncTreeLayout])
 
   useEffect(() => {
     hasUserInteracted.current = false
@@ -378,9 +382,10 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     return (
       <motion.div 
         className={`genealogy-node ${isCompact ? "is-compact" : ""}`}
-        whileHover={{ scale: 1.02, y: -4, transition: { duration: 0.2 } }}
-        initial={{ opacity: 0, y: 20 }}
+        whileHover={deterministicRendering ? undefined : { scale: 1.02, y: -4, transition: { duration: 0.2 } }}
+        initial={deterministicRendering ? false : { opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={deterministicRendering ? { duration: 0 } : undefined}
       >
         <div 
           className="node-card glass-card genealogy-node-more"
@@ -400,16 +405,21 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         </div>
       </motion.div>
     );
-  }, [root.inscription_id]);
+  }, [deterministicRendering, root.inscription_id]);
 
   const handleDoubleClick = useCallback(() => {
     markUserInteracted()
     applyAutoFit()
-    // Animate x and y smoothly with elastic physics
-    animate(x, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
-    animate(y, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
+    if (deterministicRendering) {
+      x.set(0)
+      y.set(0)
+    } else {
+      // Animate x and y smoothly with elastic physics
+      animate(x, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
+      animate(y, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
+    }
     syncTreeLayout(false)
-  }, [applyAutoFit, markUserInteracted, syncTreeLayout, x, y])
+  }, [applyAutoFit, deterministicRendering, markUserInteracted, syncTreeLayout, x, y])
 
   return (
     <div 
@@ -443,10 +453,10 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       <motion.div 
         className="genealogy-tree" 
         ref={treeRef}
-        drag
+        drag={!deterministicRendering}
         dragMomentum={false}
         onDragStart={markUserInteracted}
-        style={{ x, y, scale: springScale }}
+        style={{ x, y, scale: renderedScale }}
       >
         {/* SVG Connections Layer */}
         <svg 
@@ -626,16 +636,16 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         {selectedNode && (
           <motion.div 
             className="node-detail-overlay"
-            initial={{ opacity: 0 }}
+            initial={deterministicRendering ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={deterministicRendering ? undefined : { opacity: 0 }}
             onClick={() => setSelectedNode(null)}
           >
             <motion.div 
               className="node-detail-card glass-card"
-              initial={{ scale: 0.9, y: 20 }}
+              initial={deterministicRendering ? false : { scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
+              exit={deterministicRendering ? undefined : { scale: 0.9, y: 20 }}
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <button className="node-detail-close" onClick={() => setSelectedNode(null)}>✕</button>

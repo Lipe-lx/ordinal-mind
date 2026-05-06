@@ -1,10 +1,13 @@
 import { useEffect, useRef } from "react"
 import p5 from "p5"
+import { useReducedMotion } from "motion/react"
 
 export function OrdinalBackground() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
+    if (reduceMotion) return
     if (!containerRef.current) return
 
     const sketch = (p: p5) => {
@@ -108,7 +111,9 @@ export function OrdinalBackground() {
     return () => {
       p5Instance.remove()
     }
-  }, [])
+  }, [reduceMotion])
+
+  if (reduceMotion) return null
 
   return (
     <div 

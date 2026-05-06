@@ -7,14 +7,21 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  overflow: auto;
+  padding:
+    max(var(--space-md), var(--safe-area-top))
+    max(var(--space-md), var(--safe-area-right))
+    max(var(--space-md), var(--safe-area-bottom))
+    max(var(--space-md), var(--safe-area-left));
 }
 
 .byok-modal {
   width: 100%;
   max-width: 480px;
+  max-height: calc(100dvh - max(var(--space-md), var(--safe-area-top)) - max(var(--space-md), var(--safe-area-bottom)));
   padding: var(--space-2xl);
-  margin: var(--space-lg);
   background: var(--bg-modal-elevated);
+  overflow: auto;
 }
 
 .byok-modal h2 {

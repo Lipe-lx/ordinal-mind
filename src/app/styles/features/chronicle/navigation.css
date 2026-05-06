@@ -131,7 +131,7 @@
 .preview-fullscreen-shell {
   position: relative;
   width: min(calc(100vw - 4rem), 1600px);
-  height: min(calc(100vh - 4rem), 1100px);
+  height: min(calc(100dvh - 4rem), 1100px);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-glass);
   background: rgba(7, 10, 18, 0.78);
