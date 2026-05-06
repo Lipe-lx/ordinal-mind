@@ -1,0 +1,78 @@
+.mobile-chronicle-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-glass);
+  position: relative;
+  z-index: 20;
+  width: 100%;
+}
+
+.mobile-nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: var(--space-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.mobile-nav-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.mobile-nav-btn:not(:disabled):active {
+  color: var(--accent-primary);
+  transform: scale(0.9);
+}
+
+.mobile-nav-title-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mobile-nav-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.mobile-nav-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+
+.mobile-nav-indicators {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.mobile-nav-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.mobile-nav-dot.active {
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px var(--accent-glow);
+  width: 12px;
+  border-radius: 2px;
+}

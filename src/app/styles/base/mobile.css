@@ -59,10 +59,13 @@
   .layout-header {
     grid-template-columns: auto minmax(0, 1fr) auto;
     padding:
-      calc(var(--space-md) + var(--safe-area-top))
-      calc(var(--space-md) + var(--safe-area-right))
-      var(--space-sm)
-      calc(var(--space-md) + var(--safe-area-left));
+      calc(var(--space-sm) + var(--safe-area-top))
+      calc(var(--space-xs) + var(--safe-area-right))
+      var(--space-xs)
+      calc(var(--space-xs) + var(--safe-area-left));
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-glass);
+    min-height: 56px;
   }
 
   .layout-header-left,
@@ -87,6 +90,11 @@
       calc(var(--space-xl) + var(--safe-area-bottom))
       calc(var(--space-md) + var(--safe-area-left));
     overflow: visible;
+    position: relative;
+  }
+
+  .layout:has(.chronicle-page) .layout-main {
+    padding: 0;
   }
 
   .layout-footer {
@@ -143,22 +151,26 @@
     justify-content: center;
   }
 
-  .chronicle-page,
-  .chronicle {
+  .chronicle-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     height: 100%;
-    min-height: 0;
     overflow: hidden;
+    background: var(--bg-primary);
+    z-index: 10;
+    position: relative;
   }
 
   .chronicle {
     display: flex;
     flex-direction: column;
+    flex: 1;
     height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
-    gap: var(--space-md);
+    overflow: hidden;
+    gap: 0;
     width: 100%;
-    padding-bottom: var(--space-xl);
+    padding-bottom: 0;
     scrollbar-width: none;
   }
 
@@ -166,27 +178,52 @@
     display: none;
   }
 
-  .chronicle-sidebar-left {
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    flex: none;
+  .chronicle > * {
+    flex: 1;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 
+  .chronicle-sidebar-left,
   .chronicle-card {
-    height: auto;
-    min-height: 380px; /* Base height for readability */
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: visible;
+    height: 100% !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
+    border: none !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    border-radius: 0 !important;
+    padding: var(--space-xs) !important;
   }
 
   .chronicle-sidebar-right {
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    flex: none;
+    height: 100% !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    border: none !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+
+  .widget-provenance {
+    flex: 0 0 auto;
+    margin: var(--space-xs) !important;
+    z-index: 30;
+    transition: all 0.3s var(--ease-smooth);
+  }
+
+  .widget-provenance.expanded {
+    flex: 1 1 auto;
+    max-height: 80% !important;
   }
 
   .timeline-panel,
@@ -194,7 +231,20 @@
     height: auto;
     max-height: none;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin: 0 var(--space-xs) var(--space-xs) !important;
+  }
+
+  .timeline-panel.collapsed-by-provenance {
+    flex: 0 1 120px;
+    opacity: 0.8;
+  }
+
+  .widget-provenance.expanded .widget-provenance-body {
+    max-height: none !important;
   }
 
   .chronicle-card-content-preview {
@@ -204,9 +254,6 @@
     width: 100%;
   }
 
-  .chronicle-card {
-    padding: var(--space-sm);
-  }
 
   .chronicle-tabs-header {
     min-height: auto;
@@ -268,12 +315,26 @@
     padding-right: 0;
   }
 
-  .chronicle-sidebar-right-mobile {
-    gap: var(--space-md);
+  .timeline-scroll-container {
+    padding: var(--space-xs) 0 var(--space-md);
   }
 
-  .timeline-scroll-container {
-    padding: var(--space-sm) var(--space-sm) var(--space-md);
+  .temporal-tree {
+    padding-left: var(--space-lg);
+    padding-right: 0;
+  }
+
+  .genealogy-tree {
+    padding: var(--space-lg) var(--space-sm) !important;
+  }
+
+  .timeline-node::before {
+    left: calc(-1 * var(--space-lg) + 11px);
+  }
+
+  .timeline-node::after {
+    left: calc(-1 * var(--space-lg) + 18px);
+    width: calc(var(--space-lg) - 18px);
   }
 
   .address-page {

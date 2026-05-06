@@ -47,5 +47,6 @@
 
 @import "./styles/features/chronicle/navigation.css";
 @import "./styles/features/chronicle/tabs.css";
+@import "./styles/features/chronicle/mobile-nav.css";
 @import "./styles/features/chronicle/genealogy.css";
 @import "./styles/base/mobile.css";
