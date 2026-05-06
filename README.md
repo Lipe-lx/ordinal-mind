@@ -68,6 +68,7 @@ Ordinal Mind resolves assets through a tiered verification pipeline:
 - **💬 Intent-Aware Chat**: Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction.
 - **🛡️ Sealed Security**: LLM keys are encrypted at-rest in `localStorage` using **AES-256-GCM** derived from the user's JWT.
 - **⚡ SSE-Powered Progress**: Real-time resolution status and research activity monitoring via Server-Sent Events.
+- **🌱 Proactive Wiki Population**: Background extraction of structured knowledge from the first narrative to seed the wiki immediately.
 
 ---
 
@@ -113,7 +114,6 @@ npm run typecheck
 - 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Deep dive into data flow and consensus.
 - 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Responsibility map and directory structure.
 - 🤖 [**AGENTS.md**](./AGENTS.md): Product thesis and implementation constraints.
-- 🗺️ [**ROADMAP.md**](./ROADMAP.md): Sprint history and future milestones.
 
 ---
 

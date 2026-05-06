@@ -145,7 +145,7 @@ function buildWikiDraftPrompt(
   return `${WIKI_DRAFT_SYSTEM_PROMPT}\n\nWikiPageDraft schema:\n{\n  "slug": "inscription:<id>",\n  "entity_type": "inscription",\n  "title": "string",\n  "summary": "string",\n  "sections": [{"heading":"string","body":"string","source_event_ids":["ev..."]}],\n  "cross_refs": ["collection:<slug>"],\n  "source_event_ids": ["ev..."],\n  "generated_at": "ISO8601",\n  "byok_provider": "string"\n}\n\nInput JSON:\n${JSON.stringify(payload)}`
 }
 
-async function runByokPrompt(config: ByokConfig, prompt: string): Promise<string> {
+export async function runByokPrompt(config: ByokConfig, prompt: string): Promise<string> {
   switch (config.provider) {
     case "openai":
       return runOpenAIStylePrompt({
@@ -385,7 +385,7 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean)
 }
 
-function parseFirstJsonObject(text: string): unknown | null {
+export function parseFirstJsonObject(text: string): unknown | null {
   const cleaned = text.trim()
   if (!cleaned) return null
 

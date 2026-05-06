@@ -7,7 +7,6 @@ This is the current structure and responsibility map of the repository.
 - `README.md`: project overview and operational commands.
 - `ARCHITECTURE.md`: system architecture and data flow.
 - `AGENTS.md`: product and implementation guardrails.
-- `ROADMAP.md`: implementation status and future plans.
 - `wrangler.jsonc`: Worker entrypoint, KV binding, assets config.
 - `vite.config.ts`: React + Cloudflare Vite plugin.
 - `package.json`: scripts and dependencies.
@@ -51,6 +50,8 @@ This is the current structure and responsibility map of the repository.
 - `toolExecutor.ts`: client-side execution of research tools (mempool, ordinals, web).
 - `chatStorage.ts`: indexedDB/localStorage persistence for chat threads.
 - `useChronicleNarrativeChat.ts`: main orchestration hook for the narrative experience.
+- `wikiSeedAgent.ts`: proactive background extraction of wiki fields from narrative.
+- `wikiSubmit.ts`: shared utility for submitting wiki contributions.
 - `adapters/`: `openai.ts`, `anthropic.ts`, `gemini.ts`, `openrouter.ts` provider implementations.
 
 ### Shared App Utilities

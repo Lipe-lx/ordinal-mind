@@ -33,6 +33,8 @@ import { resolveChatToolPolicy } from "./toolPolicy"
 import { fetchConsolidated, formatConsolidatedForPrompt } from "./wikiCompleteness"
 import { parseWikiExtract, hasWikiExtract } from "./wikiExtractor"
 import { detectUserLocale, selectLocalized } from "./language"
+import { submitWikiContribution } from "./wikiSubmit"
+import { runWikiSeedAgent } from "./wikiSeedAgent"
 
 export type SynthesisPhase =
   | "idle"
@@ -183,63 +185,6 @@ export function resolveAssistantDisplayText(params: {
   return ""
 }
 
-async function submitWikiContribution(params: {
-  data: NonNullable<ReturnType<typeof parseWikiExtract>["data"]>
-  activeThreadId: string | null
-  prompt: string
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const jwt = localStorage.getItem("ordinal-mind_discord_jwt")
-  try {
-    const response = await fetch("/api/wiki/contribute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contribution: {
-          ...params.data,
-          session_id: params.activeThreadId,
-          source_excerpt: params.prompt,
-        },
-        jwt: jwt || undefined,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "")
-      console.warn("[NarrativeChat][WikiContributionFailed]", {
-        at: new Date().toISOString(),
-        field: params.data.field,
-        slug: params.data.collection_slug,
-        status: response.status,
-        body: errorBody,
-      })
-      return {
-        ok: false,
-        error: errorBody || `http_${response.status}`,
-      }
-    }
-
-    const payload = await response.json().catch(() => ({}))
-    console.info("[NarrativeChat][WikiContribution]", {
-      at: new Date().toISOString(),
-      field: params.data.field,
-      slug: params.data.collection_slug,
-      status: payload?.status,
-      tier_applied: payload?.tier_applied,
-    })
-    return { ok: true }
-  } catch (error) {
-    console.warn("[NarrativeChat][WikiContributionFailed]", {
-      at: new Date().toISOString(),
-      field: params.data.field,
-      slug: params.data.collection_slug,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    }
-  }
-}
 
 export interface ChronicleChatOptions {
   wikiBuilderMode?: boolean
@@ -748,6 +693,31 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
         setStreamingText("")
         setStreamingThought("")
         setPhase("done")
+
+        // --- Wiki Seed Agent ---
+        // Fire-and-forget: only on the initial auto-narrative (silentUserMessage, empty history).
+        // The seed agent extracts structured wiki fields from the narrative in a parallel LLM call.
+        // It never blocks the chat and errors are fully isolated.
+        if (options.silentUserMessage && !historyOverride && messagesRef.current.length === 0 && guardedText) {
+          const seedConfig = KeyStore.get()
+          if (seedConfig?.key && chronicle) {
+            void runWikiSeedAgent({
+              narrative: guardedText,
+              chronicle,
+              config: seedConfig,
+              sessionId: activeThreadId,
+              onProgress: (status) => {
+                setWikiActivity({
+                  state:
+                    status.state === "done" ? "success"
+                    : status.state === "error" ? "error"
+                    : "writing",
+                  label: status.label,
+                })
+              },
+            })
+          }
+        }
       } catch (e) {
         if (controller.signal.aborted) return
 

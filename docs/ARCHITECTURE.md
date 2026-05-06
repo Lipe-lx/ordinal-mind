@@ -86,6 +86,7 @@ graph TD
 - **Strict Scoping**: Fields are scoped to `inscription` or `collection` levels (e.g., `artist` vs `founder`) to prevent data bleed.
 - **Review Loop**: Anonymous or low-tier contributions enter a quarantine state for community/OG review.
 - **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
+- **Parallel Wiki Seed Agent**: A client-side background agent that extract facts from the initial narrative to proactively populate the wiki database.
 
 ## Security and Privacy Model
 

@@ -114,6 +114,7 @@ Use specialized reasoning modes internally:
 - Cache mode: KV TTL behavior, cache keys, freshness.
 - BYOK mode: client-side provider handling, no secret leakage.
 - UI mode: temporal tree, Chronicle card, graceful empty/loading/error states.
+- Wiki Seed Agent mode: proactive background extraction of structured wiki fields from initial narratives.
 - Review mode: verify product rules were preserved.
 
 Do not expose these modes as separate user-facing agents unless the existing app already does so.
