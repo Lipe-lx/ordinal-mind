@@ -308,7 +308,10 @@ async function fetchReferencedRawEvents(
   if (ids.length === 0) return []
 
   const rows: RawEventRow[] = []
-  const chunkSize = 200
+  // Cloudflare D1 enforces a low bound for SQLite variables in a single
+  // statement. Keep this chunk comfortably below the practical ceiling so
+  // large wiki exports do not fail with "too many SQL variables".
+  const chunkSize = 90
 
   for (let index = 0; index < ids.length; index += chunkSize) {
     const chunk = ids.slice(index, index + chunkSize)
