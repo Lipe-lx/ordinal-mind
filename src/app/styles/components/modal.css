@@ -22,6 +22,7 @@
   padding: var(--space-2xl);
   background: var(--bg-modal-elevated);
   overflow: auto;
+  position: relative;
 }
 
 .byok-modal h2 {
@@ -91,4 +92,31 @@
   display: flex;
   gap: var(--space-sm);
   justify-content: flex-end;
+}
+
+.btn-close-minimal {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.btn-close-minimal:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: 10;
 }

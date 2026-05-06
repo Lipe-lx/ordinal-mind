@@ -79,6 +79,16 @@ export function BYOKModal({ onClose }: Props) {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         >
+          <button
+            type="button"
+            className="btn-close-minimal modal-close-btn"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
           <h2>Configuration</h2>
           <p>
             Keys stay in this browser session only. Select your provider and model below.
