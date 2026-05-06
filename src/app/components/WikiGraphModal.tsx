@@ -33,6 +33,7 @@ interface ColaLayoutOptions extends cytoscape.ShapedLayoutOptions {
   nodeSpacing?: (node: cytoscape.NodeSingular) => number
   edgeLength?: number | ((edge: cytoscape.EdgeSingular) => number)
   infinite?: boolean
+  avoidOverlap?: boolean
   alphaTest?: number
   initialUnconstrainedIterations?: number
   initialUserConstraintIterations?: number
@@ -176,14 +177,16 @@ export function WikiGraphModal({
       style: buildGraphStylesheet(filters.viewMode),
     })
 
+    // Tracks the node whose full network is persistently highlighted (click-locked).
+    let lockedNodeId: string | null = null
+
     const clearHover = () => {
       cy.elements().removeClass("is-faded is-highlighted")
     }
 
-    const emphasizeNeighborhood = (nodeId: string | null) => {
+    const applyEmphasis = (nodeId: string | null) => {
       clearHover()
       if (!nodeId) return
-
       const center = cy.getElementById(nodeId)
       if (!center.length) return
       const neighborhood = center.closedNeighborhood()
@@ -192,7 +195,7 @@ export function WikiGraphModal({
     }
 
     cy.on("mouseover", "node", (event) => {
-      emphasizeNeighborhood(event.target.id())
+      applyEmphasis(event.target.id())
     })
 
     cy.on("mouseover", "edge", (event) => {
@@ -204,9 +207,13 @@ export function WikiGraphModal({
     })
 
     cy.on("mouseout", () => {
-      clearHover()
+      // Restore locked selection highlight, or clear everything
+      if (lockedNodeId) {
+        applyEmphasis(lockedNodeId)
+      } else {
+        clearHover()
+      }
     })
-
 
     cy.on("dbltap", "node", (event) => {
       const node = filteredPayload?.nodes.find((item) => item.id === event.target.id())
@@ -216,31 +223,35 @@ export function WikiGraphModal({
     })
 
     cy.on("select", "node", (event) => {
+      lockedNodeId = event.target.id()
+      applyEmphasis(lockedNodeId)
       setSelectedNodeId(event.target.id())
     })
 
     cy.on("unselect", "node", () => {
+      lockedNodeId = null
+      clearHover()
       setSelectedNodeId(null)
     })
 
     cy.on("tap", (event) => {
       if (event.target === cy) {
+        lockedNodeId = null
         cy.elements().unselect()
+        clearHover()
         setSelectedNodeId(null)
       }
     })
 
     if (filters.viewMode === "neural") {
-      let layout: cytoscape.Layouts | null = null
-
-      cy.on("grab", "node", () => {
-        layout = cy.makeLayout(buildGraphLayout("neural", false))
-        layout.run()
+      // mousedown fires before grab — unlocking here ensures locked nodes can be grabbed again
+      cy.on("mousedown", "node", (event) => {
+        event.target.unlock()
       })
 
-      cy.on("free", "node", () => {
-        // No need to stop if we are in infinite mode, 
-        // but if we were using a temporary layout for grab, we'd stop it here.
+      cy.on("free", "node", (event) => {
+        // Pin the node at the dropped position — Cola won't push it away
+        event.target.lock()
       })
     }
 
@@ -400,10 +411,10 @@ export function WikiGraphModal({
                   onClick={() => {
                     const nodeId = filteredPayload?.focus_node_id
                     if (!nodeId || !cyRef.current) return
-                    const node = cyRef.current.getElementById(nodeId)
-                    if (!node.length) return
+                    const network = collectFullNetwork(cyRef.current, nodeId)
+                    if (network.empty()) return
                     cyRef.current.animate({
-                      fit: { eles: node.closedNeighborhood(), padding: 90 },
+                      fit: { eles: network, padding: 90 },
                       duration: 260,
                     })
                   }}
@@ -416,7 +427,9 @@ export function WikiGraphModal({
                   onClick={() => {
                     const cy = cyRef.current
                     if (!cy) return
-                    cy.layout(buildGraphLayout(filters.viewMode)).run()
+                    // Release all pinned nodes before re-running the layout
+                    cy.nodes().unlock()
+                    cy.layout(buildGraphLayout(filters.viewMode, true)).run()
                   }}
                 >
                   Reset Layout
@@ -572,27 +585,67 @@ function resolveNavigationTarget(node: WikiGraphNode): string | null {
 }
 
 
+/**
+ * BFS from rootId, collecting every transitively reachable node and edge.
+ * Returns the full connected subgraph as a Cytoscape collection.
+ */
+function collectFullNetwork(cy: cytoscape.Core, rootId: string): cytoscape.Collection {
+  const root = cy.getElementById(rootId)
+  if (!root.length) return cy.collection()
+
+  const visited = new Set<string>()
+  const queue: cytoscape.NodeSingular[] = [root]
+  let result: cytoscape.Collection = cy.collection()
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    const id = current.id()
+    if (visited.has(id)) continue
+    visited.add(id)
+    result = result.union(current)
+
+    const connectedEdges = current.connectedEdges()
+    result = result.union(connectedEdges)
+
+    connectedEdges.forEach((edge) => {
+      const neighbor = edge.source().id() === id ? edge.target() : edge.source()
+      if (!visited.has(neighbor.id())) {
+        queue.push(neighbor)
+      }
+    })
+  }
+
+  return result
+}
+
 function buildGraphLayout(mode: "tree" | "neural", randomize = false): cytoscape.LayoutOptions {
   if (mode === "neural") {
     return {
       name: "cola",
       animate: true,
-      refresh: 1,
-      maxSimulationTime: 4000,
+      refresh: 2,
+      maxSimulationTime: 5000,
       ungrabifyWhileSimulating: false,
       fit: false,
-      padding: 100,
+      padding: 60,
       randomize,
+      avoidOverlap: true,
       nodeSpacing: (node: cytoscape.NodeSingular) => {
         const kind = node.data("kind")
-        return kind === "collection" ? 60 : 25
+        return kind === "collection" ? 30 : 15
       },
-      edgeLength: 85,
+      edgeLength: (edge: cytoscape.EdgeSingular) => {
+        const sourceKind = edge.source().data("kind")
+        const targetKind = edge.target().data("kind")
+        // Moderate stems from collection hub; tighter between leaf nodes
+        if (sourceKind === "collection" || targetKind === "collection") return 80
+        return 55
+      },
       infinite: true,
       alphaTest: 0.02,
-      initialUnconstrainedIterations: 200,
-      initialUserConstraintIterations: 100,
-      initialAllConstraintsIterations: 100,
+      initialUnconstrainedIterations: 500,
+      initialUserConstraintIterations: 250,
+      initialAllConstraintsIterations: 250,
     } as ColaLayoutOptions
   }
 
