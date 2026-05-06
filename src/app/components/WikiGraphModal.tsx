@@ -322,32 +322,167 @@ export function WikiGraphModal({
             exit={deterministicRendering ? undefined : { opacity: 0, scale: 0.96, y: 24 }}
             transition={{ duration: deterministicRendering ? 0 : 0.22 }}
           >
-            <header className="wiki-graph-header">
-              <h2 id="wiki-graph-title">Wiki Atlas</h2>
-              <div className="wiki-graph-header-actions">
-                {wikiStatusLabel && <span className="wiki-graph-status-pill">{wikiStatusLabel}</span>}
+            <header className="wiki-graph-header premium-header">
+              <div className="header-left">
+                <h2 id="wiki-graph-title">Wiki Atlas</h2>
+                {wikiStatusLabel && (
+                  <div className="wiki-graph-status-badge">
+                    <span className="status-dot" />
+                    {wikiStatusLabel}
+                  </div>
+                )}
+              </div>
+
+              <div className="header-center">
+                <div className="header-search-wrap">
+                  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" className="search-icon">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" />
+                  </svg>
+                  <input
+                    className="header-search-input"
+                    value={filters.search}
+                    onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                    placeholder="Search entities..."
+                  />
+                </div>
+              </div>
+
+              <div className="header-right">
+                <div className="header-tool-group">
+                  <button 
+                    type="button" 
+                    className="tool-btn" 
+                    onClick={() => cyRef.current?.fit(undefined, 80)}
+                    title="Fit view to all nodes"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
+                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    </svg>
+                    <span>Fit</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tool-btn"
+                    title="Recenter on focus node"
+                    onClick={() => {
+                      const nodeId = filteredPayload?.focus_node_id
+                      if (!nodeId || !cyRef.current) return
+                      const network = collectFullNetwork(cyRef.current, nodeId)
+                      if (network.empty()) return
+                      if (deterministicRendering) {
+                        cyRef.current.fit(network, 90)
+                      } else {
+                        cyRef.current.animate({
+                          fit: { eles: network, padding: 90 },
+                          duration: 260,
+                        })
+                      }
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M3 12h3m12 0h3M12 3v3m0 12v3" />
+                    </svg>
+                    <span>Recenter</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tool-btn"
+                    title="Reset layout and unlock pins"
+                    onClick={() => {
+                      const cy = cyRef.current
+                      if (!cy) return
+                      cy.nodes().unlock()
+                      cy.layout(buildGraphLayout(filters.viewMode, {
+                        randomize: !deterministicRendering,
+                        deterministic: deterministicRendering,
+                      })).run()
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
+                      <path d="M23 4v6h-6M1 20v-6h6" />
+                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+                    </svg>
+                    <span>Reset</span>
+                  </button>
+                </div>
+
+                <div className="header-divider" />
+
                 <button
                   ref={closeButtonRef}
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn-close-minimal"
                   onClick={onClose}
+                  aria-label="Close modal"
                 >
-                  Close
+                  <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
             </header>
 
+            {/* Mobile Tool Actions Row */}
+            <div className="wiki-graph-mobile-tools">
+              <button 
+                type="button" 
+                className="mobile-tool-btn" 
+                onClick={() => cyRef.current?.fit(undefined, 80)}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                </svg>
+                <span>Fit</span>
+              </button>
+              <button
+                type="button"
+                className="mobile-tool-btn"
+                onClick={() => {
+                  const nodeId = filteredPayload?.focus_node_id
+                  if (!nodeId || !cyRef.current) return
+                  const network = collectFullNetwork(cyRef.current, nodeId)
+                  if (network.empty()) return
+                  if (deterministicRendering) {
+                    cyRef.current.fit(network, 90)
+                  } else {
+                    cyRef.current.animate({
+                      fit: { eles: network, padding: 90 },
+                      duration: 260,
+                    })
+                  }
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M3 12h3m12 0h3M12 3v3m0 12v3" />
+                </svg>
+                <span>Recenter</span>
+              </button>
+              <button
+                type="button"
+                className="mobile-tool-btn"
+                onClick={() => {
+                  const cy = cyRef.current
+                  if (!cy) return
+                  cy.nodes().unlock()
+                  cy.layout(buildGraphLayout(filters.viewMode, {
+                    randomize: !deterministicRendering,
+                    deterministic: deterministicRendering,
+                  })).run()
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
+                  <path d="M23 4v6h-6M1 20v-6h6" />
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+                </svg>
+                <span>Reset</span>
+              </button>
+            </div>
+
             <div className="wiki-graph-toolbar">
               <div className="wiki-graph-toolbar-main">
-                <label className="wiki-graph-search">
-                  <input
-                    className="input-field"
-                    value={filters.search}
-                    onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-                    placeholder="Search"
-                  />
-                </label>
-
                 <div className="wiki-graph-view-toggle">
                   <button
                     type="button"
@@ -365,92 +500,50 @@ export function WikiGraphModal({
                   </button>
                   <div className={`view-toggle-slider mode-${filters.viewMode}`} />
                 </div>
-              </div>
 
-              <div className="wiki-graph-toolbar-filters">
-                <div className="wiki-graph-filter-group">
-                  <div className="wiki-graph-chip-row">
-                    {WIKI_GRAPH_NODE_KINDS.map((kind) => {
-                      const active = filters.nodeKinds.includes(kind)
-                      return (
-                        <button
-                          key={kind}
-                          type="button"
-                          className={`wiki-graph-chip ${active ? "is-active" : ""}`}
-                          onClick={() => setFilters((current) => ({
-                            ...current,
-                            nodeKinds: toggleValue(current.nodeKinds, kind, WIKI_GRAPH_NODE_KINDS),
-                          }))}
-                        >
-                          {formatKindLabel(kind)}
-                        </button>
-                      )
-                    })}
+                <div className="wiki-graph-toolbar-filters">
+                  <div className="wiki-graph-filter-group">
+                    <div className="wiki-graph-chip-row">
+                      {WIKI_GRAPH_NODE_KINDS.map((kind) => {
+                        const active = filters.nodeKinds.includes(kind)
+                        return (
+                          <button
+                            key={kind}
+                            type="button"
+                            className={`wiki-graph-chip ${active ? "is-active" : ""}`}
+                            onClick={() => setFilters((current) => ({
+                              ...current,
+                              nodeKinds: toggleValue(current.nodeKinds, kind, WIKI_GRAPH_NODE_KINDS),
+                            }))}
+                          >
+                            {formatKindLabel(kind)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="wiki-graph-filter-group">
+                    <div className="wiki-graph-chip-row">
+                      {WIKI_GRAPH_STATUSES.map((status) => {
+                        const active = filters.statuses.includes(status)
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            className={`wiki-graph-chip status-${status} ${active ? "is-active" : ""}`}
+                            onClick={() => setFilters((current) => ({
+                              ...current,
+                              statuses: toggleValue(current.statuses, status, WIKI_GRAPH_STATUSES),
+                            }))}
+                          >
+                            {formatStatusLabel(status)}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
-
-                <div className="wiki-graph-filter-group">
-                  <div className="wiki-graph-chip-row">
-                    {WIKI_GRAPH_STATUSES.map((status) => {
-                      const active = filters.statuses.includes(status)
-                      return (
-                        <button
-                          key={status}
-                          type="button"
-                          className={`wiki-graph-chip status-${status} ${active ? "is-active" : ""}`}
-                          onClick={() => setFilters((current) => ({
-                            ...current,
-                            statuses: toggleValue(current.statuses, status, WIKI_GRAPH_STATUSES),
-                          }))}
-                        >
-                          {formatStatusLabel(status)}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="wiki-graph-tool-actions">
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => cyRef.current?.fit(undefined, 80)}>
-                  Fit
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    const nodeId = filteredPayload?.focus_node_id
-                    if (!nodeId || !cyRef.current) return
-                    const network = collectFullNetwork(cyRef.current, nodeId)
-                    if (network.empty()) return
-                    if (deterministicRendering) {
-                      cyRef.current.fit(network, 90)
-                    } else {
-                      cyRef.current.animate({
-                        fit: { eles: network, padding: 90 },
-                        duration: 260,
-                      })
-                    }
-                  }}
-                >
-                  Recenter
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    const cy = cyRef.current
-                    if (!cy) return
-                    // Release all pinned nodes before re-running the layout
-                    cy.nodes().unlock()
-                    cy.layout(buildGraphLayout(filters.viewMode, {
-                      randomize: !deterministicRendering,
-                      deterministic: deterministicRendering,
-                    })).run()
-                  }}
-                >
-                  Reset Layout
-                </button>
               </div>
             </div>
 
