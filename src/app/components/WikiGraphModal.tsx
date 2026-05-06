@@ -70,23 +70,30 @@ export function WikiGraphModal({
   const [filters, setFilters] = useState<WikiGraphFilters>(createDefaultWikiGraphFilters)
   const [payload, setPayload] = useState<Awaited<ReturnType<typeof fetchWikiGraph>>>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false)
+  const [mobileInspectorExpanded, setMobileInspectorExpanded] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
   const deferredSearch = useDeferredValue(filters.search)
 
-  if (open && !prevOpen) {
-    setPrevOpen(true)
-    setFilters(createModalFilters(isMobile, deterministicRendering))
-    setPayload(null)
-    if (!collectionSlug) {
-      setError("No collection wiki context is available for this inscription yet.")
-      setLoading(false)
-    } else {
-      setError(null)
-      setLoading(true)
+  useEffect(() => {
+    if (open && !prevOpen) {
+      setPrevOpen(true)
+      setFilters(createModalFilters(isMobile, deterministicRendering))
+      setPayload(null)
+      setSelectedNodeId(null)
+      setMobileControlsOpen(false)
+      setMobileInspectorExpanded(false)
+      if (!collectionSlug) {
+        setError("No collection wiki context is available for this inscription yet.")
+        setLoading(false)
+      } else {
+        setError(null)
+        setLoading(true)
+      }
+    } else if (!open && prevOpen) {
+      setPrevOpen(false)
     }
-  } else if (!open && prevOpen) {
-    setPrevOpen(false)
-  }
+  }, [open, prevOpen, collectionSlug, isMobile, deterministicRendering])
 
   useEffect(() => {
     if (!open) return
@@ -160,6 +167,160 @@ export function WikiGraphModal({
     return buildNodeInspector(selectedNode)
   }, [selectedNode])
 
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileControlsOpen(false)
+      setMobileInspectorExpanded(false)
+      return
+    }
+
+    setMobileInspectorExpanded(false)
+  }, [isMobile, selectedNodeId])
+
+  const handleFitGraph = () => {
+    cyRef.current?.fit(undefined, isMobile ? 64 : 80)
+  }
+
+  const handleRecenterFocus = () => {
+    const nodeId = filteredPayload?.focus_node_id
+    if (!nodeId || !cyRef.current) return
+    const network = collectFullNetwork(cyRef.current, nodeId)
+    if (network.empty()) return
+    if (deterministicRendering) {
+      cyRef.current.fit(network, 90)
+    } else {
+      cyRef.current.animate({
+        fit: { eles: network, padding: 90 },
+        duration: 260,
+      })
+    }
+  }
+
+  const handleResetLayout = () => {
+    const cy = cyRef.current
+    if (!cy) return
+    cy.nodes().unlock()
+    cy.layout(buildGraphLayout(filters.viewMode, {
+      randomize: !deterministicRendering,
+      deterministic: deterministicRendering,
+    })).run()
+  }
+
+  const handleInspectorClose = () => {
+    if (selectedNodeId) {
+      cyRef.current?.getElementById(selectedNodeId).unselect()
+    }
+    setSelectedNodeId(null)
+    setMobileInspectorExpanded(false)
+  }
+
+  const renderToolButtons = (buttonClassName: string, iconSize: number) => (
+    <>
+      <button
+        type="button"
+        className={buttonClassName}
+        onClick={handleFitGraph}
+        title="Fit view to all nodes"
+      >
+        <svg viewBox="0 0 24 24" width={iconSize} height={iconSize} stroke="currentColor" strokeWidth="2" fill="none">
+          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+        </svg>
+        <span>Fit</span>
+      </button>
+      <button
+        type="button"
+        className={buttonClassName}
+        title="Recenter on focus node"
+        onClick={handleRecenterFocus}
+      >
+        <svg viewBox="0 0 24 24" width={iconSize} height={iconSize} stroke="currentColor" strokeWidth="2" fill="none">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M3 12h3m12 0h3M12 3v3m0 12v3" />
+        </svg>
+        <span>Recenter</span>
+      </button>
+      <button
+        type="button"
+        className={buttonClassName}
+        title="Reset layout and unlock pins"
+        onClick={handleResetLayout}
+      >
+        <svg viewBox="0 0 24 24" width={iconSize} height={iconSize} stroke="currentColor" strokeWidth="2" fill="none">
+          <path d="M23 4v6h-6M1 20v-6h6" />
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+        </svg>
+        <span>Reset</span>
+      </button>
+    </>
+  )
+
+  const viewToggle = (
+    <div className="wiki-graph-view-toggle">
+      <button
+        type="button"
+        className={`view-toggle-item ${filters.viewMode === "neural" ? "is-active" : ""}`}
+        onClick={() => setFilters((current) => ({ ...current, viewMode: "neural" }))}
+      >
+        Neural
+      </button>
+      <button
+        type="button"
+        className={`view-toggle-item ${filters.viewMode === "tree" ? "is-active" : ""}`}
+        onClick={() => setFilters((current) => ({ ...current, viewMode: "tree" }))}
+      >
+        Tree
+      </button>
+      <div className={`view-toggle-slider mode-${filters.viewMode}`} />
+    </div>
+  )
+
+  const filterChips = (
+    <>
+      <div className="wiki-graph-filter-group">
+        <div className="wiki-graph-filter-group-heading">Node types</div>
+        <div className="wiki-graph-chip-row">
+          {WIKI_GRAPH_NODE_KINDS.map((kind) => {
+            const active = filters.nodeKinds.includes(kind)
+            return (
+              <button
+                key={kind}
+                type="button"
+                className={`wiki-graph-chip ${active ? "is-active" : ""}`}
+                onClick={() => setFilters((current) => ({
+                  ...current,
+                  nodeKinds: toggleValue(current.nodeKinds, kind, WIKI_GRAPH_NODE_KINDS),
+                }))}
+              >
+                {formatKindLabel(kind)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="wiki-graph-filter-group">
+        <div className="wiki-graph-filter-group-heading">Status</div>
+        <div className="wiki-graph-chip-row">
+          {WIKI_GRAPH_STATUSES.map((status) => {
+            const active = filters.statuses.includes(status)
+            return (
+              <button
+                key={status}
+                type="button"
+                className={`wiki-graph-chip status-${status} ${active ? "is-active" : ""}`}
+                onClick={() => setFilters((current) => ({
+                  ...current,
+                  statuses: toggleValue(current.statuses, status, WIKI_GRAPH_STATUSES),
+                }))}
+              >
+                {formatStatusLabel(status)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
 
 
   useEffect(() => {
@@ -233,12 +394,19 @@ export function WikiGraphModal({
       lockedNodeId = event.target.id()
       applyEmphasis(lockedNodeId)
       setSelectedNodeId(event.target.id())
+      if (isMobile) {
+        setMobileControlsOpen(false)
+        setMobileInspectorExpanded(false)
+      }
     })
 
     cy.on("unselect", "node", () => {
       lockedNodeId = null
       clearHover()
       setSelectedNodeId(null)
+      if (isMobile) {
+        setMobileInspectorExpanded(false)
+      }
     })
 
     cy.on("tap", (event) => {
@@ -247,6 +415,9 @@ export function WikiGraphModal({
         cy.elements().unselect()
         clearHover()
         setSelectedNodeId(null)
+        if (isMobile) {
+          setMobileInspectorExpanded(false)
+        }
       }
     })
 
@@ -296,7 +467,7 @@ export function WikiGraphModal({
       cy.destroy()
       cyRef.current = null
     }
-  }, [deterministicRendering, filteredPayload, filters.viewMode, navigate])
+  }, [deterministicRendering, filteredPayload, filters.viewMode, isMobile, navigate])
 
 
   const content = (
@@ -322,230 +493,145 @@ export function WikiGraphModal({
             exit={deterministicRendering ? undefined : { opacity: 0, scale: 0.96, y: 24 }}
             transition={{ duration: deterministicRendering ? 0 : 0.22 }}
           >
-            <header className="wiki-graph-header premium-header">
-              <div className="header-left">
-                <h2 id="wiki-graph-title">Wiki Atlas</h2>
-                {wikiStatusLabel && (
-                  <div className="wiki-graph-status-badge">
-                    <span className="status-dot" />
-                    {wikiStatusLabel}
+            <header className={`wiki-graph-header premium-header ${isMobile ? "is-mobile-header" : ""}`}>
+              {isMobile ? (
+                <>
+                  <div className="wiki-graph-mobile-topbar">
+                    <div className="header-left">
+                      <h2 id="wiki-graph-title">Wiki Atlas</h2>
+                      {wikiStatusLabel && (
+                        <div className="wiki-graph-status-badge">
+                          <span className="status-dot" />
+                          {wikiStatusLabel}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      ref={closeButtonRef}
+                      type="button"
+                      className="btn-close-minimal"
+                      onClick={onClose}
+                      aria-label="Close modal"
+                    >
+                      <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
-                )}
-              </div>
 
-              <div className="header-center">
-                <div className="header-search-wrap">
-                  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" className="search-icon">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
-                  </svg>
-                  <input
-                    className="header-search-input"
-                    value={filters.search}
-                    onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-                    placeholder="Search entities..."
-                  />
-                </div>
-              </div>
-
-              <div className="header-right">
-                <div className="header-tool-group">
-                  <button 
-                    type="button" 
-                    className="tool-btn" 
-                    onClick={() => cyRef.current?.fit(undefined, 80)}
-                    title="Fit view to all nodes"
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
-                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                  <div className="header-search-wrap">
+                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" className="search-icon">
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="M21 21l-4.35-4.35" />
                     </svg>
-                    <span>Fit</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="tool-btn"
-                    title="Recenter on focus node"
-                    onClick={() => {
-                      const nodeId = filteredPayload?.focus_node_id
-                      if (!nodeId || !cyRef.current) return
-                      const network = collectFullNetwork(cyRef.current, nodeId)
-                      if (network.empty()) return
-                      if (deterministicRendering) {
-                        cyRef.current.fit(network, 90)
-                      } else {
-                        cyRef.current.animate({
-                          fit: { eles: network, padding: 90 },
-                          duration: 260,
-                        })
-                      }
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M3 12h3m12 0h3M12 3v3m0 12v3" />
-                    </svg>
-                    <span>Recenter</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="tool-btn"
-                    title="Reset layout and unlock pins"
-                    onClick={() => {
-                      const cy = cyRef.current
-                      if (!cy) return
-                      cy.nodes().unlock()
-                      cy.layout(buildGraphLayout(filters.viewMode, {
-                        randomize: !deterministicRendering,
-                        deterministic: deterministicRendering,
-                      })).run()
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
-                      <path d="M23 4v6h-6M1 20v-6h6" />
-                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-                    </svg>
-                    <span>Reset</span>
-                  </button>
-                </div>
+                    <input
+                      className="header-search-input"
+                      value={filters.search}
+                      onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                      placeholder="Search entities..."
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="header-left">
+                    <h2 id="wiki-graph-title">Wiki Atlas</h2>
+                    {wikiStatusLabel && (
+                      <div className="wiki-graph-status-badge">
+                        <span className="status-dot" />
+                        {wikiStatusLabel}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="header-divider" />
+                  <div className="header-center">
+                    <div className="header-search-wrap">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" className="search-icon">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="M21 21l-4.35-4.35" />
+                      </svg>
+                      <input
+                        className="header-search-input"
+                        value={filters.search}
+                        onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                        placeholder="Search entities..."
+                      />
+                    </div>
+                  </div>
 
-                <button
-                  ref={closeButtonRef}
-                  type="button"
-                  className="btn-close-minimal"
-                  onClick={onClose}
-                  aria-label="Close modal"
-                >
-                  <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+                  <div className="header-right">
+                    <div className="header-tool-group">
+                      {renderToolButtons("tool-btn", 16)}
+                    </div>
+
+                    <div className="header-divider" />
+
+                    <button
+                      ref={closeButtonRef}
+                      type="button"
+                      className="btn-close-minimal"
+                      onClick={onClose}
+                      aria-label="Close modal"
+                    >
+                      <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </>
+              )}
             </header>
 
-            {/* Mobile Tool Actions Row */}
-            <div className="wiki-graph-mobile-tools">
-              <button 
-                type="button" 
-                className="mobile-tool-btn" 
-                onClick={() => cyRef.current?.fit(undefined, 80)}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
-                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                </svg>
-                <span>Fit</span>
-              </button>
-              <button
-                type="button"
-                className="mobile-tool-btn"
-                onClick={() => {
-                  const nodeId = filteredPayload?.focus_node_id
-                  if (!nodeId || !cyRef.current) return
-                  const network = collectFullNetwork(cyRef.current, nodeId)
-                  if (network.empty()) return
-                  if (deterministicRendering) {
-                    cyRef.current.fit(network, 90)
-                  } else {
-                    cyRef.current.animate({
-                      fit: { eles: network, padding: 90 },
-                      duration: 260,
-                    })
-                  }
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M3 12h3m12 0h3M12 3v3m0 12v3" />
-                </svg>
-                <span>Recenter</span>
-              </button>
-              <button
-                type="button"
-                className="mobile-tool-btn"
-                onClick={() => {
-                  const cy = cyRef.current
-                  if (!cy) return
-                  cy.nodes().unlock()
-                  cy.layout(buildGraphLayout(filters.viewMode, {
-                    randomize: !deterministicRendering,
-                    deterministic: deterministicRendering,
-                  })).run()
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none">
-                  <path d="M23 4v6h-6M1 20v-6h6" />
-                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-                </svg>
-                <span>Reset</span>
-              </button>
-            </div>
-
-            <div className="wiki-graph-toolbar">
-              <div className="wiki-graph-toolbar-main">
-                <div className="wiki-graph-view-toggle">
+            {isMobile ? (
+              <div className="wiki-graph-mobile-controls">
+                <div className="wiki-graph-mobile-controls-bar">
+                  {viewToggle}
                   <button
                     type="button"
-                    className={`view-toggle-item ${filters.viewMode === "neural" ? "is-active" : ""}`}
-                    onClick={() => setFilters((current) => ({ ...current, viewMode: "neural" }))}
+                    className={`mobile-controls-toggle ${mobileControlsOpen ? "is-open" : ""}`}
+                    onClick={() => setMobileControlsOpen((current) => !current)}
+                    aria-expanded={mobileControlsOpen}
+                    aria-controls="wiki-graph-mobile-controls-panel"
                   >
-                    Neural
+                    <span>Filters</span>
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
                   </button>
-                  <button
-                    type="button"
-                    className={`view-toggle-item ${filters.viewMode === "tree" ? "is-active" : ""}`}
-                    onClick={() => setFilters((current) => ({ ...current, viewMode: "tree" }))}
-                  >
-                    Tree
-                  </button>
-                  <div className={`view-toggle-slider mode-${filters.viewMode}`} />
                 </div>
 
-                <div className="wiki-graph-toolbar-filters">
-                  <div className="wiki-graph-filter-group">
-                    <div className="wiki-graph-chip-row">
-                      {WIKI_GRAPH_NODE_KINDS.map((kind) => {
-                        const active = filters.nodeKinds.includes(kind)
-                        return (
-                          <button
-                            key={kind}
-                            type="button"
-                            className={`wiki-graph-chip ${active ? "is-active" : ""}`}
-                            onClick={() => setFilters((current) => ({
-                              ...current,
-                              nodeKinds: toggleValue(current.nodeKinds, kind, WIKI_GRAPH_NODE_KINDS),
-                            }))}
-                          >
-                            {formatKindLabel(kind)}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
+                <AnimatePresence initial={false}>
+                  {mobileControlsOpen && (
+                    <motion.div
+                      id="wiki-graph-mobile-controls-panel"
+                      className="wiki-graph-mobile-controls-panel"
+                      initial={deterministicRendering ? false : { opacity: 0, y: -12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={deterministicRendering ? undefined : { opacity: 0, y: -8 }}
+                      transition={{ duration: deterministicRendering ? 0 : 0.18 }}
+                    >
+                      <div className="wiki-graph-mobile-tools">
+                        {renderToolButtons("mobile-tool-btn", 14)}
+                      </div>
+                      <div className="wiki-graph-mobile-filter-sections">
+                        {filterChips}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <div className="wiki-graph-toolbar">
+                <div className="wiki-graph-toolbar-main">
+                  {viewToggle}
 
-                  <div className="wiki-graph-filter-group">
-                    <div className="wiki-graph-chip-row">
-                      {WIKI_GRAPH_STATUSES.map((status) => {
-                        const active = filters.statuses.includes(status)
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            className={`wiki-graph-chip status-${status} ${active ? "is-active" : ""}`}
-                            onClick={() => setFilters((current) => ({
-                              ...current,
-                              statuses: toggleValue(current.statuses, status, WIKI_GRAPH_STATUSES),
-                            }))}
-                          >
-                            {formatStatusLabel(status)}
-                          </button>
-                        )
-                      })}
-                    </div>
+                  <div className="wiki-graph-toolbar-filters">
+                    {filterChips}
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className={`wiki-graph-body view-${filters.viewMode} ${isMobile ? "is-mobile" : ""}`}>
               <section className="wiki-graph-canvas-panel">
@@ -583,70 +669,92 @@ export function WikiGraphModal({
               <AnimatePresence>
                 {selectedNode && inspectorData && (
                   <motion.aside
-                    className="wiki-graph-inspector glass-card"
+                    className={`wiki-graph-inspector glass-card ${isMobile ? "is-mobile-sheet" : ""} ${isMobile && !mobileInspectorExpanded ? "is-peek" : "is-expanded"}`}
                     initial={deterministicRendering ? false : (isMobile ? { y: "100%", opacity: 0 } : { x: "100%", opacity: 0 })}
                     animate={{ x: 0, y: 0, opacity: 1 }}
                     exit={deterministicRendering ? undefined : (isMobile ? { y: "100%", opacity: 0 } : { x: "100%", opacity: 0 })}
                     transition={deterministicRendering ? { duration: 0 } : { type: "spring", damping: 25, stiffness: 200 }}
                   >
                     <header className="wiki-graph-inspector-header">
+                      {isMobile && (
+                        <button
+                          type="button"
+                          className="wiki-graph-inspector-handle"
+                          onClick={() => setMobileInspectorExpanded((current) => !current)}
+                          aria-label={mobileInspectorExpanded ? "Collapse details" : "Expand details"}
+                        >
+                          <span />
+                        </button>
+                      )}
                       <div className="wiki-graph-inspector-top">
                         <div>
                           <h4>{inspectorData.title}</h4>
                           <span className={`wiki-graph-node-pill status-${selectedNode.status}`}>
                             {formatStatusLabel(selectedNode.status)}
                           </span>
+                          <p className="wiki-graph-inspector-subtitle">{inspectorData.subtitle}</p>
                         </div>
-                        <button 
-                          type="button" 
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => {
-                            cyRef.current?.getElementById(selectedNode.id).unselect()
-                            setSelectedNodeId(null)
-                          }}
-                        >
-                          ✕
-                        </button>
+                        <div className="wiki-graph-inspector-actions">
+                          {isMobile && (
+                            <button
+                              type="button"
+                              className="wiki-graph-inspector-toggle"
+                              onClick={() => setMobileInspectorExpanded((current) => !current)}
+                            >
+                              {mobileInspectorExpanded ? "Less" : "More"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            onClick={handleInspectorClose}
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
-                      <p className="wiki-graph-inspector-subtitle">{inspectorData.subtitle}</p>
                     </header>
 
-                    <div className="wiki-graph-inspector-content">
-                      {inspectorData.description && (
-                        <p className="wiki-graph-inspector-description">
-                          {inspectorData.description}
-                        </p>
-                      )}
+                    {(!isMobile || mobileInspectorExpanded) && (
+                      <>
+                        <div className="wiki-graph-inspector-content">
+                          {inspectorData.description && (
+                            <p className="wiki-graph-inspector-description">
+                              {inspectorData.description}
+                            </p>
+                          )}
 
-                      {inspectorData.details.length > 0 && (
-                        <div className="wiki-graph-inspector-details-group">
-                          <label>Metadata</label>
-                          <dl className="wiki-graph-inspector-details">
-                            {inspectorData.details.map((detail, idx) => (
-                              <div key={idx} className="wiki-graph-inspector-row">
-                                <dt>{detail.label}</dt>
-                                <dd>{detail.value}</dd>
-                              </div>
-                            ))}
-                          </dl>
+                          {inspectorData.details.length > 0 && (
+                            <div className="wiki-graph-inspector-details-group">
+                              <label>Metadata</label>
+                              <dl className="wiki-graph-inspector-details">
+                                {inspectorData.details.map((detail, idx) => (
+                                  <div key={idx} className="wiki-graph-inspector-row">
+                                    <dt>{detail.label}</dt>
+                                    <dd>{detail.value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
 
-                    <footer className="wiki-graph-inspector-footer">
-                      {resolveNavigationTarget(selectedNode) && (
-                        <button
-                          type="button"
-                          className="btn-premium btn-block"
-                          onClick={() => {
-                            const target = resolveNavigationTarget(selectedNode)
-                            if (target) navigate(target)
-                          }}
-                        >
-                          View Chronicle
-                        </button>
-                      )}
-                    </footer>
+                        <footer className="wiki-graph-inspector-footer">
+                          {resolveNavigationTarget(selectedNode) && (
+                            <button
+                              type="button"
+                              className="btn-premium btn-block"
+                              onClick={() => {
+                                const target = resolveNavigationTarget(selectedNode)
+                                if (target) navigate(target)
+                              }}
+                            >
+                              View Chronicle
+                            </button>
+                          )}
+                        </footer>
+                      </>
+                    )}
                   </motion.aside>
                 )}
               </AnimatePresence>

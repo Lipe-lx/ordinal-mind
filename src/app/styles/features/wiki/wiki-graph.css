@@ -11,9 +11,9 @@
     max(var(--space-md), var(--safe-area-bottom))
     max(var(--space-md), var(--safe-area-left));
   background:
-    radial-gradient(circle at top left, rgba(247, 147, 26, 0.12), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.08), transparent 30%),
-    rgba(4, 6, 12, 0.76);
+    radial-gradient(circle at top left, var(--accent-glow-strong), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.04), transparent 30%),
+    var(--bg-overlay-strong);
   backdrop-filter: blur(12px);
 }
 
@@ -25,9 +25,9 @@
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 0.75rem;
   background:
-    linear-gradient(180deg, rgba(19, 23, 34, 0.98), rgba(12, 15, 24, 0.98)),
+    linear-gradient(180deg, rgba(17, 17, 24, 0.98), rgba(10, 10, 15, 0.98)),
     var(--bg-modal-elevated);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-glass-hover);
   box-shadow: 0 24px 90px rgba(0, 0, 0, 0.42);
 }
 
@@ -37,8 +37,20 @@
   gap: var(--space-md);
   align-items: center;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.01);
+  border-bottom: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+}
+
+.wiki-graph-header.is-mobile-header {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.wiki-graph-mobile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .header-left {
@@ -61,17 +73,17 @@
   width: 100%;
   display: flex;
   align-items: center;
-  background: rgba(15, 20, 35, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
   border-radius: 10px;
   padding: 0 0.75rem;
   transition: all var(--duration-normal) var(--ease-smooth);
 }
 
 .header-search-wrap:focus-within {
-  background: rgba(15, 20, 35, 0.6);
-  border-color: rgba(247, 147, 26, 0.3);
-  box-shadow: 0 0 15px rgba(247, 147, 26, 0.05);
+  background: var(--bg-glass);
+  border-color: var(--border-accent);
+  box-shadow: 0 0 15px var(--accent-glow);
 }
 
 .header-search-wrap .search-icon {
@@ -105,8 +117,8 @@
 .header-tool-group {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
   border-radius: 8px;
   padding: 2px;
 }
@@ -127,7 +139,7 @@
 }
 
 .tool-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-glass);
   color: var(--text-primary);
 }
 
@@ -144,11 +156,77 @@
 .header-divider {
   width: 1px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border-glass);
 }
 
 .wiki-graph-mobile-tools {
   display: none;
+}
+
+.wiki-graph-mobile-controls {
+  display: none;
+  min-width: 0;
+}
+
+.wiki-graph-mobile-controls-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 112px);
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.mobile-controls-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-smooth), border-color var(--duration-fast) var(--ease-smooth);
+}
+
+.mobile-controls-toggle svg {
+  transition: transform var(--duration-fast) var(--ease-smooth);
+}
+
+.mobile-controls-toggle.is-open {
+  background: var(--bg-glass);
+  border-color: var(--border-accent);
+}
+
+.mobile-controls-toggle.is-open svg {
+  transform: rotate(180deg);
+}
+
+.wiki-graph-mobile-controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.85rem;
+  border: 1px solid var(--border-glass);
+  border-radius: 18px;
+  background: var(--bg-modal-elevated);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+
+.wiki-graph-mobile-filter-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
 }
 
 .wiki-graph-header h2 {
@@ -231,8 +309,8 @@
   display: flex;
   align-items: center;
   padding: 2px;
-  background: rgba(15, 20, 35, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
   border-radius: 999px;
   min-width: 140px;
   overflow: hidden;
@@ -266,8 +344,8 @@
   bottom: 2px;
   left: 2px;
   width: calc(50% - 2px);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass-hover);
   border-radius: 999px;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
   z-index: 1;
@@ -275,21 +353,36 @@
 
 .view-toggle-slider.mode-neural {
   transform: translateX(0);
-  background: rgba(247, 147, 26, 0.25);
-  border-color: rgba(247, 147, 26, 0.5);
-  box-shadow: 0 0 15px rgba(247, 147, 26, 0.2);
+  background: var(--accent-glow-strong);
+  border-color: var(--border-accent);
+  box-shadow: 0 0 15px var(--accent-glow);
 }
 
 .view-toggle-slider.mode-tree {
   transform: translateX(100%);
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--bg-glass);
+  border-color: var(--border-glass-hover);
 }
 
 .wiki-graph-search,
 .wiki-graph-filter-group {
   display: flex;
   align-items: center;
+}
+
+.wiki-graph-filter-group {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.wiki-graph-filter-group-heading {
+  display: none;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+  font-weight: 700;
 }
 
 .wiki-graph-search {
@@ -309,8 +402,8 @@
 }
 
 .wiki-graph-chip {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border-radius: 999px;
   padding: 0.34rem 0.62rem;
@@ -320,10 +413,10 @@
 }
 
 .wiki-graph-chip.is-active {
-  border-color: rgba(247, 147, 26, 0.6);
+  border-color: var(--border-accent);
   color: #fff;
-  background: rgba(247, 147, 26, 0.2);
-  box-shadow: 0 0 12px rgba(247, 147, 26, 0.2);
+  background: var(--accent-glow-strong);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .wiki-graph-chip.status-draft.is-active {
@@ -364,21 +457,21 @@
 .wiki-graph-canvas-panel,
 .wiki-graph-inspector {
   min-height: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at center, rgba(247, 147, 26, 0.03), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015)),
-    rgba(8, 11, 18, 0.86);
+    radial-gradient(circle at center, var(--accent-glow), transparent 70%),
+    linear-gradient(180deg, var(--bg-surface), rgba(255, 255, 255, 0.02)),
+    var(--bg-secondary);
   box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.2);
   transition: background 0.4s var(--ease-smooth);
 }
 
 .wiki-graph-body.view-neural .wiki-graph-canvas-panel {
   background:
-    radial-gradient(circle at center, rgba(247, 147, 26, 0.05), transparent 60%),
-    rgba(4, 5, 10, 0.94);
-  border-color: rgba(247, 147, 26, 0.12);
+    radial-gradient(circle at center, var(--accent-glow-strong), transparent 60%),
+    var(--bg-primary);
+  border-color: var(--border-accent);
   box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.6);
 }
 
@@ -399,10 +492,10 @@
 .wiki-graph-stats span {
   font-size: 0.66rem;
   color: var(--text-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
   border-radius: 999px;
   padding: 0.22rem 0.6rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface);
   backdrop-filter: blur(4px);
 }
 
@@ -439,8 +532,8 @@
 .wiki-graph-inline-warnings span {
   padding: 0.38rem 0.55rem;
   border-radius: 10px;
-  background: rgba(10, 10, 15, 0.72);
-  border: 1px solid rgba(251, 191, 36, 0.16);
+  background: var(--bg-modal-elevated);
+  border: 1px solid var(--border-glass);
   color: var(--text-secondary);
   font-size: 0.68rem;
   line-height: 1.45;
@@ -489,13 +582,16 @@
   flex-direction: column;
   gap: 1rem;
   overflow: hidden;
-  background: rgba(15, 20, 35, 0.85) !important;
+  background: var(--bg-modal-elevated) !important;
   backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid var(--border-glass-hover) !important;
   box-shadow: -10px 0 30px rgba(0, 0, 0, 0.3);
 }
 
 .wiki-graph-inspector-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   flex-shrink: 0;
 }
 
@@ -571,6 +667,28 @@
   align-items: flex-start;
 }
 
+.wiki-graph-inspector-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.wiki-graph-inspector-toggle {
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wiki-graph-inspector-handle {
+  display: none;
+}
+
 .wiki-graph-inspector-top p,
 .wiki-graph-inspector-description {
   margin: 0.3rem 0 0;
@@ -634,27 +752,25 @@
     margin: 0 !important;
     border: none !important;
     border-radius: 0 !important;
-    padding: var(--space-md) var(--space-sm);
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    padding:
+      calc(var(--space-sm) + var(--safe-area-top))
+      calc(var(--space-sm) + var(--safe-area-right))
+      calc(var(--space-sm) + var(--safe-area-bottom))
+      calc(var(--space-sm) + var(--safe-area-left));
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: 0.5rem;
   }
 
-  .wiki-graph-header {
-    display: grid !important;
-    grid-template-areas: 
-      "left right"
-      "center center";
-    grid-template-columns: 1fr auto;
-    gap: 1rem 0.5rem;
-    padding: 0.75rem 0.5rem;
+  .wiki-graph-header.is-mobile-header {
+    gap: 0.75rem;
+    padding: 0.15rem 0.1rem 0.25rem;
     border-bottom: none;
-    margin-bottom: 0;
   }
 
   .header-left {
-    grid-area: left;
     min-width: 0;
     align-items: center;
+    gap: 0.55rem;
   }
 
   .header-left h2 {
@@ -671,34 +787,39 @@
     max-width: 120px;
   }
 
-  .header-center {
-    grid-area: center;
-    width: 100%;
-    max-width: none;
-    margin: 0;
-  }
-
   .header-search-wrap {
-    background: rgba(15, 20, 35, 0.7);
-    border-radius: 12px;
-    height: 40px;
-  }
-
-  .header-right {
-    grid-area: right;
-    gap: 0;
+    background: var(--bg-surface);
+    border-radius: 16px;
+    min-height: 46px;
+    padding: 0 0.85rem;
   }
 
   .header-tool-group {
     display: none;
   }
 
-  .wiki-graph-mobile-tools {
+  .wiki-graph-mobile-controls {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0 0.5rem 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0 0.1rem;
+    min-width: 0;
+  }
+
+  .wiki-graph-mobile-controls-bar .wiki-graph-view-toggle {
+    min-width: 0;
+    height: 42px;
+    width: 100%;
+  }
+
+  .mobile-controls-toggle {
+    min-height: 42px;
+  }
+
+  .wiki-graph-mobile-tools {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
   }
 
   .mobile-tool-btn {
@@ -707,59 +828,57 @@
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    padding: 0.5rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
+    min-height: 42px;
+    padding: 0.6rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
     color: var(--text-secondary);
     font-size: 0.65rem;
     font-weight: 600;
+    cursor: pointer;
   }
 
   .header-divider {
     display: none;
   }
 
-  .wiki-graph-toolbar {
-    padding: 0.25rem 0.5rem;
-    gap: 0.75rem;
-  }
-
-  .wiki-graph-toolbar-main {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.75rem;
-  }
-
-  .wiki-graph-view-toggle {
+  .wiki-graph-mobile-filter-sections .wiki-graph-filter-group {
     width: 100%;
     min-width: 0;
-    height: 38px;
   }
 
-  .wiki-graph-toolbar-filters {
-    width: 100%;
-    gap: 0.75rem;
+  .wiki-graph-mobile-filter-sections .wiki-graph-filter-group-heading {
+    display: block;
   }
 
-  .wiki-graph-filter-group {
+  .wiki-graph-mobile-filter-sections .wiki-graph-chip-row {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     width: 100%;
-  }
-
-  .wiki-graph-chip-row {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    width: 100%;
+    min-width: 0;
     gap: 0.45rem;
-    padding: 2px 0 10px;
+    padding: 0.1rem 0 0.35rem;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     mask-image: linear-gradient(to right, black 85%, transparent 100%);
   }
 
-  .wiki-graph-chip-row::-webkit-scrollbar {
+  .wiki-graph-mobile-filter-sections .wiki-graph-chip-row::-webkit-scrollbar {
     display: none;
+  }
+
+  .wiki-graph-body.is-mobile {
+    gap: 0;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-canvas-panel {
+    display: block;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-canvas {
+    min-height: 100%;
   }
 
   .wiki-graph-body.is-mobile .wiki-graph-inspector {
@@ -770,23 +889,90 @@
     top: auto;
     width: auto;
     height: auto;
-    max-height: calc(75% - 1rem);
+    max-height: min(68dvh, calc(100% - 1rem));
     z-index: 1000;
-    padding: 1.25rem;
-    border-radius: 1.5rem 1.5rem 0.75rem 0.75rem;
-    background: rgba(10, 12, 20, 0.98) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    padding: 0.9rem 0.95rem calc(0.95rem + var(--safe-area-bottom));
+    border-radius: 1.4rem 1.4rem 0.9rem 0.9rem;
+    background: var(--bg-modal-elevated) !important;
+    border: 1px solid var(--border-glass-hover) !important;
     box-shadow: 0 -15px 50px rgba(0, 0, 0, 0.8);
   }
 
+  .wiki-graph-body.is-mobile .wiki-graph-inspector.is-peek {
+    max-height: 142px;
+    overflow: hidden;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-header {
+    gap: 0.5rem;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-handle span {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-glass-hover);
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-top {
+    gap: 0.75rem;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-top > div:first-child {
+    min-width: 0;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-top h4 {
+    margin-bottom: 0.4rem;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-subtitle {
+    margin-top: 0.55rem;
+    font-size: 0.7rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .wiki-graph-body.is-mobile .wiki-graph-inspector-content {
+    padding-right: 0;
+  }
+
   .wiki-graph-stats {
-    padding: 0.5rem 0.5rem 0;
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    right: 0.6rem;
+    z-index: 2;
+    padding: 0;
     gap: 0.35rem;
+    pointer-events: none;
   }
 
   .wiki-graph-stats span {
     font-size: 0.62rem;
     padding: 0.15rem 0.45rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-modal-elevated);
+    backdrop-filter: blur(8px);
+  }
+}
+
+@media (max-width: 420px) {
+  .wiki-graph-mobile-controls-bar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 96px);
+    gap: 0.35rem;
   }
 }
