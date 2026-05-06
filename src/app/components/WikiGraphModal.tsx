@@ -8,6 +8,7 @@ import cytoscapeFcose from "cytoscape-fcose"
 import cytoscapeCola from "cytoscape-cola"
 import type { WikiGraphNode } from "../lib/types"
 import {
+  buildNodeInspector,
   createDefaultWikiGraphFilters,
   fetchWikiGraph,
   filterWikiGraphPayload,
@@ -63,6 +64,7 @@ export function WikiGraphModal({
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<WikiGraphFilters>(createDefaultWikiGraphFilters)
   const [payload, setPayload] = useState<Awaited<ReturnType<typeof fetchWikiGraph>>>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [prevOpen, setPrevOpen] = useState(open)
   const deferredSearch = useDeferredValue(filters.search)
 
@@ -142,6 +144,16 @@ export function WikiGraphModal({
       search: deferredSearch,
     })
   }, [payload, filters, deferredSearch])
+  
+  const selectedNode = useMemo(() => {
+    if (!selectedNodeId || !filteredPayload) return null
+    return filteredPayload.nodes.find(n => n.id === selectedNodeId) ?? null
+  }, [selectedNodeId, filteredPayload])
+
+  const inspectorData = useMemo(() => {
+    if (!selectedNode) return null
+    return buildNodeInspector(selectedNode)
+  }, [selectedNode])
 
 
 
@@ -201,6 +213,21 @@ export function WikiGraphModal({
       if (!node) return
       const target = resolveNavigationTarget(node)
       if (target) navigate(target)
+    })
+
+    cy.on("select", "node", (event) => {
+      setSelectedNodeId(event.target.id())
+    })
+
+    cy.on("unselect", "node", () => {
+      setSelectedNodeId(null)
+    })
+
+    cy.on("tap", (event) => {
+      if (event.target === cy) {
+        cy.elements().unselect()
+        setSelectedNodeId(null)
+      }
     })
 
     if (filters.viewMode === "neural") {
@@ -435,6 +462,77 @@ export function WikiGraphModal({
                   </>
                 )}
               </section>
+              
+              <AnimatePresence>
+                {selectedNode && inspectorData && (
+                  <motion.aside
+                    className="wiki-graph-inspector glass-card"
+                    initial={{ x: "100%", opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: "100%", opacity: 0 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                  >
+                    <header className="wiki-graph-inspector-header">
+                      <div className="wiki-graph-inspector-top">
+                        <div>
+                          <h4>{inspectorData.title}</h4>
+                          <span className={`wiki-graph-node-pill status-${selectedNode.status}`}>
+                            {formatStatusLabel(selectedNode.status)}
+                          </span>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => {
+                            cyRef.current?.getElementById(selectedNode.id).unselect()
+                            setSelectedNodeId(null)
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="wiki-graph-inspector-subtitle">{inspectorData.subtitle}</p>
+                    </header>
+
+                    <div className="wiki-graph-inspector-content">
+                      {inspectorData.description && (
+                        <p className="wiki-graph-inspector-description">
+                          {inspectorData.description}
+                        </p>
+                      )}
+
+                      {inspectorData.details.length > 0 && (
+                        <div className="wiki-graph-inspector-details-group">
+                          <label>Metadata</label>
+                          <dl className="wiki-graph-inspector-details">
+                            {inspectorData.details.map((detail, idx) => (
+                              <div key={idx} className="wiki-graph-inspector-row">
+                                <dt>{detail.label}</dt>
+                                <dd>{detail.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                      )}
+                    </div>
+
+                    <footer className="wiki-graph-inspector-footer">
+                      {resolveNavigationTarget(selectedNode) && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-block btn-sm"
+                          onClick={() => {
+                            const target = resolveNavigationTarget(selectedNode)
+                            if (target) navigate(target)
+                          }}
+                        >
+                          View Chronicle
+                        </button>
+                      )}
+                    </footer>
+                  </motion.aside>
+                )}
+              </AnimatePresence>
 
             </div>
           </motion.div>
@@ -627,11 +725,13 @@ function buildGraphStylesheet(mode: "tree" | "neural"): cytoscape.StylesheetJson
     {
       selector: "node.kind-wiki_page",
       style: {
-        "background-color": "rgba(14, 116, 144, 0.92)",
-        "border-color": "rgba(103, 232, 249, 0.28)",
+        "background-color": "#D6ED4E",
+        "border-color": "rgba(214, 237, 78, 0.28)",
+        "color": "#0a0a0f",
+        "text-outline-color": "rgba(255,255,255,0.8)",
         ...(isNeural ? {
-          "background-gradient-stop-colors": "#dbeafe #3b82f6 #2563eb",
-          "shadow-color": "rgba(59, 130, 246, 0.6)",
+          "background-gradient-stop-colors": "#f7fee7 #d6ed4e #84cc16",
+          "shadow-color": "rgba(214, 237, 78, 0.6)",
         } : {})
       },
     },
