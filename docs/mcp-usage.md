@@ -163,6 +163,97 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   }'
 ```
 
+### 5) Use Wiki Read-Only Tools (Phase 1)
+
+#### Search wiki collections
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":9,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_search_collections",
+      "arguments":{
+        "query":"punks",
+        "limit":10,
+        "offset":0
+      }
+    }
+  }'
+```
+
+#### Get wiki field status
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":10,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_get_field_status",
+      "arguments":{
+        "collection_slug":"ordinal-punks"
+      }
+    }
+  }'
+```
+
+#### Get wiki collection context
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":11,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_get_collection_context",
+      "arguments":{
+        "collection_slug":"ordinal-punks",
+        "include_graph_summary":true
+      }
+    }
+  }'
+```
+
+### 6) Use Wiki Proposal Tool (Phase 2 Governance)
+
+#### Propose a wiki update (tier-governed)
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'Authorization: Bearer <mcp_access_token>' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":12,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_propose_update",
+      "arguments":{
+        "collection_slug":"ordinal-punks",
+        "field":"origin_narrative",
+        "proposed_value":"Launch narrative draft backed by cited sources.",
+        "sources":[
+          "https://ordinals.com/inscription/6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0"
+        ],
+        "rationale":"Candidate summary to be reviewed before publication.",
+        "idempotency_key":"wiki-proposal-ordinal-punks-001"
+      }
+    }
+  }'
+```
+
 ## OAuth MCP (Dedicated Token)
 
 Use OAuth MCP endpoints (separate from web session auth):
@@ -191,8 +282,12 @@ Authorization: Bearer <mcp_access_token>
   - `resources/*` available
   - `query_chronicle` available
   - `search_collection_inscriptions` available
+  - `wiki_search_collections` available
+  - `wiki_get_field_status` available
+  - `wiki_get_collection_context` available
   - `prompts/list` returns `[]`
 - Authenticated (Discord tier claims in MCP token):
+  - `community|og|genesis`: `wiki_propose_update` (follows app tier rules: `community -> quarantine`, `og/genesis -> published`)
   - `community|og|genesis`: `contribute_wiki` (+ anonymous query tools remain available)
   - `genesis`: `review_contribution`, `refresh_chronicle`, `reindex_collection`
 
@@ -200,8 +295,8 @@ Authorization: Bearer <mcp_access_token>
 
 - `406 Not Acceptable` on `/mcp`
   - Missing `Accept: application/json, text/event-stream`.
-- `tools/list` empty
-  - Expected for anonymous token/session.
+- `tools/list` without mutation tools
+  - Expected for anonymous token/session. Read-only query tools remain available.
 - `401/403` on `tools/call`
   - Missing/invalid MCP token or insufficient tier/capability.
 - `resource_payload_too_large`

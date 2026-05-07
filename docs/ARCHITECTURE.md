@@ -132,6 +132,10 @@ graph TD
 - Tool registration is dynamic per request tier:
   - `query_chronicle`: `anon|community|og|genesis`
   - `search_collection_inscriptions`: `anon|community|og|genesis`
+  - `wiki_search_collections`: `anon|community|og|genesis`
+  - `wiki_get_field_status`: `anon|community|og|genesis`
+  - `wiki_get_collection_context`: `anon|community|og|genesis`
+  - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> quarantine`, `og/genesis -> published`)
   - `contribute_wiki`: `community|og|genesis`
   - `review_contribution`: `genesis`
   - `refresh_chronicle`: `genesis`

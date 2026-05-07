@@ -13,7 +13,8 @@ import { handleReviewDecision } from "../wiki/reviews"
 import { runChroniclePipeline, newRequestId } from "../chronicleService"
 import { toCapabilityMap, type McpResolvedAuth } from "./types"
 import { MCP_LIMITS, limitWikiContributionValue } from "./guards"
-import { isInscriptionId } from "../wiki/contribute"
+import { CANONICAL_FIELDS, isCanonicalField, isFieldAllowedForSlug, isInscriptionId } from "../wiki/contribute"
+import { getConsolidatedSnapshot } from "../wiki/consolidateEndpoint"
 
 const contributeSchema = {
   collection_slug: z.string().min(1),
@@ -68,6 +69,32 @@ const searchCollectionSchema = {
   offset: z.number().int().min(0).max(500).default(0),
   sort: z.enum(["recent", "oldest"]).default("recent"),
   include_meta: z.boolean().default(false),
+}
+
+const wikiSearchCollectionsSchema = {
+  query: z.string().min(1),
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).max(500).default(0),
+}
+
+const wikiFieldStatusSchema = {
+  collection_slug: z.string().min(1),
+}
+
+const wikiCollectionContextSchema = {
+  collection_slug: z.string().min(1),
+  include_graph_summary: z.boolean().default(true),
+}
+
+const wikiProposeUpdateSchema = {
+  collection_slug: z.string().min(1),
+  field: z.enum(CANONICAL_FIELDS),
+  proposed_value: z.string().min(1).max(MCP_LIMITS.MAX_WIKI_CONTRIBUTION_LEN),
+  sources: z.array(z.string().min(1)).max(8).default([]),
+  rationale: z.string().max(500).optional(),
+  confidence: z.enum(["stated_by_user", "inferred", "correcting_existing"]).default("stated_by_user"),
+  verifiable: z.boolean().default(true),
+  idempotency_key: z.string().min(8).max(128).optional(),
 }
 
 type ProgressEmitter = {
@@ -142,6 +169,53 @@ function normalizeEventType(value: string): EventType {
   if (value === "x_mention") return "social_mention"
   if (QUERY_EVENT_TYPES.includes(value as EventType)) return value as EventType
   return "transfer"
+}
+
+function sanitizeFtsQuery(query: string): string {
+  const cleaned = query
+    .replace(/['"*^():]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (!cleaned) return ""
+  return cleaned
+    .split(" ")
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => `${token}*`)
+    .join(" ")
+}
+
+function normalizeCollectionSlug(value: string): string {
+  const trimmed = value.trim()
+  return trimmed.startsWith("collection:") ? trimmed.slice("collection:".length) : trimmed
+}
+
+function isLikelySourceRef(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (isInscriptionId(trimmed)) return true
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+function toSourceExcerpt(input: {
+  sources: string[]
+  rationale?: string
+  idempotency_key?: string
+}): string {
+  const lines: string[] = []
+  if (input.idempotency_key) lines.push(`idempotency_key: ${input.idempotency_key}`)
+  if (input.rationale) lines.push(`rationale: ${input.rationale}`)
+  if (input.sources.length > 0) {
+    lines.push("sources:")
+    for (const source of input.sources) lines.push(`- ${source}`)
+  }
+  return lines.join("\n").slice(0, 500)
 }
 
 function timestampToMs(value: string | undefined): number | null {
@@ -469,7 +543,295 @@ export function registerTools(options: {
     }
   )
 
+  server.registerTool(
+    "wiki_search_collections",
+    {
+      description: "Read-only wiki collection search by text query with pagination",
+      inputSchema: wikiSearchCollectionsSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_search_collections",
+        limit: 60,
+        windowSeconds: 60,
+        alertThreshold: 40,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) {
+        return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+      }
+
+      const query = String(args.query).trim()
+      const ftsQuery = sanitizeFtsQuery(query)
+      if (!ftsQuery) return jsonToolResult({ ok: false, error: "query_invalid" })
+
+      const limit = Number(args.limit)
+      const offset = Number(args.offset)
+
+      const rows = await env.DB.prepare(`
+        SELECT wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at, bm25(wiki_fts) AS score
+        FROM wiki_fts
+        JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+        WHERE wiki_fts MATCH ?
+          AND wp.entity_type = 'collection'
+        ORDER BY score
+        LIMIT ?
+        OFFSET ?
+      `)
+        .bind(ftsQuery, limit, offset)
+        .all<{
+          slug: string
+          title: string | null
+          summary: string | null
+          entity_type: string
+          updated_at: string | null
+          score: number | null
+        }>()
+
+      const totalRows = await env.DB.prepare(`
+        SELECT COUNT(*) AS total
+        FROM wiki_fts
+        JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+        WHERE wiki_fts MATCH ?
+          AND wp.entity_type = 'collection'
+      `)
+        .bind(ftsQuery)
+        .all<{ total: number }>()
+
+      const items = (rows.results ?? []).map((row) => {
+        const normalizedSlug = normalizeCollectionSlug(row.slug)
+        const score = typeof row.score === "number" && Number.isFinite(row.score) ? row.score : 25
+        const confidence = Number((1 / (1 + Math.max(0, score))).toFixed(4))
+        return {
+          slug: normalizedSlug,
+          title: row.title ?? normalizedSlug,
+          summary: row.summary ?? "",
+          confidence,
+          updated_at: row.updated_at,
+        }
+      })
+
+      return jsonToolResult({
+        ok: true,
+        query,
+        limit,
+        offset,
+        total: Number(totalRows.results?.[0]?.total ?? 0),
+        items,
+        resource_uris: items.map((item) => `wiki://collection/${item.slug}`),
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_get_field_status",
+    {
+      description: "Read-only wiki field coverage and status for a collection slug",
+      inputSchema: wikiFieldStatusSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_field_status",
+        limit: 60,
+        windowSeconds: 60,
+        alertThreshold: 40,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+
+      const slug = normalizeCollectionSlug(String(args.collection_slug))
+      const snapshot = await getConsolidatedSnapshot(slug, env)
+      const fields = Object.entries(snapshot.data.narrative).map(([name, value]) => {
+        const weighted = value.contributions[0]?.weight
+        return {
+          name,
+          status: value.status,
+          confidence: typeof weighted === "number" ? weighted : snapshot.data.confidence,
+          resolved_by_tier: value.resolved_by_tier,
+          last_updated: value.contributions[0]?.created_at ?? null,
+          contribution_count: value.contributions.length,
+        }
+      })
+
+      return jsonToolResult({
+        ok: true,
+        collection_slug: slug,
+        completeness_score: snapshot.data.completeness.score,
+        completeness: snapshot.data.completeness,
+        confidence: snapshot.data.confidence,
+        fields,
+        gaps: snapshot.data.gaps,
+        cached: snapshot.cached,
+        resource_uris: [
+          `wiki://collection/${slug}`,
+          `collection://context/${slug}`,
+        ],
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_get_collection_context",
+    {
+      description: "Read-only collection context snapshot (consensus + optional graph summary)",
+      inputSchema: wikiCollectionContextSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_collection_context",
+        limit: 60,
+        windowSeconds: 60,
+        alertThreshold: 40,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+
+      const slug = normalizeCollectionSlug(String(args.collection_slug))
+      const snapshot = await getConsolidatedSnapshot(slug, env)
+      let graph_summary: Record<string, unknown> | null = null
+
+      if (Boolean(args.include_graph_summary)) {
+        const graphRows = await env.DB.prepare(`
+          SELECT COUNT(*) AS total
+          FROM wiki_pages
+          WHERE slug = ? OR slug LIKE ?
+        `)
+          .bind(`collection:${slug}`, `${slug}:%`)
+          .all<{ total: number }>()
+
+        graph_summary = {
+          related_wiki_pages: Number(graphRows.results?.[0]?.total ?? 0),
+        }
+      }
+
+      return jsonToolResult({
+        ok: true,
+        collection_slug: slug,
+        consolidated: snapshot.data,
+        graph_summary,
+        cached: snapshot.cached,
+        resource_uris: [
+          `collection://context/${slug}`,
+          `wiki://collection/${slug}`,
+        ],
+      })
+    }
+  )
+
   if (caps.canContributeWiki) {
+    server.registerTool(
+      "wiki_propose_update",
+      {
+        description: "Create a wiki proposal following standard tier governance rules",
+        inputSchema: wikiProposeUpdateSchema,
+      },
+      async (args) => {
+        if (!auth) return unauthorizedResult()
+        if (!env.DB) return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+
+        const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+          keyPrefix: "mcp_wiki_propose_update",
+          limit: 24,
+          windowSeconds: 60,
+          alertThreshold: 16,
+        })
+        if (!rate.ok) {
+          return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+        }
+
+        const slug = normalizeCollectionSlug(String(args.collection_slug))
+        const field = String(args.field)
+        if (!isCanonicalField(field)) {
+          return jsonToolResult({ ok: false, error: "invalid_canonical_field", field })
+        }
+        if (!isFieldAllowedForSlug(field, slug)) {
+          return jsonToolResult({
+            ok: false,
+            error: "field_scope_mismatch",
+            detail: `Field '${field}' is not allowed for ${isInscriptionId(slug) ? "inscriptions" : "collections"}.`,
+          })
+        }
+
+        const sources = Array.isArray(args.sources)
+          ? args.sources.map((value) => String(value).trim()).filter(Boolean).slice(0, 8)
+          : []
+        const invalidSources = sources.filter((value) => !isLikelySourceRef(value))
+        if (invalidSources.length > 0) {
+          return jsonToolResult({
+            ok: false,
+            error: "invalid_sources",
+            invalid_sources: invalidSources,
+          })
+        }
+
+        const rationale = typeof args.rationale === "string" ? args.rationale.trim() : undefined
+        const idempotencyKey = typeof args.idempotency_key === "string" ? args.idempotency_key.trim() : undefined
+        const sourceExcerpt = toSourceExcerpt({
+          sources,
+          rationale,
+          idempotency_key: idempotencyKey,
+        })
+
+        const jwt = await mintInternalSessionJwt(auth, env)
+        if (!jwt) return jsonToolResult({ ok: false, error: "auth_not_configured" })
+
+        const internalRequest = new Request("https://ordinalmind.local/api/wiki/contribute", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({
+            contribution: {
+              collection_slug: slug,
+              field,
+              value: limitWikiContributionValue(String(args.proposed_value)),
+              confidence: args.confidence,
+              verifiable: Boolean(args.verifiable),
+              session_id: `mcp-proposal-${auth.props.sub}`,
+              source_excerpt: sourceExcerpt || undefined,
+              operation: "add",
+            },
+          }),
+        })
+
+        const response = await handleContribute(internalRequest, env)
+        const payload = asRecord(await response.json().catch(() => ({ ok: false, error: "invalid_response" })))
+
+        const proposalId = typeof payload.contribution_id === "string" ? payload.contribution_id : null
+        const status = typeof payload.status === "string" ? payload.status : "unknown"
+
+        return jsonToolResult({
+          ok: Boolean(payload.ok),
+          proposal_id: proposalId,
+          status,
+          tier_applied: payload.tier_applied ?? auth.props.tier,
+          idempotency_key: idempotencyKey ?? null,
+          validation: {
+            passed: true,
+            issues: [] as string[],
+          },
+          normalized_value: limitWikiContributionValue(String(args.proposed_value)).trim(),
+          sources,
+          rationale: rationale ?? null,
+          resource_uris: [
+            `wiki://collection/${slug}`,
+            `collection://context/${slug}`,
+          ],
+          upstream: payload,
+        })
+      }
+    )
+
     server.registerTool(
       "contribute_wiki",
       {
