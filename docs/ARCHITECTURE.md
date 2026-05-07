@@ -128,8 +128,10 @@ graph TD
 ### Capability gating
 
 - Tier mapping remains: `anon`, `community`, `og`, `genesis`.
-- Anonymous clients can access resources only.
+- Anonymous clients can access resources and read-only query tools.
 - Tool registration is dynamic per request tier:
+  - `query_chronicle`: `anon|community|og|genesis`
+  - `search_collection_inscriptions`: `anon|community|og|genesis`
   - `contribute_wiki`: `community|og|genesis`
   - `review_contribution`: `genesis`
   - `refresh_chronicle`: `genesis`

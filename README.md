@@ -127,11 +127,13 @@ npm run typecheck
 
 ### MCP Tools and Capability Gates
 
+- `query_chronicle`: public read-only query tool (`anon` and authenticated).
+- `search_collection_inscriptions`: public read-only query tool (`anon` and authenticated).
 - `contribute_wiki`: `community`, `og`, `genesis`.
 - `review_contribution`: `genesis` only.
 - `refresh_chronicle`: `genesis` only, supports `notifications/progress`.
 - `reindex_collection`: `genesis` only, supports `notifications/progress`.
-- Anonymous MCP access exposes resources only.
+- Anonymous MCP access exposes resources + read-only query tools.
 
 ### MCP Runtime Flags
 

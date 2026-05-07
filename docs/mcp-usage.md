@@ -103,6 +103,66 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   }'
 ```
 
+### 4) Use Query Tools
+
+#### List tools
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":6,
+    "method":"tools/list",
+    "params":{}
+  }'
+```
+
+#### Query chronicle with filters
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":7,
+    "method":"tools/call",
+    "params":{
+      "name":"query_chronicle",
+      "arguments":{
+        "inscription_id":"0",
+        "event_types":["genesis","transfer"],
+        "sort":"asc",
+        "limit":25
+      }
+    }
+  }'
+```
+
+#### Search inscriptions by collection
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":8,
+    "method":"tools/call",
+    "params":{
+      "name":"search_collection_inscriptions",
+      "arguments":{
+        "collection_slug":"ordinal-punks",
+        "limit":20,
+        "offset":0,
+        "sort":"recent"
+      }
+    }
+  }'
+```
+
 ## OAuth MCP (Dedicated Token)
 
 Use OAuth MCP endpoints (separate from web session auth):
@@ -129,10 +189,11 @@ Authorization: Bearer <mcp_access_token>
 
 - Anonymous:
   - `resources/*` available
-  - `tools/list` returns `[]`
+  - `query_chronicle` available
+  - `search_collection_inscriptions` available
   - `prompts/list` returns `[]`
 - Authenticated (Discord tier claims in MCP token):
-  - `community|og|genesis`: `contribute_wiki`
+  - `community|og|genesis`: `contribute_wiki` (+ anonymous query tools remain available)
   - `genesis`: `review_contribution`, `refresh_chronicle`, `reindex_collection`
 
 ## Troubleshooting
