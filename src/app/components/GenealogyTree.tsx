@@ -121,6 +121,7 @@ interface Props {
 type GenealogyViewMode = "tree" | "grouped"
 const MIN_GENEALOGY_SCALE = 0.1
 const MAX_GENEALOGY_SCALE = 3
+const TAP_SUPPRESSION_MS = 220
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
@@ -152,6 +153,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   // Pinch-to-zoom state
   const activePointers = useRef(new Map<number, { x: number, y: number }>())
   const lastPinchDistance = useRef<number | null>(null)
+  const suppressNodeTapUntilRef = useRef(0)
 
   const root = useMemo<RelatedInscriptionSummary>(() => {
     return {
@@ -298,6 +300,17 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     hasUserInteracted.current = true
   }, [])
 
+  const suppressNodeTap = useCallback((durationMs: number = TAP_SUPPRESSION_MS) => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    suppressNodeTapUntilRef.current = Math.max(suppressNodeTapUntilRef.current, now + durationMs)
+  }, [])
+
+  const handleNodeTap = useCallback((node: RelatedInscriptionSummary) => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    if (now < suppressNodeTapUntilRef.current) return
+    setSelectedNode(node)
+  }, [])
+
   const getTreeTransformOrigin = useCallback((): Point2D | null => {
     if (!containerRef.current || !treeRef.current) return null
 
@@ -433,6 +446,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
     if (activePointers.current.size === 2 && containerRef.current) {
+      suppressNodeTap()
       markUserInteracted()
       const pointers = Array.from(activePointers.current.values())
       const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y)
@@ -454,7 +468,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       }
       lastPinchDistance.current = dist
     }
-  }, [applyZoomAtPoint, markUserInteracted, scale])
+  }, [applyZoomAtPoint, markUserInteracted, scale, suppressNodeTap])
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (containerRef.current?.hasPointerCapture(e.pointerId)) {
@@ -561,11 +575,14 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      onPanStart={deterministicRendering ? undefined : markUserInteracted}
+      onPanStart={deterministicRendering ? undefined : () => {
+        markUserInteracted()
+        suppressNodeTap()
+      }}
       onPan={deterministicRendering ? undefined : (_e, info) => {
         // Only pan for tracked non-interactive pointers.
         if (activePointers.current.size !== 1) return
-        
+        suppressNodeTap()
         x.set(x.get() + info.delta.x)
         y.set(y.get() + info.delta.y)
       }}
@@ -654,7 +671,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               inscription={ggp}
               label="Great-Grandparent"
               isFeatured={ggp.inscription_id === oldestNodeId}
-              onTap={() => setSelectedNode(ggp)}
+              onTap={() => handleNodeTap(ggp)}
             />
           ))}
           {greatGrandparents.length > GENEALOGY_VISIBLE_LIMITS.greatGrandparents && renderMoreCard(greatGrandparents.length - GENEALOGY_VISIBLE_LIMITS.greatGrandparents, false)}
@@ -669,7 +686,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               inscription={gp}
               label="Grandparent"
               isFeatured={gp.inscription_id === oldestNodeId}
-              onTap={() => setSelectedNode(gp)}
+              onTap={() => handleNodeTap(gp)}
             />
           ))}
           {grandparents.length > GENEALOGY_VISIBLE_LIMITS.grandparents && renderMoreCard(grandparents.length - GENEALOGY_VISIBLE_LIMITS.grandparents, false)}
@@ -684,7 +701,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
               inscription={p}
               label="Parent"
               isFeatured={p.inscription_id === oldestNodeId}
-              onTap={() => setSelectedNode(p)}
+              onTap={() => handleNodeTap(p)}
             />
           ))}
           {parents.length > GENEALOGY_VISIBLE_LIMITS.parents && renderMoreCard(parents.length - GENEALOGY_VISIBLE_LIMITS.parents, false)}
@@ -697,7 +714,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
             inscription={root}
             label="Root"
             isRoot
-            onTap={() => setSelectedNode(root)}
+            onTap={() => handleNodeTap(root)}
           />
         </div>
 
@@ -709,7 +726,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                   id={`node-${child.inscription_id}`}
                   inscription={child}
                   compact
-                  onTap={() => setSelectedNode(child)}
+                  onTap={() => handleNodeTap(child)}
                 />
                 <div className="descendant-grandchildren">
                   {groupedGrandchildren.map((grandchild) => (
@@ -718,7 +735,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                       id={`node-${grandchild.inscription_id}`}
                       inscription={grandchild}
                       compact
-                    onTap={() => setSelectedNode(grandchild)}
+                    onTap={() => handleNodeTap(grandchild)}
                   />
                   ))}
                   {columnHiddenGrandchildrenCount > 0
@@ -736,7 +753,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                       id={`node-${grandchild.inscription_id}`}
                       inscription={grandchild}
                       compact
-                      onTap={() => setSelectedNode(grandchild)}
+                      onTap={() => handleNodeTap(grandchild)}
                     />
                   ))}
                   {descendantColumns.hiddenUnassignedGrandchildrenCount > 0
@@ -761,7 +778,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                     id={`node-${child.inscription_id}`}
                     inscription={child}
                     compact
-                    onTap={() => setSelectedNode(child)}
+                    onTap={() => handleNodeTap(child)}
                   />
                 ))}
                 {totalChildren > GENEALOGY_VISIBLE_LIMITS.children && renderMoreCard(totalChildren - GENEALOGY_VISIBLE_LIMITS.children, true)}
@@ -776,7 +793,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
                     id={`node-${grandchild.inscription_id}`}
                     inscription={grandchild}
                     compact
-                    onTap={() => setSelectedNode(grandchild)}
+                    onTap={() => handleNodeTap(grandchild)}
                   />
                 ))}
                 {hiddenGrandchildrenCount > 0 && renderMoreCard(hiddenGrandchildrenCount, true)}
