@@ -21,6 +21,7 @@ import { calculateTier, calculateBadges } from "../auth/tierEngine"
 import {
   buildAuthCookie,
   buildClearAuthCookie,
+  getCookie,
   requireSessionUser,
 } from "../auth/session"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
@@ -28,6 +29,7 @@ import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 const PKCE_TTL_SECONDS = 5 * 60 // 5 minutes
 const AUTH_CODE_TTL_SECONDS = 90
 const AUTH_COOKIE_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
+const PKCE_COOKIE_NAME = "ordinal_mind_pkce"
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -78,6 +80,20 @@ function getRedirectUri(requestUrl: URL, env: Env): string {
   return getFallbackRedirectUri(requestUrl)
 }
 
+function buildPkceCookie(
+  requestUrl: URL,
+  payload: { state: string; code_verifier: string; redirect_uri: string }
+): string {
+  const secure = requestUrl.protocol === "https:" ? "; Secure" : ""
+  const raw = encodeURIComponent(JSON.stringify(payload))
+  return `${PKCE_COOKIE_NAME}=${raw}; Path=/; Max-Age=${PKCE_TTL_SECONDS}; HttpOnly; SameSite=Lax${secure}`
+}
+
+function buildClearPkceCookie(requestUrl: URL): string {
+  const secure = requestUrl.protocol === "https:" ? "; Secure" : ""
+  return `${PKCE_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`
+}
+
 function isDocumentNavigation(request: Request): boolean {
   return request.headers.get("Sec-Fetch-Dest") === "document"
 }
@@ -112,14 +128,26 @@ async function handleDiscordInit(request: Request, env: Env): Promise<Response> 
   if (!env.DISCORD_CLIENT_ID) {
     return json({ error: "Discord integration not configured." }, 503)
   }
+  if (!env.JWT_SECRET) {
+    return json({ error: "Discord integration not configured." }, 503)
+  }
 
   const url = new URL(request.url)
+  const canonicalRedirectUri = getRedirectUri(url, env)
+  const canonicalOrigin = new URL(canonicalRedirectUri).origin
+  // Always begin OAuth from the same origin used in redirect_uri.
+  // This avoids state being created in one environment (ex: localhost)
+  // and validated in another (ex: workers.dev).
+  if (url.origin !== canonicalOrigin) {
+    return redirect(`${canonicalOrigin}/api/auth/discord`)
+  }
+
   const state = crypto.randomUUID()
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await deriveCodeChallenge(codeVerifier)
 
   const pkceKey = `pkce:${state}`
-  const redirectUri = getRedirectUri(url, env)
+  const redirectUri = canonicalRedirectUri
   await env.CHRONICLES_KV.put(
     pkceKey,
     JSON.stringify({
@@ -141,7 +169,13 @@ async function handleDiscordInit(request: Request, env: Env): Promise<Response> 
     return json({ url: authUrl })
   }
 
-  return redirect(authUrl)
+  return redirect(authUrl, {
+    "Set-Cookie": buildPkceCookie(url, {
+      state,
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri,
+    }),
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -173,28 +207,54 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
 
   const pkceKey = `pkce:${state}`
   const pkceRaw = await env.CHRONICLES_KV.get(pkceKey)
-  if (!pkceRaw) {
-    console.warn(
-      JSON.stringify({
-        at: new Date().toISOString(),
-        event: "security.auth.pkce_missing",
-      })
-    )
-    return json({ error: "Invalid or expired OAuth state. Please try connecting again." }, 400)
-  }
-
-  await env.CHRONICLES_KV.delete(pkceKey)
-
-  let codeVerifier: string
+  let codeVerifier = ""
   let redirectUri = getRedirectUri(url, env)
-  try {
-    const pkce = JSON.parse(pkceRaw) as { code_verifier: string; redirect_uri?: string }
-    codeVerifier = pkce.code_verifier
-    if (typeof pkce.redirect_uri === "string" && pkce.redirect_uri.trim().length > 0) {
-      redirectUri = pkce.redirect_uri
+
+  if (pkceRaw) {
+    await env.CHRONICLES_KV.delete(pkceKey)
+    try {
+      const pkce = JSON.parse(pkceRaw) as { code_verifier: string; redirect_uri?: string }
+      codeVerifier = pkce.code_verifier
+      if (typeof pkce.redirect_uri === "string" && pkce.redirect_uri.trim().length > 0) {
+        redirectUri = pkce.redirect_uri
+      }
+    } catch {
+      return json({ error: "Corrupted PKCE state." }, 500)
     }
-  } catch {
-    return json({ error: "Corrupted PKCE state." }, 500)
+  } else {
+    const cookieRaw = getCookie(request, PKCE_COOKIE_NAME)
+    if (cookieRaw) {
+      try {
+        const cookiePkce = JSON.parse(cookieRaw) as {
+          state?: string
+          code_verifier?: string
+          redirect_uri?: string
+        }
+        if (
+          typeof cookiePkce.state === "string" &&
+          cookiePkce.state === state &&
+          typeof cookiePkce.code_verifier === "string" &&
+          cookiePkce.code_verifier.length > 0
+        ) {
+          codeVerifier = cookiePkce.code_verifier
+          if (typeof cookiePkce.redirect_uri === "string" && cookiePkce.redirect_uri.trim().length > 0) {
+            redirectUri = cookiePkce.redirect_uri
+          }
+        }
+      } catch {
+        // Ignore malformed cookie and fallback to the standard error.
+      }
+    }
+
+    if (!codeVerifier) {
+      console.warn(
+        JSON.stringify({
+          at: new Date().toISOString(),
+          event: "security.auth.pkce_missing",
+        })
+      )
+      return json({ error: "Invalid or expired OAuth state. Please try connecting again." }, 400)
+    }
   }
 
   try {
@@ -266,6 +326,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
     const callbackOrigin = new URL(redirectUri).origin
     return redirect(`${callbackOrigin}/#auth_code=${encodeURIComponent(authCode)}`, {
       "Referrer-Policy": "no-referrer",
+      "Set-Cookie": buildClearPkceCookie(url),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "OAuth callback failed."
@@ -288,6 +349,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
     })()
     return redirect(`${fallbackOrigin}/#auth_error=${encodeURIComponent(message)}`, {
       "Referrer-Policy": "no-referrer",
+      "Set-Cookie": buildClearPkceCookie(url),
     })
   }
 }
