@@ -6,8 +6,19 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "production",
-    "DISCORD_REDIRECT_URI": "https://ordinal-mind-worker.lulipelipe-lx.workers.dev/api/auth/callback"
+    "DISCORD_REDIRECT_URI": "https://ordinalmind.com/api/auth/callback",
+    "ALLOWED_ORIGINS": "https://ordinalmind.com,https://www.ordinalmind.com,https://ordinal-mind-worker.lulipelipe-lx.workers.dev"
   },
+  "routes": [
+    {
+      "pattern": "ordinalmind.com/*",
+      "zone_name": "ordinalmind.com"
+    },
+    {
+      "pattern": "www.ordinalmind.com/*",
+      "zone_name": "ordinalmind.com"
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
