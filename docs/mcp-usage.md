@@ -205,6 +205,11 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   }'
 ```
 
+**Note on Discovery Strategy:**
+The search tool follows a "Discovery-First" approach. Items appear in search results as soon as they have technical consensus data (`completeness > 0`), even if a narrative has not yet been generated.
+- `completeness`: A score from 0.0 to 1.0 indicating data coverage.
+- `is_seed`: If `true`, the item is a discovery draft with technical data but pending a full narrative.
+
 #### Get wiki field status
 
 ```bash

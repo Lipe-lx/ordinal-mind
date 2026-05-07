@@ -95,6 +95,7 @@ graph TD
 - **Review Loop**: Anonymous or low-tier contributions enter a quarantine state for community/OG review.
 - **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
 - **Parallel Wiki Seed Agent**: A client-side background agent that extract facts from the initial narrative to proactively populate the wiki database.
+- **Discovery-First Indexing**: Collections with any consensus data (completeness > 0) are automatically seeded into the search index (`wiki_pages`), enabling immediate discovery via MCP and UI even before full narrative generation.
 
 ## MCP Plane (Agent Interop)
 
