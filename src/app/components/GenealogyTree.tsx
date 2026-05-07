@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useMotionValue, useSpring, animate, useTransform, type MotionValue } from "motion/react"
+import { motion, AnimatePresence, useMotionValue, useTransform, type MotionValue } from "motion/react"
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import { createPortal } from "react-dom"
 import type { ChronicleResponse, RelatedInscriptionSummary } from "../lib/types"
@@ -9,6 +9,7 @@ import {
   GENEALOGY_VISIBLE_LIMITS,
 } from "../lib/genealogy"
 import { computeGenealogyAutoFitScale, GENEALOGY_LAYOUT_SETTLE_DELAYS_MS } from "../lib/genealogyLayout"
+import { zoomAtPoint, type Point2D } from "../lib/genealogyViewport"
 import { formatContentTypeLabel } from "../lib/media"
 import { useDeterministicRendering } from "../lib/useDeterministicRendering"
 import { GenealogyNode } from "./GenealogyNode"
@@ -118,6 +119,8 @@ interface Props {
 }
 
 type GenealogyViewMode = "tree" | "grouped"
+const MIN_GENEALOGY_SCALE = 0.1
+const MAX_GENEALOGY_SCALE = 3
 
 export const GenealogyTree = memo(({ chronicle }: Props) => {
   const deterministicRendering = useDeterministicRendering()
@@ -136,10 +139,6 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const scale = useMotionValue(1)
   const x = useMotionValue(0)
   const y = useMotionValue(0)
-  
-  // Spring physics
-  const springScale = useSpring(scale, { stiffness: 120, damping: 24 })
-  const renderedScale = deterministicRendering ? scale : springScale
 
   // Parallax effect only when dragging
   const bgX = useTransform(x, (vx) => (vx as number) * 0.1)
@@ -225,7 +224,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       }
 
       const treeRect = treeRef.current.getBoundingClientRect()
-      // Calculate the ACTUAL rendered scale from DOM to be independent of spring state
+      // Calculate the actual rendered scale from DOM instead of relying on internal motion values.
       const offsetWidth = treeRef.current.offsetWidth || 1
       const actualScale = treeRect.width / offsetWidth || 1
       
@@ -293,6 +292,40 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const markUserInteracted = useCallback(() => {
     hasUserInteracted.current = true
   }, [])
+
+  const getTreeTransformOrigin = useCallback((): Point2D | null => {
+    if (!containerRef.current || !treeRef.current) return null
+
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const treeRect = treeRef.current.getBoundingClientRect()
+
+    return {
+      x: treeRect.left - containerRect.left + treeRect.width / 2,
+      y: treeRect.top - containerRect.top + treeRect.height / 2,
+    }
+  }, [])
+
+  const applyZoomAtPoint = useCallback((anchor: Point2D, nextScale: number) => {
+    const origin = getTreeTransformOrigin()
+    if (!origin) return
+
+    const next = zoomAtPoint({
+      anchor,
+      transformOrigin: origin,
+      current: {
+        scale: scale.get(),
+        tx: x.get(),
+        ty: y.get(),
+      },
+      nextScale,
+      minScale: MIN_GENEALOGY_SCALE,
+      maxScale: MAX_GENEALOGY_SCALE,
+    })
+
+    scale.set(next.scale)
+    x.set(next.tx)
+    y.set(next.ty)
+  }, [getTreeTransformOrigin, scale, x, y])
 
   // Setup ResizeObserver for robust measurement
   useEffect(() => {
@@ -368,7 +401,15 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [isFullscreen])
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (containerRef.current) {
+      try {
+        containerRef.current.setPointerCapture(e.pointerId)
+      } catch {
+        // Ignore pointer capture failures in unsupported edge-cases.
+      }
+    }
+
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     
     if (activePointers.current.size === 2) {
@@ -390,29 +431,31 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       if (lastPinchDistance.current !== null && dist > 0) {
         const delta = dist / lastPinchDistance.current
         const currentScale = scale.get()
-        const newScale = Math.min(Math.max(currentScale * delta, 0.1), 3.0)
+        const newScale = currentScale * delta
         
         if (newScale !== currentScale) {
-          // Calculate midpoint in container coordinates
           const rect = containerRef.current.getBoundingClientRect()
-          const midX = (pointers[0].x + pointers[1].x) / 2 - rect.left
-          const midY = (pointers[0].y + pointers[1].y) / 2 - rect.top
+          const anchor = {
+            x: (pointers[0].x + pointers[1].x) / 2 - rect.left,
+            y: (pointers[0].y + pointers[1].y) / 2 - rect.top,
+          }
 
-          // Zoom towards midpoint
-          // P = (M - [x, y]) / scale
-          const px = (midX - x.get()) / currentScale
-          const py = (midY - y.get()) / currentScale
-
-          scale.set(newScale)
-          x.set(midX - px * newScale)
-          y.set(midY - py * newScale)
+          applyZoomAtPoint(anchor, newScale)
         }
       }
       lastPinchDistance.current = dist
     }
-  }, [markUserInteracted, scale, x, y])
+  }, [applyZoomAtPoint, markUserInteracted, scale])
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (containerRef.current?.hasPointerCapture(e.pointerId)) {
+      try {
+        containerRef.current.releasePointerCapture(e.pointerId)
+      } catch {
+        // Ignore release failures if pointer ownership already changed.
+      }
+    }
+
     activePointers.current.delete(e.pointerId)
     if (activePointers.current.size < 2) {
       lastPinchDistance.current = null
@@ -429,29 +472,21 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       markUserInteracted()
       const delta = e.deltaY * -0.0012
       const currentScale = scale.get()
-      const newScale = Math.min(Math.max(currentScale + delta, 0.1), 3.0)
+      const newScale = currentScale + delta
       
       if (newScale !== currentScale && containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
-        const mouseX = e.clientX - rect.left
-        const mouseY = e.clientY - rect.top
-
-        const px = (mouseX - x.get()) / currentScale
-        const py = (mouseY - y.get()) / currentScale
-
-        scale.set(newScale)
-        x.set(mouseX - px * newScale)
-        y.set(mouseY - py * newScale)
+        const anchor = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        }
+        applyZoomAtPoint(anchor, newScale)
       }
     }
 
     container.addEventListener("wheel", onWheel, { passive: false })
     return () => container.removeEventListener("wheel", onWheel)
-  }, [markUserInteracted, scale, x, y, isFullscreen])
-
-  // Note: We removed the springScale.on("change") listener here because the SVG 
-  // is nested within the scaled container. Connections remain stable during zoom.
-
+  }, [applyZoomAtPoint, isFullscreen, markUserInteracted, scale])
 
   // Identify the single oldest progenitor in the visible tree
   const oldestNodeId = useMemo(() => {
@@ -504,16 +539,8 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const handleDoubleClick = useCallback(() => {
     markUserInteracted()
     applyAutoFit()
-    if (deterministicRendering) {
-      x.set(0)
-      y.set(0)
-    } else {
-      // Animate x and y smoothly with elastic physics
-      animate(x, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
-      animate(y, 0, { type: "spring", stiffness: 120, damping: 15, mass: 1 })
-    }
     syncTreeLayout(false)
-  }, [applyAutoFit, deterministicRendering, markUserInteracted, syncTreeLayout, x, y])
+  }, [applyAutoFit, markUserInteracted, syncTreeLayout])
 
   const content = (
     <motion.div 
@@ -530,9 +557,8 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
         // Only pan if not pinching (1 pointer)
         if (activePointers.current.size > 1) return
         
-        const s = renderedScale.get()
-        x.set(x.get() + info.delta.x / s)
-        y.set(y.get() + info.delta.y / s)
+        x.set(x.get() + info.delta.x)
+        y.set(y.get() + info.delta.y)
       }}
     >
       <GenealogyBackground x={bgX} y={bgY} />
@@ -577,7 +603,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       <motion.div 
         className="genealogy-tree" 
         ref={treeRef}
-        style={{ x, y, scale: renderedScale }}
+        style={{ x, y, scale }}
       >
         {/* SVG Connections Layer */}
         <svg 
