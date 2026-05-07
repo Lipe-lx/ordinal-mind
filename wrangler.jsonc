@@ -6,6 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "production",
+    "MCP_ENABLED": "1",
+    "MCP_OAUTH_ENABLED": "1",
+    "MCP_SPEC_TARGET": "2025-11-25",
     "DISCORD_REDIRECT_URI": "https://ordinalmind.com/api/auth/callback",
     "ALLOWED_ORIGINS": "https://ordinalmind.com,https://www.ordinalmind.com,https://ordinal-mind-worker.lulipelipe-lx.workers.dev"
   },
@@ -29,6 +32,10 @@
     {
       "binding": "CHRONICLES_KV",
       "id": "613a2fb769ce4ba7a7b8dfd792ba65cd"
+    },
+    {
+      "binding": "OAUTH_KV",
+      "id": "5264da3df91d47f1b091142834747940"
     }
   ],
   "d1_databases": [

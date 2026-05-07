@@ -3,6 +3,7 @@
 Ordinal Mind uses a factual-first split architecture:
 - **Worker** builds and serves verifiable Chronicle data (Layer 0) from public sources.
 - **Client** performs optional BYOK AI synthesis/chat and Wiki contributions (Layer 1/2) on top of that data.
+- **MCP Surface** exposes read-first resources and capability-gated operational tools for agent clients.
 
 ## High-Level Runtime
 
@@ -38,6 +39,13 @@ graph TD
   C -->|GET /api/wiki/graph| W
   W --> Graph[Graph Engine]
   Graph -->|Neural Layout| UI
+
+  MCPClient[MCP Client] -->|/mcp (Streamable HTTP)| W
+  W --> MCPSrv[MCP Server per request]
+  MCPSrv --> MCPRes[Resources: chronicle/wiki/context]
+  MCPSrv --> MCPTools[Tools: contribute/review/refresh/reindex]
+  MCPClient -->|OAuth 2.1| MCPOAuth[/mcp/oauth/* + well-known/]
+  MCPOAuth --> W
 ```
 
 ## Layer 0: Worker Data Plane (Factual)
@@ -88,6 +96,50 @@ graph TD
 - **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
 - **Parallel Wiki Seed Agent**: A client-side background agent that extract facts from the initial narrative to proactively populate the wiki database.
 
+## MCP Plane (Agent Interop)
+
+### Entry, lifecycle, and compatibility
+
+- `/mcp` is mounted without changing existing `/api/*` behavior.
+- A new `McpServer` instance is created per request (no global singleton).
+- Route-level enablement is controlled by `MCP_ENABLED` and `MCP_OAUTH_ENABLED`.
+- `MCP_SPEC_TARGET=2025-11-25` is used as the compatibility target marker.
+
+### Resources-first model
+
+- `chronicle://inscription/{id}`: factual timeline from KV-first path with D1 fallback.
+- `wiki://collection/{slug}`: consolidated wiki snapshot with tier-weighted outputs.
+- `collection://context/{slug}`: contextual collection summary and graph metadata.
+- Resource guardrails enforce caps for payload size, provenance depth, event window, and collection links before returning payloads.
+- Resource reads are read-oriented: no forced expensive recomputation in resource handlers.
+
+### OAuth 2.1 and dedicated MCP token contract
+
+- MCP auth is isolated from web session auth and uses dedicated OAuth token issuance.
+- Discord remains identity provider input; the Worker issues MCP-scoped access tokens with tier/capability claims.
+- OAuth endpoints:
+  - `/mcp/oauth/authorize`
+  - `/mcp/oauth/callback`
+  - `/mcp/oauth/token`
+  - `/mcp/oauth/register`
+  - `/.well-known/oauth-protected-resource` (provider-managed metadata flow)
+- OAuth state/token records use `OAUTH_KV` (dedicated namespace recommended and configured).
+
+### Capability gating
+
+- Tier mapping remains: `anon`, `community`, `og`, `genesis`.
+- Anonymous clients can access resources only.
+- Tool registration is dynamic per request tier:
+  - `contribute_wiki`: `community|og|genesis`
+  - `review_contribution`: `genesis`
+  - `refresh_chronicle`: `genesis`
+  - `reindex_collection`: `genesis`
+
+### Progressive operations
+
+- `refresh_chronicle` and `reindex_collection` emit `notifications/progress` when `progressToken` is present.
+- Tool-level rate limits are applied with dedicated KV prefixes to control loops and upstream cost.
+
 ## Security and Privacy Model
 
 - **No Server Secrets**: LLM keys are never seen by the server.
@@ -95,6 +147,7 @@ graph TD
 - **Content Security Policy (CSP)**: Strict `script-src 'self'` in production. Automatically relaxes to include `'unsafe-inline'` and `ws:`/`wss:` in local development to support Vite Fast Refresh and HMR.
 - **Public Data Only**: The Worker only scrapes public, cacheable data.
 - **Stateless Identity**: Session state is carried by signed JWTs.
+- **MCP Origin Hardening**: MCP requests validate `Origin` against trusted origins to mitigate DNS rebinding classes.
 
 ## Failure and Degradation Strategy
 

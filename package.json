@@ -25,6 +25,9 @@
     "cf:kv:import": "node scripts/cloudflare/kv-import-bulk.mjs"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.5.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "agents": "^0.12.3",
     "cbor": "^10.0.12",
     "cytoscape": "^3.33.3",
     "cytoscape-cola": "^2.5.1",
@@ -36,7 +39,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "react-router": "^7.0.0"
+    "react-router": "^7.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.0",

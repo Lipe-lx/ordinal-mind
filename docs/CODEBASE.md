@@ -78,6 +78,12 @@ This is the current structure and responsibility map of the repository.
 - `index.ts`: Worker entrypoint and route orchestration.
 - `routes/auth.ts`: Discord OAuth PKCE flow and session management.
 - `routes/wiki.ts`: wiki namespace router (contribute, consolidated, health).
+- `mcp/index.ts`: MCP entrypoint (`/mcp`) with per-request server creation, origin checks, and structured request logs.
+- `mcp/oauth.ts`: Dedicated MCP OAuth 2.1 provider wiring, Discord bridge, token props/scopes, callback handling.
+- `mcp/resources.ts`: read-only MCP resources (`chronicle://`, `wiki://`, `collection://`) with guardrails.
+- `mcp/tools.ts`: capability-gated MCP tools and progressive notifications for long operations.
+- `mcp/guards.ts`: MCP payload/depth/window/link guards and contribution input caps.
+- `mcp/types.ts`: MCP auth props, tier normalization, and capability map.
 
 ### Data Pipeline (`src/worker/pipeline`)
 
@@ -126,3 +132,5 @@ This is the current structure and responsibility map of the repository.
 - Wiki requires D1 migrations (`npm run db:migrate:local`).
 - LLM synthesis is strictly client-side; keys never leave the browser.
 - Factual Layer 0 (On-chain) has priority over Layer 1 (Wiki) narrative.
+- MCP is feature-flagged (`MCP_ENABLED`, `MCP_OAUTH_ENABLED`) and does not replace `/api/*`.
+- MCP OAuth token/state storage should use dedicated `OAUTH_KV` (separate from `CHRONICLES_KV`) for operational isolation.

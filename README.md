@@ -45,6 +45,7 @@ graph LR
 | **Storage** | Cloudflare D1 (SQL), Cloudflare KV (Cache) |
 | **Frontend** | React 19, Motion 12, Cytoscape.js (Neural Graph) |
 | **Identity** | Discord OAuth2 (PKCE), HMAC-SHA256 JWT |
+| **MCP** | MCP TypeScript SDK v1, Cloudflare `createMcpHandler`, OAuth 2.1 |
 | **AI/LLM** | Client-side BYOK (OpenAI, Anthropic, Gemini) |
 | **Tooling** | Vite 6, Vitest, Wrangler |
 
@@ -106,6 +107,41 @@ npm run typecheck
 | `/api/wiki/collection/:slug/graph` | `GET` | Public | Neural graph nodes and edges. |
 | `/api/wiki/contribute` | `POST` | Auth | Submit structured knowledge updates. |
 | `/api/auth/discord` | `GET` | Public | Initiate Discord PKCE handshake. |
+
+## 🔌 MCP Interface
+
+| Endpoint | Method | Scope | Description |
+| :--- | :--- | :--- | :--- |
+| `/mcp` | `GET`, `POST`, `DELETE`, `OPTIONS` | Public/Auth | MCP Streamable HTTP endpoint (feature-flagged, per-request server instance). |
+| `/mcp/oauth/authorize` | `GET` | Public | Starts MCP OAuth 2.1 authorization flow via Discord identity. |
+| `/mcp/oauth/callback` | `GET` | Public | OAuth callback endpoint for the MCP flow. |
+| `/mcp/oauth/token` | `POST` | Public | MCP OAuth token endpoint (provider-managed). |
+| `/mcp/oauth/register` | `POST` | Public | MCP OAuth dynamic client registration endpoint (provider-managed). |
+| `/.well-known/oauth-protected-resource` | `GET` | Public | Protected resource metadata for MCP clients. |
+
+### MCP Resources
+
+- `chronicle://inscription/{id}`: factual chronicle from KV-first pipeline with guardrails.
+- `wiki://collection/{slug}`: tier-weighted wiki consolidated snapshot.
+- `collection://context/{slug}`: collection context + graph summary (+ inscription context when slug is inscription id).
+
+### MCP Tools and Capability Gates
+
+- `contribute_wiki`: `community`, `og`, `genesis`.
+- `review_contribution`: `genesis` only.
+- `refresh_chronicle`: `genesis` only, supports `notifications/progress`.
+- `reindex_collection`: `genesis` only, supports `notifications/progress`.
+- Anonymous MCP access exposes resources only.
+
+### MCP Runtime Flags
+
+- `MCP_ENABLED=1`: enables `/mcp` routing.
+- `MCP_OAUTH_ENABLED=1`: enables dedicated MCP OAuth endpoints and token validation.
+- `MCP_SPEC_TARGET=2025-11-25`: project compliance target marker for MCP behavior and reviews.
+
+### KV Best Practice for OAuth
+
+`OAUTH_KV` should use a dedicated KV namespace (not shared with `CHRONICLES_KV`) to isolate OAuth transient state and token records from factual chronicle cache data.
 
 ---
 

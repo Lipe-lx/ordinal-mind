@@ -1,35 +1,33 @@
 // Worker entrypoint — routing and orchestration.
 // Routes:
 //   OPTIONS *            → CORS preflight
-//   GET /api/chronicle   → resolver → cache → parallel fetch → timeline → response
+//   GET /api/chronicle   → resolver → cache → pipeline → response
 //   GET /api/chronicle?stream=1 → SSE streaming with progress feedback
+//   /mcp                 → MCP Streamable HTTP handler (feature-flagged)
 //   * (everything else)  → env.ASSETS.fetch(request) — SPA static assets
 
 import { resolveInput } from "./resolver"
-import { cacheGet, cachePut } from "./cache"
-import { db } from "./db"
-import { persistRawEvents } from "./wiki/persistEvents"
+import { cacheGet } from "./cache"
 import { handleWikiRoute } from "./routes/wiki"
 import { handleAuthRoute } from "./routes/auth"
 import { fetchUnisat } from "./agents/unisat"
 import { attachSecurityHeaders } from "./security"
-
+import { newRequestId, runChroniclePipeline } from "./chronicleService"
+import type { DiagnosticsContext, ProgressCallback } from "./pipeline/types"
+import { handleMcpRequest, isMcpEnabled } from "./mcp"
 import {
-  fetchMetadata,
-  parallelFetch,
-  dependentFetch,
-  enrichment,
-  buildOutput,
-} from "./pipeline/phases"
-import { emptyCollectorSignals } from "./pipeline/defaults"
-import type {
-  ChronicleState,
-  DiagnosticsContext,
-  ProgressCallback,
-} from "./pipeline/types"
+  MCP_OAUTH_PATHS,
+  type McpOAuthRuntime,
+  createMcpOAuthProvider,
+  handleMcpAuthorizeRoute,
+  handleMcpCallbackRoute,
+  resolveMcpAuthFromRequest,
+} from "./mcp/oauth"
+import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider"
 
 export interface Env {
   CHRONICLES_KV: KVNamespace
+  OAUTH_KV?: KVNamespace
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   ENVIRONMENT: string
   UNISAT_API_KEY?: string
@@ -38,21 +36,34 @@ export interface Env {
   DISCORD_CLIENT_SECRET?: string
   DISCORD_REDIRECT_URI?: string
   JWT_SECRET?: string
+  OAUTH_PROVIDER?: OAuthHelpers
   ALLOWED_ORIGINS?: string
+  MCP_ENABLED?: string
+  MCP_OAUTH_ENABLED?: string
+  MCP_SPEC_TARGET?: string
 }
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Session-Id",
 }
 
-function newRequestId(): string {
-  try {
-    return crypto.randomUUID().slice(0, 8)
-  } catch {
-    return Math.random().toString(36).slice(2, 10)
+let mcpOAuthRuntimePromise: Promise<McpOAuthRuntime> | null = null
+
+function isMcpOauthEnabled(env: Env): boolean {
+  return env.MCP_OAUTH_ENABLED === "1"
+}
+
+async function getMcpOAuthRuntime(): Promise<McpOAuthRuntime> {
+  if (mcpOAuthRuntimePromise) return mcpOAuthRuntimePromise
+
+  const defaultHandler = {
+    fetch: coreFetch,
   }
+
+  mcpOAuthRuntimePromise = createMcpOAuthProvider(defaultHandler)
+  return mcpOAuthRuntimePromise
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -62,88 +73,81 @@ function jsonResponse(data: unknown, status = 200): Response {
   })
 }
 
-function initState(
-  id: string,
-  env: Env,
-  diagnostics: DiagnosticsContext,
-  lite: boolean,
-  onProgress?: ProgressCallback
-): ChronicleState {
-  return {
-    inscriptionId: id,
-    env: {
-      CHRONICLES_KV: env.CHRONICLES_KV,
-      UNISAT_API_KEY: env.UNISAT_API_KEY,
-      DB: env.DB,
-    },
-    diagnostics,
-    lite,
-    onProgress,
-    meta: null,
-    cborTraits: null,
-    transfers: [],
-    collectionData: null,
-    genesisTxResult: null,
-    genesisTxFetched: false,
-    transfersFetched: false,
-    skippedTransferCount: 0,
-    headTransferCount: 0,
-    mentions: [],
-    collectorSignals: emptyCollectorSignals(),
-    mentionSourceCatalog: [],
-    mentionDebugInfo: undefined,
-    webResearch: null,
-    unisatEnrichment: null,
-    rarity: null,
-    validation: null,
-    events: [],
-    sourceCatalog: [],
-    chronicle: null,
-    trace: {
-      request_id: diagnostics.requestId,
-      inscription_id: id,
-      phases: [],
-      total_duration_ms: 0,
-    },
-  }
-}
-
-async function runPipeline(state: ChronicleState): Promise<ChronicleState> {
-  state = await fetchMetadata(state)
-  state = await parallelFetch(state)
-  state = await dependentFetch(state)
-  state = await enrichment(state)
-  state = await buildOutput(state)
-  return state
-}
-
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
       const url = new URL(request.url)
-      const isDev = (env?.ENVIRONMENT === "development") || 
-                    (url.hostname === "localhost") || 
-                    (url.hostname === "127.0.0.1")
+      const isDev = (env?.ENVIRONMENT === "development")
+        || (url.hostname === "localhost")
+        || (url.hostname === "127.0.0.1")
 
-      // CORS preflight
-      if (request.method === "OPTIONS") {
-        return attachSecurityHeaders(request, new Response(null, { headers: CORS_HEADERS }), isDev)
+      let response: Response
+      if (isMcpEnabled(env) && isMcpOauthEnabled(env)) {
+        const { provider } = await getMcpOAuthRuntime()
+        response = await provider.fetch(request, env, ctx)
+      } else {
+        response = await coreFetch(request, env, ctx)
       }
 
-      // API routes
-      if (url.pathname.startsWith("/api/")) {
-        const response = await handleApi(request, url, env)
-        return attachSecurityHeaders(request, response, isDev)
-      }
-
-      // Serve static assets (SPA fallback handled by wrangler.jsonc config)
-      const response = await env.ASSETS.fetch(request)
       return attachSecurityHeaders(request, response, isDev)
     } catch (err) {
       console.error("Worker fetch error:", err)
       return new Response(err instanceof Error ? err.message : "Internal Worker Error", { status: 500 })
     }
   },
+
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!(isMcpEnabled(env) && isMcpOauthEnabled(env))) return
+    if (!env.OAUTH_KV) return
+
+    try {
+      const { provider } = await getMcpOAuthRuntime()
+      const result = await provider.purgeExpiredData(env, { batchSize: 100 })
+      ctx.waitUntil(
+        Promise.resolve().then(() => {
+          console.info(JSON.stringify({
+            at: new Date().toISOString(),
+            event: "mcp.oauth.purge",
+            ...result,
+          }))
+        })
+      )
+    } catch (error) {
+      console.error("MCP OAuth purge failed:", error)
+    }
+  },
+}
+
+async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(request.url)
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { headers: CORS_HEADERS })
+  }
+
+  if (isMcpEnabled(env)) {
+    if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.authorize) {
+      return handleMcpAuthorizeRoute(request, env)
+    }
+
+    if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.callback) {
+      return handleMcpCallbackRoute(request, env)
+    }
+
+    if (url.pathname.startsWith("/mcp")) {
+      const auth = isMcpOauthEnabled(env)
+        ? await resolveMcpAuthFromRequest(request, env, (await getMcpOAuthRuntime()).options)
+        : undefined
+
+      return handleMcpRequest({ request, env, ctx, auth })
+    }
+  }
+
+  if (url.pathname.startsWith("/api/")) {
+    return handleApi(request, url, env)
+  }
+
+  return env.ASSETS.fetch(request)
 }
 
 async function handleApi(
@@ -186,11 +190,11 @@ async function handleApi(
 
         const cursor = Number.parseInt(url.searchParams.get("cursor") ?? "0", 10)
         const size = Number.parseInt(url.searchParams.get("size") ?? "48", 10)
-        
+
         const page = await fetchUnisat.addressInscriptions(resolved.value, env.UNISAT_API_KEY, cursor, size)
-        
+
         if (!page) {
-           return jsonResponse({
+          return jsonResponse({
             type: "address",
             address: resolved.value,
             inscriptions: [],
@@ -202,7 +206,7 @@ async function handleApi(
         return jsonResponse({
           type: "address",
           address: resolved.value,
-          inscriptions: page.inscription.map(i => ({
+          inscriptions: page.inscription.map((i) => ({
             id: i.inscriptionId,
             number: i.inscriptionNumber,
             content_type: i.contentType,
@@ -214,9 +218,7 @@ async function handleApi(
       }
 
       const id = resolved.value
-      const route: DiagnosticsContext["route"] = useStream
-        ? "stream"
-        : "standard"
+      const route: DiagnosticsContext["route"] = useStream ? "stream" : "standard"
       const diagnostics: DiagnosticsContext = {
         debug,
         requestId: newRequestId(),
@@ -224,7 +226,6 @@ async function handleApi(
         inscriptionId: id,
       }
 
-      // Cache check (only for non-streaming)
       if (!useStream && !debug) {
         const cached = await cacheGet(env.CHRONICLES_KV, id)
         if (cached) {
@@ -232,12 +233,10 @@ async function handleApi(
         }
       }
 
-      // Streaming mode: SSE with progress feedback
       if (useStream) {
         return handleStreamingChronicle(id, env, diagnostics)
       }
 
-      // Standard mode: JSON response (backward compatible)
       return handleStandardChronicle(id, env, diagnostics, lite)
     } catch (err) {
       console.error("Chronicle API error:", err)
@@ -250,47 +249,22 @@ async function handleApi(
   return jsonResponse({ error: "Not found" }, 404)
 }
 
-// --- Standard JSON response (backward compatible) ---
-
 async function handleStandardChronicle(
   id: string,
   env: Env,
   diagnostics: DiagnosticsContext,
   lite?: boolean
 ): Promise<Response> {
-  const state = initState(id, env, diagnostics, !!lite)
   try {
-    const result = await runPipeline(state)
-    if (!result.chronicle) {
-      return jsonResponse({ error: "Pipeline produced no output" }, 500)
-    }
-
-    // Persist + cache (non-blocking)
-    if (env.DB) {
-      void persistRawEvents(env, id, result.events).then((r) => {
-        if (!r.ok) console.warn(`Raw events persistence skipped: ${r.status}`)
-      })
-    }
-
-    if (!lite) {
-      try {
-        await cachePut(env.CHRONICLES_KV, id, result.chronicle)
-      } catch (cacheErr) {
-        console.error("Cache write failed:", cacheErr)
-      }
-    }
-
-    // Validation to DB (non-blocking)
-    if (result.validation) {
-      try {
-        await db.putValidation(env.CHRONICLES_KV, {
-          inscription_id: id,
-          ...result.validation,
-        })
-      } catch {
-        // non-blocking
-      }
-    }
+    const result = await runChroniclePipeline({
+      id,
+      env,
+      diagnostics,
+      lite: Boolean(lite),
+      persistToDb: true,
+      writeCache: !lite,
+      writeValidation: true,
+    })
 
     return jsonResponse(result.chronicle)
   } catch (err) {
@@ -314,7 +288,7 @@ async function handleStreamingChronicle(
         encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)
       )
     } catch {
-      // Writer may be closed if client disconnected
+      // Writer may be closed if client disconnected.
     }
   }
 
@@ -324,28 +298,16 @@ async function handleStreamingChronicle(
 
   const pipeline = (async () => {
     try {
-      const state = initState(id, env, diagnostics, false, onProgress)
-      const result = await runPipeline(state)
-
-      if (!result.chronicle) {
-        await sendEvent("error", { message: "Pipeline produced no output" })
-        return
-      }
-
-      // Persist + cache (non-blocking)
-      if (env.DB) {
-        void persistRawEvents(env, id, result.events).then((r) => {
-          if (!r.ok) {
-            console.warn(`Raw events persistence skipped (stream): ${r.status}`)
-          }
-        })
-      }
-
-      try {
-        await cachePut(env.CHRONICLES_KV, id, result.chronicle)
-      } catch {
-        // Cache failure is non-blocking
-      }
+      const result = await runChroniclePipeline({
+        id,
+        env,
+        diagnostics,
+        lite: false,
+        onProgress,
+        persistToDb: true,
+        writeCache: true,
+        writeValidation: true,
+      })
 
       await sendEvent("result", result.chronicle)
     } catch (err) {
@@ -357,12 +319,11 @@ async function handleStreamingChronicle(
       try {
         await writer.close()
       } catch {
-        // Already closed
+        // Already closed.
       }
     }
   })()
 
-  // Ensure the pipeline runs to completion
   void pipeline
 
   return new Response(readable, {
