@@ -1,0 +1,155 @@
+# MCP Usage Guide (Ordinal Mind)
+
+Short operational guide for teams and agents consuming the public MCP server.
+
+## Endpoint
+
+- Base URL: `https://ordinalmind.com/mcp`
+- Transport: Streamable HTTP (SSE)
+- Server: `ordinal-mind` (`2.0.0`)
+
+## Required Headers
+
+Use these headers for MCP requests:
+
+- `Content-Type: application/json`
+- `Accept: application/json, text/event-stream`
+
+If `Accept` does not include `text/event-stream`, the server may return `406`.
+
+## Quick Start
+
+### 1) Initialize
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"initialize",
+    "params":{
+      "protocolVersion":"2024-11-05",
+      "capabilities":{},
+      "clientInfo":{"name":"demo-client","version":"1.0.0"}
+    }
+  }'
+```
+
+Expected capabilities include `resources`, `tools`, and `prompts`.
+
+### 2) Discover Resource Templates
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"resources/templates/list",
+    "params":{}
+  }'
+```
+
+Templates currently exposed:
+
+- `chronicle://inscription/{id}`
+- `wiki://collection/{slug}`
+- `collection://context/{slug}`
+
+### 3) Read a Resource
+
+#### Chronicle by inscription
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":3,
+    "method":"resources/read",
+    "params":{"uri":"chronicle://inscription/0"}
+  }'
+```
+
+#### Collection wiki
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":4,
+    "method":"resources/read",
+    "params":{"uri":"wiki://collection/ordinal-punks"}
+  }'
+```
+
+#### Collection context
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":5,
+    "method":"resources/read",
+    "params":{"uri":"collection://context/ordinal-punks"}
+  }'
+```
+
+## OAuth MCP (Dedicated Token)
+
+Use OAuth MCP endpoints (separate from web session auth):
+
+- `GET /mcp/oauth/authorize`
+- `GET /mcp/oauth/callback`
+- `POST /mcp/oauth/token`
+- `POST /mcp/oauth/register`
+- `GET /.well-known/oauth-protected-resource`
+
+Discovery example:
+
+```bash
+curl -sS 'https://ordinalmind.com/.well-known/oauth-protected-resource'
+```
+
+After OAuth, send MCP bearer token:
+
+```http
+Authorization: Bearer <mcp_access_token>
+```
+
+## Capability Behavior
+
+- Anonymous:
+  - `resources/*` available
+  - `tools/list` returns `[]`
+  - `prompts/list` returns `[]`
+- Authenticated (Discord tier claims in MCP token):
+  - `community|og|genesis`: `contribute_wiki`
+  - `genesis`: `review_contribution`, `refresh_chronicle`, `reindex_collection`
+
+## Troubleshooting
+
+- `406 Not Acceptable` on `/mcp`
+  - Missing `Accept: application/json, text/event-stream`.
+- `tools/list` empty
+  - Expected for anonymous token/session.
+- `401/403` on `tools/call`
+  - Missing/invalid MCP token or insufficient tier/capability.
+- `resource_payload_too_large`
+  - Response hit MCP guardrails; narrow query scope.
+- `untrusted_origin`
+  - Origin is not in trusted origin set for MCP hardening.
+
+## Notes for Agents/Clients
+
+- Prefer template discovery via `resources/templates/list`.
+- Expect SSE responses (`event: message` + JSON payload).
+- Treat `notifications/initialized` as a notification, not a request expecting a response.

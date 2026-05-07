@@ -149,6 +149,7 @@ npm run typecheck
 
 - 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Deep dive into data flow and consensus.
 - 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Responsibility map and directory structure.
+- 🔌 [**mcp-usage.md**](./docs/mcp-usage.md): Practical MCP usage (`initialize`, `resources/read`, OAuth, troubleshooting).
 - 🤖 [**AGENTS.md**](./AGENTS.md): Product thesis and implementation constraints.
 
 ---

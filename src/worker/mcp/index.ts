@@ -3,6 +3,7 @@ import type { Env } from "../index"
 import { registerResources } from "./resources"
 import { registerTools } from "./tools"
 import { type McpResolvedAuth } from "./types"
+import { registerCompatibilityStubs } from "./compat"
 
 function buildAllowedOrigins(requestUrl: URL, extraAllowed?: string): Set<string> {
   const allowed = new Set<string>([requestUrl.origin])
@@ -41,6 +42,7 @@ export function createOrdinalMindMcpServer(options: {
   request: Request
 }): McpServer {
   const server = new McpServer({ name: "ordinal-mind", version: "2.0.0" })
+  registerCompatibilityStubs(server)
   registerResources(server, options.env)
   registerTools({
     server,
