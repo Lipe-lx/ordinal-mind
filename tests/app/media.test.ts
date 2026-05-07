@@ -7,6 +7,7 @@ import {
   getMediaPreviewMode,
   isEmojiOnly,
   isTextLikeContentType,
+  normalizeContentType,
 } from "../../src/app/lib/media"
 
 describe("media helpers", () => {
@@ -18,8 +19,14 @@ describe("media helpers", () => {
 
   it("detects model and document inscriptions distinctly", () => {
     expect(detectMediaKind("model/gltf+json")).toBe("model")
+    expect(detectMediaKind("Content Type GLTF model/gltf+json")).toBe("model")
     expect(detectMediaKind("application/pdf")).toBe("document")
     expect(detectMediaKind("text/plain;charset=utf-8")).toBe("text")
+  })
+
+  it("normalizes noisy content-type strings by extracting the MIME token", () => {
+    expect(normalizeContentType("Content Type GLTF model/gltf+json")).toBe("model/gltf+json")
+    expect(normalizeContentType("MIME: image/png; charset=binary")).toBe("image/png")
   })
 
   it("maps advanced media kinds to ordinals preview mode", () => {

@@ -146,6 +146,8 @@ export function attachSecurityHeaders(
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https:",
+      "media-src 'self' data: blob: https:",
+      "frame-src 'self' https://ordinals.com",
       isDev ? "connect-src 'self' http: https: ws: wss:" : "connect-src 'self' https:",
       "object-src 'none'",
     ].join("; ")

@@ -41,12 +41,44 @@ const IMAGE_EXTENSION_LABELS: Record<string, string> = {
   "image/x-icon": "ICO",
 }
 
+const MIME_TOP_LEVELS = [
+  "application",
+  "audio",
+  "font",
+  "example",
+  "image",
+  "message",
+  "model",
+  "multipart",
+  "text",
+  "video",
+] as const
+
+const MIME_TOKEN_PATTERN = new RegExp(
+  `\\b(?:${MIME_TOP_LEVELS.join("|")})/[a-z0-9][a-z0-9!#$&^_.+-]*\\b`,
+  "i"
+)
+
 export function buildOrdinalsPreviewUrl(inscriptionId: string): string {
   return `https://ordinals.com/preview/${inscriptionId}`
 }
 
 export function normalizeContentType(contentType: string | undefined): string {
-  return contentType?.split(";")[0]?.trim().toLowerCase() ?? ""
+  const normalized = contentType?.trim().toLowerCase() ?? ""
+  if (!normalized) return ""
+
+  const firstSegment = normalized.split(";")[0]?.trim() ?? ""
+  if (!firstSegment) return ""
+
+  if (MIME_TOKEN_PATTERN.test(firstSegment)) {
+    const exactMatch = firstSegment.match(MIME_TOKEN_PATTERN)
+    return exactMatch?.[0] ?? firstSegment
+  }
+
+  const embeddedMatch = normalized.match(MIME_TOKEN_PATTERN)
+  if (embeddedMatch?.[0]) return embeddedMatch[0]
+
+  return firstSegment
 }
 
 export function isTextLikeContentType(contentType: string): boolean {
