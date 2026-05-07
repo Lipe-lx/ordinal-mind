@@ -4,7 +4,6 @@ import type {
   OAuthProvider,
   OAuthProviderOptions,
 } from "@cloudflare/workers-oauth-provider"
-import type { ExportedHandler } from "@cloudflare/workers-types"
 import type { Env } from "../index"
 import {
   buildAuthorizationUrl,
@@ -46,6 +45,10 @@ const SUPPORTED_SCOPES = [
 export type McpOAuthRuntime = {
   provider: OAuthProvider<Env>
   options: OAuthProviderOptions<Env>
+}
+
+type ExportedFetchHandler<EnvT> = {
+  fetch: (request: Request, env: EnvT, ctx: ExecutionContext) => Response | Promise<Response>
 }
 
 async function loadOAuthProviderLib(): Promise<{
@@ -151,8 +154,10 @@ async function deletePendingState(kv: KVNamespace, key: string): Promise<void> {
   await kv.delete(key)
 }
 
-export function buildMcpOAuthOptions(defaultHandler: ExportedHandler<Env>): OAuthProviderOptions<Env> {
+export function buildMcpOAuthOptions(defaultHandler: ExportedFetchHandler<Env>): OAuthProviderOptions<Env> {
   return {
+    apiRoute: "/mcp",
+    apiHandler: defaultHandler,
     defaultHandler,
     authorizeEndpoint: MCP_OAUTH_PATHS.authorize,
     tokenEndpoint: MCP_OAUTH_PATHS.token,
@@ -183,7 +188,7 @@ export function buildMcpOAuthOptions(defaultHandler: ExportedHandler<Env>): OAut
   }
 }
 
-export async function createMcpOAuthProvider(defaultHandler: ExportedHandler<Env>): Promise<McpOAuthRuntime> {
+export async function createMcpOAuthProvider(defaultHandler: ExportedFetchHandler<Env>): Promise<McpOAuthRuntime> {
   const { OAuthProvider } = await loadOAuthProviderLib()
   const options = buildMcpOAuthOptions(defaultHandler)
   return {

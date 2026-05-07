@@ -55,6 +55,13 @@ function isMcpOauthEnabled(env: Env): boolean {
   return env.MCP_OAUTH_ENABLED === "1"
 }
 
+function isMcpOAuthProviderManagedPath(pathname: string): boolean {
+  return pathname === MCP_OAUTH_PATHS.token
+    || pathname === MCP_OAUTH_PATHS.register
+    || pathname === "/.well-known/oauth-authorization-server"
+    || pathname === "/.well-known/oauth-protected-resource"
+}
+
 async function getMcpOAuthRuntime(): Promise<McpOAuthRuntime> {
   if (mcpOAuthRuntimePromise) return mcpOAuthRuntimePromise
 
@@ -81,13 +88,7 @@ export default {
         || (url.hostname === "localhost")
         || (url.hostname === "127.0.0.1")
 
-      let response: Response
-      if (isMcpEnabled(env) && isMcpOauthEnabled(env)) {
-        const { provider } = await getMcpOAuthRuntime()
-        response = await provider.fetch(request, env, ctx)
-      } else {
-        response = await coreFetch(request, env, ctx)
-      }
+      const response = await coreFetch(request, env, ctx)
 
       return attachSecurityHeaders(request, response, isDev)
     } catch (err) {
@@ -126,6 +127,11 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (isMcpEnabled(env)) {
+    if (isMcpOauthEnabled(env) && isMcpOAuthProviderManagedPath(url.pathname)) {
+      const { provider } = await getMcpOAuthRuntime()
+      return provider.fetch(request, env, ctx)
+    }
+
     if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.authorize) {
       return handleMcpAuthorizeRoute(request, env)
     }
