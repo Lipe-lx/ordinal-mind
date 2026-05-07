@@ -97,6 +97,8 @@ const wikiProposeUpdateSchema = {
   idempotency_key: z.string().min(8).max(128).optional(),
 }
 
+const helpSchema = {}
+
 type ProgressEmitter = {
   _meta?: { progressToken?: string | number } & Record<string, unknown>
   sendNotification: (...args: unknown[]) => Promise<void>
@@ -360,6 +362,68 @@ export function registerTools(options: {
   const { server, env, auth, request } = options
   const tier = normalizeTierForTool(auth?.props.tier)
   const caps = toCapabilityMap(tier)
+
+  server.registerTool(
+    "help",
+    {
+      description: "Usage guide for this MCP server: recommended workflow, tool selection, and tier behavior",
+      inputSchema: helpSchema,
+    },
+    async () => {
+      const writableTools: string[] = []
+      if (caps.canContributeWiki) writableTools.push("wiki_propose_update", "contribute_wiki")
+      if (caps.canReviewContribution) writableTools.push("review_contribution")
+      if (caps.canRefreshChronicle) writableTools.push("refresh_chronicle", "reindex_collection")
+
+      return jsonToolResult({
+        ok: true,
+        server: "ordinal-mind",
+        tier,
+        strategy: {
+          intent: "Factual-first research for Bitcoin Ordinals with optional wiki governance actions.",
+          steps: [
+            "If the slug is unknown, discover candidates with wiki_search_collections.",
+            "Confirm context with wiki_get_collection_context (or wiki://collection/{slug}).",
+            "From a known slug, get inscription IDs with search_collection_inscriptions.",
+            "Audit each known inscription ID with query_chronicle (or chronicle://inscription/{id}).",
+          ],
+        },
+        when_to_use: {
+          resources: [
+            "Use resources/read for canonical snapshots by known identifier (stable and cache-friendly).",
+          ],
+          tools: [
+            "Use tools/call for filtered queries, discovery, and governance actions.",
+          ],
+          distinction: {
+            wiki: "Consensus/context layer (narrative, coverage, community curation).",
+            chronicle: "Technical audit layer (timestamped on-chain and derived factual events).",
+          },
+        },
+        governance: {
+          wiki_propose_update: "Follows app tier rules: community -> quarantine, og/genesis -> published.",
+          review_contribution: "Genesis-only moderation action.",
+        },
+        available_tools_now: {
+          read_only: [
+            "help",
+            "query_chronicle",
+            "search_collection_inscriptions",
+            "wiki_search_collections",
+            "wiki_get_field_status",
+            "wiki_get_collection_context",
+          ],
+          writable: writableTools,
+        },
+        examples: [
+          "Discover slug: wiki_search_collections { query: '<collection-name-or-keyword>', limit: 10, offset: 0 }.",
+          "Load context: wiki_get_collection_context { collection_slug: '<slug-from-search>', include_graph_summary: true }.",
+          "List related inscriptions: search_collection_inscriptions { collection_slug: '<slug-from-search>', limit: 20, offset: 0, sort: 'recent' }.",
+          "Audit one inscription: query_chronicle { inscription_id: '<inscription-id>', event_types: ['genesis','transfer'], sort: 'asc', limit: 25 }.",
+        ],
+      })
+    }
+  )
 
   server.registerTool(
     "query_chronicle",

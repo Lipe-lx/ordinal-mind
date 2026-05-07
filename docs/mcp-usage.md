@@ -19,6 +19,8 @@ If `Accept` does not include `text/event-stream`, the server may return `406`.
 
 ## Quick Start
 
+Note: values like `ordinal-punks` and `0` are just sample inputs. For production use, discover valid slugs first with `wiki_search_collections` and use real inscription IDs.
+
 ### 1) Initialize
 
 ```bash
@@ -116,6 +118,23 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
     "id":6,
     "method":"tools/list",
     "params":{}
+  }'
+```
+
+#### Get strategy guide (`help`)
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":6,
+    "method":"tools/call",
+    "params":{
+      "name":"help",
+      "arguments":{}
+    }
   }'
 ```
 
@@ -280,6 +299,7 @@ Authorization: Bearer <mcp_access_token>
 
 - Anonymous:
   - `resources/*` available
+  - `help` available
   - `query_chronicle` available
   - `search_collection_inscriptions` available
   - `wiki_search_collections` available

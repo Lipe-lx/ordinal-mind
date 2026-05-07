@@ -130,6 +130,7 @@ graph TD
 - Tier mapping remains: `anon`, `community`, `og`, `genesis`.
 - Anonymous clients can access resources and read-only query tools.
 - Tool registration is dynamic per request tier:
+  - `help`: `anon|community|og|genesis`
   - `query_chronicle`: `anon|community|og|genesis`
   - `search_collection_inscriptions`: `anon|community|og|genesis`
   - `wiki_search_collections`: `anon|community|og|genesis`

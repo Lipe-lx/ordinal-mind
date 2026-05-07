@@ -127,6 +127,7 @@ npm run typecheck
 
 ### MCP Tools and Capability Gates
 
+- `help`: read-only usage and strategy guide for agents (`anon` and authenticated).
 - `query_chronicle`: public read-only query tool (`anon` and authenticated).
 - `search_collection_inscriptions`: public read-only query tool (`anon` and authenticated).
 - `wiki_search_collections`: public read-only wiki discovery tool (`anon` and authenticated).
