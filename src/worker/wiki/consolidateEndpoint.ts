@@ -123,6 +123,22 @@ export async function getConsolidatedSnapshot(
 
   const consolidated = await buildConsolidation(slug, env)
 
+  // Seed proativo: se a coleção tem dados, garante que ela exista no índice de busca (wiki_pages)
+  // Isso permite que ela seja encontrada no MCP mesmo sem uma narrativa completa.
+  if (consolidated.completeness.score > 0 && env.DB) {
+    await env.DB.prepare(`
+      INSERT OR IGNORE INTO wiki_pages
+        (slug, entity_type, title, summary, sections_json, cross_refs_json,
+         source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
+      VALUES (?, 'collection', ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
+    `)
+      .bind(slug, consolidated.narrative["name"]?.canonical_value || slug)
+      .run()
+      .catch(() => {
+        // Erros de seed são ignorados para não interromper a consolidação principal
+      })
+  }
+
   await env.DB.prepare(`
     INSERT INTO consolidated_cache (
       collection_slug, snapshot_json, confidence, completeness, contribution_count, updated_at

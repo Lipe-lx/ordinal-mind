@@ -382,7 +382,7 @@ export function registerTools(options: {
         strategy: {
           intent: "Factual-first research for Bitcoin Ordinals with optional wiki governance actions.",
           steps: [
-            "If the slug is unknown, discover candidates with wiki_search_collections.",
+            "If the slug is unknown, discover candidates with wiki_search_collections. Note: items are searchable as soon as they have technical data (completeness > 0).",
             "Confirm context with wiki_get_collection_context (or wiki://collection/{slug}).",
             "From a known slug, get inscription IDs with search_collection_inscriptions.",
             "Audit each known inscription ID with query_chronicle (or chronicle://inscription/{id}).",
@@ -416,7 +416,7 @@ export function registerTools(options: {
           writable: writableTools,
         },
         examples: [
-          "Discover slug: wiki_search_collections { query: '<collection-name-or-keyword>', limit: 10, offset: 0 }.",
+          "Discover slug: wiki_search_collections { query: '<collection-name-or-keyword>', limit: 10, offset: 0 }. Check 'completeness' score; items with 'is_seed: true' have data but pending narrative.",
           "Load context: wiki_get_collection_context { collection_slug: '<slug-from-search>', include_graph_summary: true }.",
           "List related inscriptions: search_collection_inscriptions { collection_slug: '<slug-from-search>', limit: 20, offset: 0, sort: 'recent' }.",
           "Audit one inscription: query_chronicle { inscription_id: '<inscription-id>', event_types: ['genesis','transfer'], sort: 'asc', limit: 25 }.",
@@ -636,9 +636,13 @@ export function registerTools(options: {
       const offset = Number(args.offset)
 
       const rows = await env.DB.prepare(`
-        SELECT wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at, bm25(wiki_fts) AS score
+        SELECT 
+          wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at, 
+          bm25(wiki_fts) AS score,
+          cc.completeness
         FROM wiki_fts
         JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+        LEFT JOIN consolidated_cache cc ON wp.slug = cc.collection_slug
         WHERE wiki_fts MATCH ?
           AND wp.entity_type = 'collection'
         ORDER BY score
@@ -653,6 +657,7 @@ export function registerTools(options: {
           entity_type: string
           updated_at: string | null
           score: number | null
+          completeness: number | null
         }>()
 
       const totalRows = await env.DB.prepare(`
@@ -672,8 +677,10 @@ export function registerTools(options: {
         return {
           slug: normalizedSlug,
           title: row.title ?? normalizedSlug,
-          summary: row.summary ?? "",
+          summary: row.summary || "Discovery Draft: Narrative pending consensus growth.",
           confidence,
+          completeness: row.completeness ?? 0,
+          is_seed: row.updated_at === null || row.summary === "",
           updated_at: row.updated_at,
         }
       })
@@ -763,7 +770,7 @@ export function registerTools(options: {
       const snapshot = await getConsolidatedSnapshot(slug, env)
       let graph_summary: Record<string, unknown> | null = null
 
-      if (Boolean(args.include_graph_summary)) {
+      if (args.include_graph_summary) {
         const graphRows = await env.DB.prepare(`
           SELECT COUNT(*) AS total
           FROM wiki_pages
