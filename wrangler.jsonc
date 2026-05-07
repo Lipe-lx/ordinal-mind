@@ -4,6 +4,9 @@
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-04-24",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -13,14 +16,14 @@
   "kv_namespaces": [
     {
       "binding": "CHRONICLES_KV",
-      "id": "9434dd5bf9394fcc808384e46ff61725"
+      "id": "613a2fb769ce4ba7a7b8dfd792ba65cd"
     }
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "ordinal-mind-wiki",
-      "database_id": "39280f3a-c801-450d-9a4e-329f972b20f7"
+      "database_id": "85fece45-95d7-4067-ab5c-9e44a5a8c7ac"
     }
   ]
 }
