@@ -145,6 +145,10 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const bgX = useTransform(x, (vx) => (vx as number) * 0.1)
   const bgY = useTransform(y, (vy) => (vy as number) * 0.1)
 
+  // Pinch-to-zoom state
+  const activePointers = useRef(new Map<number, { x: number, y: number }>())
+  const lastPinchDistance = useRef<number | null>(null)
+
   const root = useMemo<RelatedInscriptionSummary>(() => {
     return {
       inscription_id: chronicle.meta.inscription_id,
@@ -364,6 +368,57 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [isFullscreen])
 
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    
+    if (activePointers.current.size === 2) {
+      const pointers = Array.from(activePointers.current.values())
+      const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y)
+      lastPinchDistance.current = dist
+    }
+  }, [])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!activePointers.current.has(e.pointerId)) return
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (activePointers.current.size === 2 && containerRef.current) {
+      markUserInteracted()
+      const pointers = Array.from(activePointers.current.values())
+      const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y)
+      
+      if (lastPinchDistance.current !== null && dist > 0) {
+        const delta = dist / lastPinchDistance.current
+        const currentScale = scale.get()
+        const newScale = Math.min(Math.max(currentScale * delta, 0.1), 3.0)
+        
+        if (newScale !== currentScale) {
+          // Calculate midpoint in container coordinates
+          const rect = containerRef.current.getBoundingClientRect()
+          const midX = (pointers[0].x + pointers[1].x) / 2 - rect.left
+          const midY = (pointers[0].y + pointers[1].y) / 2 - rect.top
+
+          // Zoom towards midpoint
+          // P = (M - [x, y]) / scale
+          const px = (midX - x.get()) / currentScale
+          const py = (midY - y.get()) / currentScale
+
+          scale.set(newScale)
+          x.set(midX - px * newScale)
+          y.set(midY - py * newScale)
+        }
+      }
+      lastPinchDistance.current = dist
+    }
+  }, [markUserInteracted, scale, x, y])
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    activePointers.current.delete(e.pointerId)
+    if (activePointers.current.size < 2) {
+      lastPinchDistance.current = null
+    }
+  }, [])
+
   // Handle Zoom
   useEffect(() => {
     const container = containerRef.current
@@ -375,12 +430,24 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       const delta = e.deltaY * -0.0012
       const currentScale = scale.get()
       const newScale = Math.min(Math.max(currentScale + delta, 0.1), 3.0)
-      scale.set(newScale)
+      
+      if (newScale !== currentScale && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        const mouseX = e.clientX - rect.left
+        const mouseY = e.clientY - rect.top
+
+        const px = (mouseX - x.get()) / currentScale
+        const py = (mouseY - y.get()) / currentScale
+
+        scale.set(newScale)
+        x.set(mouseX - px * newScale)
+        y.set(mouseY - py * newScale)
+      }
     }
 
     container.addEventListener("wheel", onWheel, { passive: false })
     return () => container.removeEventListener("wheel", onWheel)
-  }, [markUserInteracted, scale, isFullscreen])
+  }, [markUserInteracted, scale, x, y, isFullscreen])
 
   // Note: We removed the springScale.on("change") listener here because the SVG 
   // is nested within the scaled container. Connections remain stable during zoom.
@@ -454,8 +521,15 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       ref={containerRef}
       style={{ touchAction: "none" }}
       onDoubleClick={handleDoubleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onPanStart={deterministicRendering ? undefined : markUserInteracted}
       onPan={deterministicRendering ? undefined : (_e, info) => {
+        // Only pan if not pinching (1 pointer)
+        if (activePointers.current.size > 1) return
+        
         const s = renderedScale.get()
         x.set(x.get() + info.delta.x / s)
         y.set(y.get() + info.delta.y / s)
