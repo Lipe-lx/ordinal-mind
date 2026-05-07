@@ -108,7 +108,7 @@ class FakeD1Statement {
       }))
     }
 
-    if (sql.includes("select id, field, value, contributor_id, og_tier, created_at") && sql.includes("from wiki_contributions")) {
+    if (sql.includes("select id, field, value") && sql.includes("value_norm") && sql.includes("from wiki_contributions")) {
       const slug = String(this.params[0] ?? "")
       return this.db.wikiContributions
         .filter((item) => String(item.collection_slug) === slug)
@@ -117,6 +117,7 @@ class FakeD1Statement {
           id: item.id,
           field: item.field,
           value: item.value,
+          value_norm: item.value_norm,
           contributor_id: item.contributor_id,
           og_tier: item.og_tier,
           created_at: item.created_at,

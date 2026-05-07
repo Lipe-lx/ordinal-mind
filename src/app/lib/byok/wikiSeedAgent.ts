@@ -12,6 +12,7 @@
 // - Respects field scope rules enforced by the backend.
 
 import type { Chronicle } from "../types"
+import { chooseCanonicalWikiValue, normalizeWikiValue } from "../wikiNormalization"
 import type { ByokConfig } from "./index"
 import { runByokPrompt, parseFirstJsonObject } from "./wikiAdapter"
 import { submitWikiContribution } from "./wikiSubmit"
@@ -128,6 +129,7 @@ interface RawExtractedField {
 interface ValidatedSeedField {
   field: CanonicalField
   value: string
+  value_norm: string
   verifiable: boolean
   scope: "collection" | "inscription"
   collection_slug: string
@@ -175,10 +177,51 @@ function validateExtractedField(
   return {
     field: r.field,
     value: r.value.trim().slice(0, 300),
+    value_norm: normalizeWikiValue(r.value.trim().slice(0, 300)),
     verifiable: Boolean(r.verifiable),
     scope,
     collection_slug: resolvedSlug,
   }
+}
+
+function dedupeSeedFields(fields: ValidatedSeedField[]): ValidatedSeedField[] {
+  if (fields.length <= 1) return fields
+
+  const grouped = new Map<string, ValidatedSeedField[]>()
+  for (const field of fields) {
+    const key = `${field.collection_slug}|${field.field}|${field.value_norm}`
+    const list = grouped.get(key) ?? []
+    list.push(field)
+    grouped.set(key, list)
+  }
+
+  const deduped: ValidatedSeedField[] = []
+  for (const candidates of grouped.values()) {
+    if (candidates.length === 1) {
+      deduped.push(candidates[0])
+      continue
+    }
+
+    const canonicalValue = chooseCanonicalWikiValue(candidates.map((item) => item.value))
+    const best = [...candidates].sort((left, right) => {
+      const verifiableDiff = Number(right.verifiable) - Number(left.verifiable)
+      if (verifiableDiff !== 0) return verifiableDiff
+      return left.value.localeCompare(right.value)
+    })[0]
+
+    if (!best) continue
+    deduped.push({
+      ...best,
+      value: canonicalValue,
+      value_norm: normalizeWikiValue(canonicalValue),
+    })
+  }
+
+  return deduped.sort((left, right) =>
+    left.collection_slug.localeCompare(right.collection_slug)
+    || left.field.localeCompare(right.field)
+    || left.value_norm.localeCompare(right.value_norm)
+  )
 }
 
 async function extractFieldsFromNarrative(
@@ -279,7 +322,8 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       label: "Seeding wiki from narrative…",
     })
 
-    const fields = await extractFieldsFromNarrative(narrative, chronicle, config)
+    const extractedFields = await extractFieldsFromNarrative(narrative, chronicle, config)
+    const fields = dedupeSeedFields(extractedFields)
 
     if (fields.length === 0) {
       console.info("[OrdinalMind][WikiSeedAgent] No extractable wiki fields found", {
@@ -298,6 +342,8 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
     console.info("[OrdinalMind][WikiSeedAgent] Fields extracted", {
       at: new Date().toISOString(),
       inscription_id: chronicle.meta.inscription_id,
+      extracted_count: extractedFields.length,
+      deduped_count: fields.length,
       fields: fields.map((f) => f.field),
     })
 

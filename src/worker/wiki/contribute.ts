@@ -6,13 +6,17 @@
 //   genesis / og  → published immediately
 //   community / anon → quarantine (awaiting review)
 //
-// Deduplication: same collection_slug + field + value → status = 'duplicate'
+// Consolidation:
+// - One active contribution per (slug + field + contributor_key + active status)
+// - Same normalized semantic value => duplicate/no-op
+// - Different value => upsert in-place + audit trail in wiki_log
 
 import type { Env } from "../index"
 import { verifyJWT } from "../auth/jwt"
 import type { OGTier } from "../auth/jwt"
 import { requireSessionUser } from "../auth/session"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
+import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
 
 /** Fields strictly for collections (origin, founders, etc.) */
 export const COLLECTION_ONLY_FIELDS = [
@@ -57,21 +61,21 @@ export function isInscriptionId(slug: string): boolean {
   return INSCRIPTION_ID_RE.test(slug)
 }
 
-/** 
- * Enforce field scope: 
+/**
+ * Enforce field scope:
  * - 'inscriber' is only for inscriptions.
  * - 'founder', 'launch_date', etc. are only for collections.
  */
 export function isFieldAllowedForSlug(field: CanonicalField, slug: string): boolean {
   const isInscription = isInscriptionId(slug)
-  
+
   if (isInscription) {
-    return (INSCRIPTION_ONLY_FIELDS as readonly string[]).includes(field) || 
-           (SHARED_FIELDS as readonly string[]).includes(field)
+    return (INSCRIPTION_ONLY_FIELDS as readonly string[]).includes(field)
+      || (SHARED_FIELDS as readonly string[]).includes(field)
   }
-  
-  return (COLLECTION_ONLY_FIELDS as readonly string[]).includes(field) || 
-         (SHARED_FIELDS as readonly string[]).includes(field)
+
+  return (COLLECTION_ONLY_FIELDS as readonly string[]).includes(field)
+    || (SHARED_FIELDS as readonly string[]).includes(field)
 }
 
 export interface WikiContributionInput {
@@ -99,8 +103,21 @@ export interface ContributeResponse {
 
 type ContributionStatus = "published" | "quarantine" | "duplicate" | "deleted"
 
+interface ActiveContributionRow {
+  id: string
+  value: string
+  value_norm: string | null
+  status: string
+}
+
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
   return tier === "og" || tier === "genesis" ? "published" : "quarantine"
+}
+
+function buildContributorKey(contributorId: string | null, sessionId: string): string {
+  return contributorId
+    ? `user:${contributorId}`
+    : `anon:${sessionId}`
 }
 
 function generateId(): string {
@@ -125,9 +142,9 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
   if (operation === "add" && (typeof c.value !== "string" || !c.value.trim())) return null
 
   if (
-    c.confidence !== "stated_by_user" &&
-    c.confidence !== "inferred" &&
-    c.confidence !== "correcting_existing"
+    c.confidence !== "stated_by_user"
+    && c.confidence !== "inferred"
+    && c.confidence !== "correcting_existing"
   ) return null
   if (typeof c.session_id !== "string" || !c.session_id) return null
 
@@ -167,25 +184,85 @@ async function resolveContributor(
   return { contributor_id: null, tier: "anon" }
 }
 
-async function checkDuplicate(
+async function readActiveContribution(
   env: Env,
   slug: string,
   field: CanonicalField,
-  value: string
-): Promise<boolean> {
-  if (!env.DB) return false
-  try {
-    const row = await env.DB.prepare(`
-      SELECT id FROM wiki_contributions
-      WHERE collection_slug = ? AND field = ? AND value = ?
-      LIMIT 1
-    `)
-      .bind(slug, field, value)
-      .first<{ id: string }>()
-    return Boolean(row)
-  } catch {
-    return false
+  contributorKey: string,
+  status: "published" | "quarantine"
+): Promise<ActiveContributionRow | null> {
+  if (!env.DB) return null
+
+  const row = await env.DB.prepare(`
+    SELECT id, value, value_norm, status
+    FROM wiki_contributions
+    WHERE collection_slug = ?
+      AND field = ?
+      AND contributor_key = ?
+      AND status = ?
+    LIMIT 1
+  `)
+    .bind(slug, field, contributorKey, status)
+    .first<ActiveContributionRow>()
+
+  return row ?? null
+}
+
+async function writeConsolidationAudit(
+  env: Env,
+  payload: {
+    contribution_id: string
+    collection_slug: string
+    field: CanonicalField
+    contributor_key: string
+    previous_value: string
+    previous_value_norm: string
+    next_value: string
+    next_value_norm: string
+    status: "published" | "quarantine"
+    tier: OGTier
   }
+): Promise<void> {
+  if (!env.DB) return
+
+  try {
+    await env.DB.prepare(`
+      INSERT INTO wiki_log (operation, slug, detail_json)
+      VALUES ('contribution_consolidated', ?, ?)
+    `)
+      .bind(
+        payload.collection_slug,
+        JSON.stringify({
+          at: new Date().toISOString(),
+          contribution_id: payload.contribution_id,
+          field: payload.field,
+          contributor_key: payload.contributor_key,
+          status: payload.status,
+          tier: payload.tier,
+          before: {
+            value: payload.previous_value,
+            value_norm: payload.previous_value_norm,
+          },
+          after: {
+            value: payload.next_value,
+            value_norm: payload.next_value_norm,
+          },
+        })
+      )
+      .run()
+  } catch {
+    // Audit log is best-effort only.
+  }
+}
+
+async function invalidateConsolidatedCache(env: Env, slug: string): Promise<void> {
+  if (!env.DB) return
+
+  await env.DB.prepare(`
+    DELETE FROM consolidated_cache WHERE collection_slug = ?
+  `)
+    .bind(slug)
+    .run()
 }
 
 export async function handleContribute(request: Request, env: Env): Promise<Response> {
@@ -230,10 +307,10 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
   // Enforce field scope (Inscriber belongs to Inscriptions, Founder to Collections, etc.)
   if (!isFieldAllowedForSlug(contribution.field, contribution.collection_slug)) {
-    return json({ 
-      ok: false, 
-      error: "field_scope_mismatch", 
-      detail: `Field '${contribution.field}' is not allowed for ${isInscriptionId(contribution.collection_slug) ? "inscriptions" : "collections"}.` 
+    return json({
+      ok: false,
+      error: "field_scope_mismatch",
+      detail: `Field '${contribution.field}' is not allowed for ${isInscriptionId(contribution.collection_slug) ? "inscriptions" : "collections"}.`,
     }, 400)
   }
 
@@ -246,18 +323,14 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       // Mark all existing published contributions for this field as 'deleted'
       await env.DB.prepare(`
         UPDATE wiki_contributions
-        SET status = 'deleted'
+        SET status = 'deleted',
+            updated_at = datetime('now')
         WHERE collection_slug = ? AND field = ? AND status = 'published'
       `)
         .bind(contribution.collection_slug, contribution.field)
         .run()
 
-      // Invalidate cache
-      await env.DB.prepare(`
-        DELETE FROM consolidated_cache WHERE collection_slug = ?
-      `)
-        .bind(contribution.collection_slug)
-        .run()
+      await invalidateConsolidatedCache(env, contribution.collection_slug)
 
       return json({
         ok: true,
@@ -271,50 +344,129 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     }
   }
 
-  // Deduplication check
-  const isDuplicate = await checkDuplicate(env, contribution.collection_slug, contribution.field, contribution.value)
-  if (isDuplicate) {
-    const fakeId = generateId()
-    const response: ContributeResponse = {
+  const status: "published" | "quarantine" = resolveStatus(tier)
+  const contributorKey = buildContributorKey(contributor_id, contribution.session_id)
+  const valueNorm = normalizeWikiValue(contribution.value)
+
+  let activeRow: ActiveContributionRow | null = null
+  try {
+    activeRow = await readActiveContribution(
+      env,
+      contribution.collection_slug,
+      contribution.field,
+      contributorKey,
+      status
+    )
+  } catch (err) {
+    console.error("[WikiContribute] Failed to read active contribution:", err)
+    return json({ ok: false, error: "db_read_failed" }, 500)
+  }
+
+  if (activeRow) {
+    const currentNorm = normalizeWikiValue(
+      (typeof activeRow.value_norm === "string" && activeRow.value_norm)
+      || (typeof activeRow.value === "string" ? activeRow.value : contribution.value)
+    )
+
+    if (currentNorm === valueNorm) {
+      const duplicateResponse: ContributeResponse = {
+        ok: true,
+        contribution_id: activeRow.id,
+        status: "duplicate",
+        tier_applied: tier,
+      }
+      return json(duplicateResponse)
+    }
+
+    try {
+      await env.DB.prepare(`
+        UPDATE wiki_contributions
+        SET
+          value = ?,
+          value_norm = ?,
+          confidence = ?,
+          verifiable = ?,
+          contributor_id = ?,
+          contributor_key = ?,
+          og_tier = ?,
+          session_id = ?,
+          source_excerpt = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `)
+        .bind(
+          contribution.value,
+          valueNorm,
+          contribution.confidence,
+          contribution.verifiable ? 1 : 0,
+          contributor_id,
+          contributorKey,
+          tier,
+          contribution.session_id,
+          contribution.source_excerpt ?? null,
+          activeRow.id
+        )
+        .run()
+
+      await writeConsolidationAudit(env, {
+        contribution_id: activeRow.id,
+        collection_slug: contribution.collection_slug,
+        field: contribution.field,
+        contributor_key: contributorKey,
+        previous_value: typeof activeRow.value === "string" ? activeRow.value : "",
+        previous_value_norm: currentNorm,
+        next_value: contribution.value,
+        next_value_norm: valueNorm,
+        status,
+        tier,
+      })
+
+      if (status === "published") {
+        await invalidateConsolidatedCache(env, contribution.collection_slug)
+      }
+    } catch (err) {
+      console.error("[WikiContribute] D1 consolidation update failed:", err)
+      return json({ ok: false, error: "db_write_failed" }, 500)
+    }
+
+    const consolidatedResponse: ContributeResponse = {
       ok: true,
-      contribution_id: fakeId,
-      status: "duplicate",
+      contribution_id: activeRow.id,
+      status,
       tier_applied: tier,
     }
-    return json(response)
+
+    return json(consolidatedResponse)
   }
 
   const id = generateId()
-  const status: ContributionStatus = resolveStatus(tier)
 
   try {
     await env.DB.prepare(`
       INSERT INTO wiki_contributions
-        (id, collection_slug, field, value, confidence, verifiable,
-         contributor_id, og_tier, session_id, source_excerpt, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, collection_slug, field, value, value_norm, confidence, verifiable,
+         contributor_id, contributor_key, og_tier, session_id, source_excerpt, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `)
       .bind(
         id,
         contribution.collection_slug,
         contribution.field,
         contribution.value,
+        valueNorm,
         contribution.confidence,
         contribution.verifiable ? 1 : 0,
         contributor_id,
+        contributorKey,
         tier,
         contribution.session_id,
         contribution.source_excerpt ?? null,
-        status,
+        status
       )
       .run()
 
     if (status === "published") {
-      await env.DB.prepare(`
-        DELETE FROM consolidated_cache WHERE collection_slug = ?
-      `)
-        .bind(contribution.collection_slug)
-        .run()
+      await invalidateConsolidatedCache(env, contribution.collection_slug)
     }
   } catch (err) {
     console.error("[WikiContribute] D1 insert failed:", err)

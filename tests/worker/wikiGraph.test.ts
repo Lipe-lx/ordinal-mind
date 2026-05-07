@@ -60,7 +60,7 @@ class GraphTestStatement {
       }))
     }
 
-    if (sql.includes("select id, field, value, contributor_id, og_tier, created_at") && sql.includes("from wiki_contributions")) {
+    if (sql.includes("select id, field, value") && sql.includes("value_norm") && sql.includes("from wiki_contributions")) {
       const slug = String(this.params[0] ?? "")
       return this.db.wikiContributions
         .filter((row) => String(row.collection_slug) === slug)
@@ -69,6 +69,7 @@ class GraphTestStatement {
           id: row.id,
           field: row.field,
           value: row.value,
+          value_norm: row.value_norm,
           contributor_id: row.contributor_id,
           og_tier: row.og_tier,
           created_at: row.created_at,

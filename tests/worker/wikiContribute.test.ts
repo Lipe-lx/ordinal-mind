@@ -95,7 +95,7 @@ describe("wikiContribute handler", () => {
       DB: {
         prepare: vi.fn().mockReturnThis(),
         bind: vi.fn().mockReturnThis(),
-        first: vi.fn().mockResolvedValue({ id: "existing" }),
+        first: vi.fn().mockResolvedValue({ id: "existing", value: "Satoshi!", value_norm: "satoshi", status: "quarantine" }),
       },
       JWT_SECRET: "test-secret",
     } as unknown as Env
@@ -115,5 +115,75 @@ describe("wikiContribute handler", () => {
     const data = await res.json() as any
     expect(data.ok).toBe(true)
     expect(data.status).toBe("duplicate")
+  })
+
+  it("consolidates semantically equivalent values as duplicate", async () => {
+    const localMockEnv = {
+      DB: {
+        prepare: vi.fn().mockReturnThis(),
+        bind: vi.fn().mockReturnThis(),
+        first: vi.fn().mockResolvedValue({
+          id: "existing_semantic",
+          value: "Sátoshi!!",
+          value_norm: "satoshi",
+          status: "quarantine",
+        }),
+      },
+      JWT_SECRET: "test-secret",
+    } as unknown as Env
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "test-slug",
+        field: "founder",
+        value: "satoshi",
+        confidence: "stated_by_user",
+        session_id: "s1",
+      },
+    })
+
+    const res = await handleContribute(req, localMockEnv)
+    expect(res.status).toBe(200)
+    const data = await res.json() as any
+    expect(data.ok).toBe(true)
+    expect(data.status).toBe("duplicate")
+    expect(data.contribution_id).toBe("existing_semantic")
+  })
+
+  it("updates existing active contribution in-place when value changes", async () => {
+    const first = vi.fn().mockResolvedValue({
+      id: "existing_update",
+      value: "Old founder",
+      value_norm: "old founder",
+      status: "quarantine",
+    })
+    const run = vi.fn().mockResolvedValue({ success: true })
+    const localMockEnv = {
+      DB: {
+        prepare: vi.fn().mockReturnThis(),
+        bind: vi.fn().mockReturnThis(),
+        first,
+        run,
+      },
+      JWT_SECRET: "test-secret",
+    } as unknown as Env
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "test-slug",
+        field: "founder",
+        value: "New founder",
+        confidence: "correcting_existing",
+        session_id: "s1",
+      },
+    })
+
+    const res = await handleContribute(req, localMockEnv)
+    expect(res.status).toBe(200)
+    const data = await res.json() as any
+    expect(data.ok).toBe(true)
+    expect(data.status).toBe("quarantine")
+    expect(data.contribution_id).toBe("existing_update")
+    expect(run).toHaveBeenCalled()
   })
 })

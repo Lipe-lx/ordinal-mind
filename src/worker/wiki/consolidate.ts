@@ -13,11 +13,12 @@
 
 import type { Env } from "../index"
 import { CANONICAL_FIELDS, isFieldAllowedForSlug, isInscriptionId, type CanonicalField } from "./contribute"
-import type { 
-  ConsolidatedCollection, 
-  ConsolidatedField, 
-  ConsensusContribution, 
-  ContributionStatus 
+import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
+import type {
+  ConsolidatedCollection,
+  ConsolidatedField,
+  ConsensusContribution,
+  ContributionStatus,
 } from "../../app/lib/types"
 
 const TIER_WEIGHTS: Record<string, number> = {
@@ -31,16 +32,47 @@ interface DBContributionRow {
   id: string
   field: CanonicalField
   value: string
+  value_norm?: string | null
   contributor_id: string | null
   og_tier: string
   created_at: string
+}
+
+function deduplicateByNormalizedValue(rows: DBContributionRow[]): DBContributionRow[] {
+  if (rows.length <= 1) return rows
+
+  const byNorm = new Map<string, DBContributionRow[]>()
+  for (const row of rows) {
+    const norm = normalizeWikiValue(row.value_norm ?? row.value)
+    const list = byNorm.get(norm) ?? []
+    list.push(row)
+    byNorm.set(norm, list)
+  }
+
+  const deduped: DBContributionRow[] = []
+  for (const candidates of byNorm.values()) {
+    const best = [...candidates].sort((left, right) => {
+      const leftWeight = TIER_WEIGHTS[left.og_tier] ?? 1
+      const rightWeight = TIER_WEIGHTS[right.og_tier] ?? 1
+      if (leftWeight !== rightWeight) return rightWeight - leftWeight
+
+      const timeDiff = new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+      if (timeDiff !== 0) return timeDiff
+
+      return right.id.localeCompare(left.id)
+    })[0]
+
+    if (best) deduped.push(best)
+  }
+
+  return deduped
 }
 
 export async function buildConsolidation(slug: string, env: Env): Promise<ConsolidatedCollection> {
   if (!env.DB) throw new Error("wiki_db_unavailable")
 
   const rows = await env.DB.prepare(`
-    SELECT id, field, value, contributor_id, og_tier, created_at
+    SELECT id, field, value, value_norm, contributor_id, og_tier, created_at
     FROM wiki_contributions
     WHERE collection_slug = ? AND status = 'published'
   `)
@@ -72,8 +104,9 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
   let filledCount = 0
 
   for (const field of allowedFields) {
-    const fieldRows = contributionsByField.get(field) ?? []
-    
+    const originalFieldRows = contributionsByField.get(field) ?? []
+    const fieldRows = deduplicateByNormalizedValue(originalFieldRows)
+
     if (fieldRows.length === 0) {
       gaps.push(field)
       narrative[field] = {
@@ -97,7 +130,9 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     // Sort by weight desc, then latest
     contributions.sort((a, b) => {
       if (a.weight !== b.weight) return b.weight - a.weight
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      const timeDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      if (timeDiff !== 0) return timeDiff
+      return b.value.localeCompare(a.value)
     })
 
     const topContrib = contributions[0]
@@ -109,11 +144,13 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     if (topWeight >= TIER_WEIGHTS.genesis) {
       status = "canonical"
     } else if (topWeight === TIER_WEIGHTS.og) {
-      // Check for dispute: another OG with a different value
-      const otherOgs = contributions.filter(c => c.weight === TIER_WEIGHTS.og && c.value !== topContrib.value)
+      // Check for dispute: another OG with a different semantic value
+      const topNorm = normalizeWikiValue(topContrib.value)
+      const otherOgs = contributions.filter(
+        (c) => c.weight === TIER_WEIGHTS.og && normalizeWikiValue(c.value) !== topNorm
+      )
       if (otherOgs.length > 0) {
         status = "disputed"
-        // In dispute, we don't have a firm canonical value
       } else {
         status = "canonical"
       }
@@ -157,9 +194,9 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
       FROM raw_chronicle_events
       WHERE event_type = 'genesis'
         AND inscription_id IN (
-          SELECT inscription_id 
-          FROM raw_chronicle_events 
-          WHERE event_type = 'collection_link' 
+          SELECT inscription_id
+          FROM raw_chronicle_events
+          WHERE event_type = 'collection_link'
             AND (
               json_extract(metadata_json, '$.name') = ?
               OR json_extract(metadata_json, '$.parent_inscription_id') = ?

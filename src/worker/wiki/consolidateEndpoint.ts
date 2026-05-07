@@ -9,12 +9,91 @@ export interface ConsolidatedSnapshotResult {
   cached: boolean
 }
 
+interface TableInfoRow {
+  name: string
+}
+
+interface LegacyActiveContributionRow {
+  id: string
+  field: string
+  status: "published" | "quarantine"
+  contributor_key: string
+  created_at: string
+}
+
+async function hasLazyCleanupColumns(env: Env): Promise<boolean> {
+  if (!env.DB) return false
+
+  try {
+    const columns = await env.DB.prepare("PRAGMA table_info('wiki_contributions')")
+      .all<TableInfoRow>()
+    const names = new Set((columns.results ?? []).map((row) => row.name))
+    return names.has("contributor_key") && names.has("updated_at")
+  } catch {
+    return false
+  }
+}
+
+async function cleanupLegacyActiveDuplicates(slug: string, env: Env): Promise<boolean> {
+  if (!env.DB) return false
+  const hasColumns = await hasLazyCleanupColumns(env)
+  if (!hasColumns) return false
+
+  const rows = await env.DB.prepare(`
+    SELECT id, field, status, contributor_key, created_at
+    FROM wiki_contributions
+    WHERE collection_slug = ?
+      AND status IN ('published', 'quarantine')
+    ORDER BY datetime(created_at) DESC, id DESC
+  `)
+    .bind(slug)
+    .all<LegacyActiveContributionRow>()
+
+  const seen = new Set<string>()
+  const duplicateIds: string[] = []
+
+  for (const row of rows.results ?? []) {
+    const key = `${row.field}|${row.status}|${row.contributor_key}`
+    if (seen.has(key)) {
+      duplicateIds.push(row.id)
+      continue
+    }
+    seen.add(key)
+  }
+
+  if (duplicateIds.length === 0) return false
+
+  const placeholders = duplicateIds.map(() => "?").join(", ")
+  await env.DB.prepare(`
+    UPDATE wiki_contributions
+    SET
+      status = 'duplicate',
+      reviewed_at = COALESCE(reviewed_at, datetime('now')),
+      updated_at = datetime('now')
+    WHERE id IN (${placeholders})
+  `)
+    .bind(...duplicateIds)
+    .run()
+
+  return true
+}
+
 export async function getConsolidatedSnapshot(
   slug: string,
   env: Env
 ): Promise<ConsolidatedSnapshotResult> {
   if (!env.DB) {
     throw new Error("wiki_db_unavailable")
+  }
+
+  const cleanedLegacy = await cleanupLegacyActiveDuplicates(slug, env)
+  if (cleanedLegacy) {
+    await env.DB.prepare(`
+      DELETE FROM consolidated_cache
+      WHERE collection_slug = ?
+    `)
+      .bind(slug)
+      .run()
   }
 
   const cacheRow = await env.DB.prepare(`
