@@ -40,7 +40,7 @@ interface Props {
   onDeleteThread: (threadId: string) => boolean
   onRetry: () => Promise<void> | void
   onCancel: () => void
-  onOpenBYOK: () => void
+  onOpenBYOK: (tab?: "llm" | "research" | "identity" | "wiki-export") => void
   onOpenWikiGraph?: () => void
 }
 
@@ -145,7 +145,7 @@ export function NarrativeChatRenderer({
                 : "Configure BYOK to unlock Chronicle chat. The factual timeline remains fully available."}
             </p>
             {!hasKey && (
-              <button className="btn-premium" onClick={onOpenBYOK}>
+              <button className="btn-premium" onClick={() => onOpenBYOK("llm")}>
                 <span className="byok-icon icon-premium">🔑</span>
                 <span>Configure BYOK</span>
               </button>
@@ -416,7 +416,7 @@ export function NarrativeChatRenderer({
           </div>
           <div className="narrative-chat-actions">
             {!hasKey ? (
-              <button type="button" className="btn-premium" onClick={onOpenBYOK}>
+              <button type="button" className="btn-premium" onClick={() => onOpenBYOK("llm")}>
                 <span className="byok-icon icon-premium">🔑</span>
                 <span>Configure BYOK</span>
               </button>

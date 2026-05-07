@@ -38,7 +38,7 @@ interface Props {
   onRenameThread: (threadId: string, title: string) => boolean
   onDeleteThread: (threadId: string) => boolean
   onRetryMessage: () => Promise<void> | void
-  onOpenBYOK: () => void
+  onOpenBYOK: (tab?: "llm" | "research" | "identity" | "wiki-export") => void
   onCancel: () => void
 }
 

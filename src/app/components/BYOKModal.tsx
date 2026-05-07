@@ -7,13 +7,14 @@ import { downloadWikiExport } from "../lib/wikiExport"
 
 interface Props {
   onClose: () => void
+  initialTab?: "llm" | "research" | "identity" | "wiki-export"
 }
 
-export function BYOKModal({ onClose }: Props) {
+export function BYOKModal({ onClose, initialTab }: Props) {
   const [config, setConfig] = useState<ByokConfig>(
     KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
   )
-  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity" | "wiki-export">("identity")
+  const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity" | "wiki-export">(initialTab ?? "identity")
   const { identity, isLoading: identityLoading, connect, disconnect } = useDiscordIdentity()
   const [wikiExportState, setWikiExportState] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [wikiExportMessage, setWikiExportMessage] = useState("")

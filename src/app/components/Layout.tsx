@@ -12,13 +12,14 @@ import type { ReactNode } from "react"
 export interface LayoutOutletContext {
   setHeaderCenter: (node: ReactNode) => void
   setHeaderRight: (node: ReactNode) => void
-  openBYOK: () => void
+  openBYOK: (tab?: "llm" | "research" | "identity" | "wiki-export") => void
 }
 
 export function Layout() {
   const location = useLocation()
   const isHome = location.pathname === "/"
   const [showBYOK, setShowBYOK] = useState(false)
+  const [targetTab, setTargetTab] = useState<"llm" | "research" | "identity" | "wiki-export" | undefined>()
   const [showTooltip, setShowTooltip] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
   const byokRef = useRef<HTMLButtonElement>(null)
@@ -36,7 +37,8 @@ export function Layout() {
     setHeaderRightState(node)
   }, [])
 
-  const openBYOK = useCallback(() => {
+  const openBYOK = useCallback((tab?: "llm" | "research" | "identity" | "wiki-export") => {
+    setTargetTab(tab)
     setShowBYOK(true)
   }, [])
 
@@ -85,7 +87,7 @@ export function Layout() {
                     className={`identity-avatar-wrap tier-border-${identity.tier}`} 
                     style={{ width: "32px", height: "32px", cursor: "pointer" }}
                     title={`${identity.username} (${identity.tier})`}
-                    onClick={openBYOK}
+                    onClick={() => openBYOK()}
                   >
                     {identity.avatar ? (
                       <img
@@ -132,7 +134,7 @@ export function Layout() {
                 <button
                   ref={byokRef}
                   className={`btn-minimal-key ${hasKey ? "has-key" : ""}`}
-                  onClick={openBYOK}
+                  onClick={() => openBYOK()}
                   onMouseEnter={() => setShowTooltip(true)}
                   onMouseLeave={() => setShowTooltip(false)}
                   id="byok-trigger"
@@ -175,7 +177,15 @@ export function Layout() {
         </div>
       </footer>
 
-      {showBYOK && <BYOKModal onClose={() => setShowBYOK(false)} />}
+      {showBYOK && (
+        <BYOKModal 
+          initialTab={targetTab} 
+          onClose={() => {
+            setShowBYOK(false)
+            setTargetTab(undefined)
+          }} 
+        />
+      )}
       <WikiReviewModal
         open={showReviewModal}
         items={reviewQueue.items}
