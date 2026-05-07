@@ -1,0 +1,99 @@
+.agent-surface {
+  margin-top: var(--space-3xl);
+  padding: var(--space-md) var(--space-xl);
+  background: rgba(247, 147, 26, 0.03);
+  border: 1px solid rgba(247, 147, 26, 0.1);
+  border-radius: var(--radius-2xl);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  transition: all var(--duration-normal) var(--ease-smooth);
+}
+
+.agent-surface:hover {
+  background: rgba(247, 147, 26, 0.06);
+  border-color: rgba(247, 147, 26, 0.2);
+  transform: translateY(-2px);
+}
+
+.agent-status-indicator {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.agent-status-indicator::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid #10b981;
+  border-radius: 50%;
+  animation: pulse-ring 2s infinite;
+  opacity: 0;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.agent-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.agent-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.agent-url {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.agent-connect-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-connect-btn:hover {
+  background: var(--accent-primary);
+  color: #000;
+  border-color: var(--accent-primary);
+}
+
+.agent-connect-btn.copied {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
+}
+
+@media (max-width: 640px) {
+  .agent-surface {
+    flex-direction: column;
+    text-align: center;
+    padding: var(--space-lg);
+  }
+  
+  .agent-info {
+    align-items: center;
+  }
+}

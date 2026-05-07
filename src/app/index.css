@@ -25,6 +25,7 @@
 @import "./styles/components/modal.css";
 @import "./styles/components/skeleton.css";
 @import "./styles/components/identity.css";
+@import "./styles/components/agent-surface.css";
 
 @import "./styles/layout/error-boundary.css";
 @import "./styles/pages/address.css";

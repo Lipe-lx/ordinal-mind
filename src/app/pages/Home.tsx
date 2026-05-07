@@ -262,6 +262,29 @@ export function Home() {
           <button className="btn btn-ghost" type="button" onClick={() => setInput("69420")}>#69420</button>
           <button className="btn btn-ghost" type="button" onClick={() => setInput("1000")}>#1000</button>
         </motion.div>
+
+        <motion.div 
+          className="agent-surface"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0, duration: 0.8 }}
+        >
+          <div className="agent-status-indicator" title="MCP Server Online" />
+          <div className="agent-info">
+            <span className="agent-label">Agent Surface 2.0</span>
+            <span className="agent-url">ordinalmind.com/mcp</span>
+          </div>
+          <button 
+            className={`agent-connect-btn ${error === "Copied!" ? "copied" : ""}`}
+            onClick={() => {
+              navigator.clipboard.writeText("https://ordinalmind.com/mcp")
+              setError("Copied!")
+              setTimeout(() => setError(null), 2000)
+            }}
+          >
+            {error === "Copied!" ? "URL Copied" : "Connect Agent"}
+          </button>
+        </motion.div>
       </motion.div>
     </div>
   )
