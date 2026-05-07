@@ -53,8 +53,29 @@ function redirect(url: string, extraHeaders?: Record<string, string>): Response 
   })
 }
 
-function getRedirectUri(requestUrl: URL): string {
+function normalizeAuthPath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1)
+  }
+  return pathname
+}
+
+function getFallbackRedirectUri(requestUrl: URL): string {
   return `${requestUrl.origin}/api/auth/callback`
+}
+
+function getRedirectUri(requestUrl: URL, env: Env): string {
+  const configured = env.DISCORD_REDIRECT_URI?.trim()
+  if (configured) {
+    try {
+      const parsed = new URL(configured)
+      const normalizedPath = normalizeAuthPath(parsed.pathname)
+      return `${parsed.origin}${normalizedPath}${parsed.search}`
+    } catch {
+      // Misconfigured value should not break auth entirely.
+    }
+  }
+  return getFallbackRedirectUri(requestUrl)
 }
 
 function isDocumentNavigation(request: Request): boolean {
@@ -98,15 +119,20 @@ async function handleDiscordInit(request: Request, env: Env): Promise<Response> 
   const codeChallenge = await deriveCodeChallenge(codeVerifier)
 
   const pkceKey = `pkce:${state}`
+  const redirectUri = getRedirectUri(url, env)
   await env.CHRONICLES_KV.put(
     pkceKey,
-    JSON.stringify({ code_verifier: codeVerifier, created_at: new Date().toISOString() }),
+    JSON.stringify({
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri,
+      created_at: new Date().toISOString(),
+    }),
     { expirationTtl: PKCE_TTL_SECONDS }
   )
 
   const authUrl = buildAuthorizationUrl({
     clientId: env.DISCORD_CLIENT_ID,
-    redirectUri: getRedirectUri(url),
+    redirectUri,
     state,
     codeChallenge,
   })
@@ -160,9 +186,13 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
   await env.CHRONICLES_KV.delete(pkceKey)
 
   let codeVerifier: string
+  let redirectUri = getRedirectUri(url, env)
   try {
-    const pkce = JSON.parse(pkceRaw) as { code_verifier: string }
+    const pkce = JSON.parse(pkceRaw) as { code_verifier: string; redirect_uri?: string }
     codeVerifier = pkce.code_verifier
+    if (typeof pkce.redirect_uri === "string" && pkce.redirect_uri.trim().length > 0) {
+      redirectUri = pkce.redirect_uri
+    }
   } catch {
     return json({ error: "Corrupted PKCE state." }, 500)
   }
@@ -171,7 +201,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
     const tokens = await exchangeCode({
       code,
       codeVerifier,
-      redirectUri: getRedirectUri(url),
+      redirectUri,
       clientId: env.DISCORD_CLIENT_ID,
       clientSecret: env.DISCORD_CLIENT_SECRET,
     })
@@ -233,7 +263,8 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
       return json({ auth_code: authCode, expires_in: AUTH_CODE_TTL_SECONDS })
     }
 
-    return redirect(`${url.origin}/#auth_code=${encodeURIComponent(authCode)}`, {
+    const callbackOrigin = new URL(redirectUri).origin
+    return redirect(`${callbackOrigin}/#auth_code=${encodeURIComponent(authCode)}`, {
       "Referrer-Policy": "no-referrer",
     })
   } catch (err) {
@@ -248,7 +279,14 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
     if (wantsJSON(request)) {
       return json({ error: message }, 500)
     }
-    return redirect(`${url.origin}/#auth_error=${encodeURIComponent(message)}`, {
+    const fallbackOrigin = (() => {
+      try {
+        return new URL(redirectUri).origin
+      } catch {
+        return url.origin
+      }
+    })()
+    return redirect(`${fallbackOrigin}/#auth_error=${encodeURIComponent(message)}`, {
       "Referrer-Policy": "no-referrer",
     })
   }
@@ -387,7 +425,7 @@ async function handleDisconnect(request: Request, env: Env): Promise<Response> {
 // ---------------------------------------------------------------------------
 export async function handleAuthRoute(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url)
-  const path = url.pathname
+  const path = normalizeAuthPath(url.pathname)
 
   if (request.method === "GET" && path === "/api/auth/discord") {
     return handleDiscordInit(request, env)

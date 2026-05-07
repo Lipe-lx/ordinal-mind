@@ -5,7 +5,8 @@
   "compatibility_date": "2026-04-24",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "DISCORD_REDIRECT_URI": "https://ordinal-mind-worker.lulipelipe-lx.workers.dev/api/auth/callback"
   },
   "assets": {
     "directory": "./dist",

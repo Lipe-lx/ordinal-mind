@@ -36,6 +36,7 @@ export interface Env {
   DB?: D1Database
   DISCORD_CLIENT_ID?: string
   DISCORD_CLIENT_SECRET?: string
+  DISCORD_REDIRECT_URI?: string
   JWT_SECRET?: string
   ALLOWED_ORIGINS?: string
 }
