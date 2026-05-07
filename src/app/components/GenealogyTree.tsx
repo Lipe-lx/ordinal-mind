@@ -122,6 +122,7 @@ type GenealogyViewMode = "tree" | "grouped"
 const MIN_GENEALOGY_SCALE = 0.1
 const MAX_GENEALOGY_SCALE = 3
 const TAP_SUPPRESSION_MS = 220
+const TAP_DRAG_THRESHOLD_PX = 8
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
@@ -152,6 +153,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
 
   // Pinch-to-zoom state
   const activePointers = useRef(new Map<number, { x: number, y: number }>())
+  const pointerStartPositions = useRef(new Map<number, { x: number, y: number }>())
   const lastPinchDistance = useRef<number | null>(null)
   const suppressNodeTapUntilRef = useRef(0)
 
@@ -422,17 +424,8 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (isInteractiveTarget(e.target)) return
 
-    if (containerRef.current) {
-      try {
-        if (e.pointerType !== "mouse") {
-          containerRef.current.setPointerCapture(e.pointerId)
-        }
-      } catch {
-        // Ignore pointer capture failures in unsupported edge-cases.
-      }
-    }
-
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    pointerStartPositions.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     
     if (activePointers.current.size === 2) {
       const pointers = Array.from(activePointers.current.values())
@@ -445,7 +438,31 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     if (!activePointers.current.has(e.pointerId)) return
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
+    const start = pointerStartPositions.current.get(e.pointerId)
+    if (start) {
+      const movement = Math.hypot(e.clientX - start.x, e.clientY - start.y)
+      if (movement >= TAP_DRAG_THRESHOLD_PX) {
+        if (e.pointerType !== "mouse" && containerRef.current && !containerRef.current.hasPointerCapture(e.pointerId)) {
+          try {
+            containerRef.current.setPointerCapture(e.pointerId)
+          } catch {
+            // Ignore pointer capture failures in unsupported edge-cases.
+          }
+        }
+        suppressNodeTap()
+      }
+    }
+
     if (activePointers.current.size === 2 && containerRef.current) {
+      activePointers.current.forEach((_value, pointerId) => {
+        if (!containerRef.current?.hasPointerCapture(pointerId)) {
+          try {
+            containerRef.current?.setPointerCapture(pointerId)
+          } catch {
+            // Ignore pointer capture failures in unsupported edge-cases.
+          }
+        }
+      })
       suppressNodeTap()
       markUserInteracted()
       const pointers = Array.from(activePointers.current.values())
@@ -480,6 +497,7 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
     }
 
     activePointers.current.delete(e.pointerId)
+    pointerStartPositions.current.delete(e.pointerId)
     if (activePointers.current.size < 2) {
       lastPinchDistance.current = null
     }
@@ -575,14 +593,13 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      onPanStart={deterministicRendering ? undefined : () => {
-        markUserInteracted()
-        suppressNodeTap()
-      }}
+      onPanStart={deterministicRendering ? undefined : markUserInteracted}
       onPan={deterministicRendering ? undefined : (_e, info) => {
         // Only pan for tracked non-interactive pointers.
         if (activePointers.current.size !== 1) return
-        suppressNodeTap()
+        if (Math.hypot(info.offset.x, info.offset.y) >= TAP_DRAG_THRESHOLD_PX) {
+          suppressNodeTap()
+        }
         x.set(x.get() + info.delta.x)
         y.set(y.get() + info.delta.y)
       }}
