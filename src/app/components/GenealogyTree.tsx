@@ -122,6 +122,11 @@ type GenealogyViewMode = "tree" | "grouped"
 const MIN_GENEALOGY_SCALE = 0.1
 const MAX_GENEALOGY_SCALE = 3
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest("button, a, input, textarea, select, label, summary, [role='button']"))
+}
+
 export const GenealogyTree = memo(({ chronicle }: Props) => {
   const deterministicRendering = useDeterministicRendering()
   const [selectedNode, setSelectedNode] = useState<RelatedInscriptionSummary | null>(null)
@@ -402,9 +407,13 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
   }, [isFullscreen])
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (isInteractiveTarget(e.target)) return
+
     if (containerRef.current) {
       try {
-        containerRef.current.setPointerCapture(e.pointerId)
+        if (e.pointerType !== "mouse") {
+          containerRef.current.setPointerCapture(e.pointerId)
+        }
       } catch {
         // Ignore pointer capture failures in unsupported edge-cases.
       }
@@ -554,8 +563,8 @@ export const GenealogyTree = memo(({ chronicle }: Props) => {
       onPointerCancel={handlePointerUp}
       onPanStart={deterministicRendering ? undefined : markUserInteracted}
       onPan={deterministicRendering ? undefined : (_e, info) => {
-        // Only pan if not pinching (1 pointer)
-        if (activePointers.current.size > 1) return
+        // Only pan for tracked non-interactive pointers.
+        if (activePointers.current.size !== 1) return
         
         x.set(x.get() + info.delta.x)
         y.set(y.get() + info.delta.y)
