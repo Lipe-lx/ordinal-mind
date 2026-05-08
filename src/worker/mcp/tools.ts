@@ -534,11 +534,12 @@ export function registerTools(options: {
             },
             flow_start: {
               content_type: "application/json",
-              required: ["client_id", "redirect_uri"],
+              required: ["client_id"],
               defaults: {
                 scope: "wiki.contribute wiki.review chronicle.refresh collection.reindex",
+                redirect_uri: "https://example.com/callback",
               },
-              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier. Persist oauth_client.code_verifier from flow/start for /mcp/oauth/token exchange. redirect_uri must be your client callback (never /mcp/oauth/callback).",
+              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier. If redirect_uri is omitted, MCP defaults to https://example.com/callback for low-friction agent flows. Persist oauth_client.code_verifier from flow/start for /mcp/oauth/token exchange. redirect_uri must never be /mcp/oauth/callback.",
             },
             token: {
               content_type: "application/x-www-form-urlencoded",

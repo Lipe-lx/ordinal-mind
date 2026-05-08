@@ -39,6 +39,7 @@ const MCP_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 const CALLBACK_STATE_READ_ATTEMPTS = 3
 const CALLBACK_STATE_READ_RETRY_MS = 120
 const MCP_OAUTH_STATE_COOKIE_NAME = "ordinal_mind_mcp_oauth_state"
+const DEFAULT_PUBLIC_CLIENT_REDIRECT_URI = "https://example.com/callback"
 
 interface PendingMcpAuthorizationCookie {
   v: 1
@@ -77,7 +78,7 @@ type ExportedFetchHandler<EnvT> = {
 
 interface FlowStartInput {
   client_id: string
-  redirect_uri: string
+  redirect_uri?: string
   scope?: string
   resource?: string
   state?: string
@@ -671,12 +672,13 @@ export async function handleMcpFlowStartRoute(
   } catch {
     input = null
   }
-  if (!input?.client_id || !input.redirect_uri) {
-    return oauthError(400, "invalid_flow_start_request", "client_id and redirect_uri are required.", false)
+  if (!input?.client_id) {
+    return oauthError(400, "invalid_flow_start_request", "client_id is required.", false)
   }
+  const effectiveRedirectUri = input.redirect_uri?.trim() || DEFAULT_PUBLIC_CLIENT_REDIRECT_URI
   let redirectUrl: URL
   try {
-    redirectUrl = new URL(input.redirect_uri)
+    redirectUrl = new URL(effectiveRedirectUri)
   } catch {
     return oauthError(400, "invalid_redirect_uri", "redirect_uri must be a valid absolute URL.", false)
   }

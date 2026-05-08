@@ -166,6 +166,27 @@ describe("MCP OAuth flow sessions", () => {
     expect(body.oauth_client?.state).toBeTruthy()
   })
 
+  it("uses default redirect_uri when flow/start omits redirect_uri", async () => {
+    const env = makeEnv()
+    const oauthApi = {
+      parseAuthRequest: vi.fn(async () => ({ scope: ["wiki.contribute"] })),
+      completeAuthorization: vi.fn(),
+    }
+    const req = new Request("https://ordinalmind.com/mcp/oauth/flow/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: "client-1",
+      }),
+    })
+    const res = await handleMcpFlowStartRoute(req, env, oauthApi as any)
+    const body = await res.json() as any
+
+    expect(res.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.oauth_client?.redirect_uri).toBe("https://example.com/callback")
+  })
+
   it("status reflects token_ready after successful callback", async () => {
     const env = makeEnv()
     const oauthApi = {
