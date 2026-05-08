@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  canCurrentUserIngestWiki,
   fetchWikiHealth,
   fetchWikiPage,
   isWikiHealthReady,
@@ -110,5 +111,34 @@ describe("wikiLifecycle helpers", () => {
     const result = await fetchWikiPage("inscription:abc123i0")
     expect(result.page?.slug).toBe("inscription:abc123i0")
     expect(result.error).toBeNull()
+  })
+
+  it("allows ingest only for og/genesis tiers", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, user: { tier: "og" } }), { status: 200 })
+    ))
+    await expect(canCurrentUserIngestWiki()).resolves.toBe(true)
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, user: { tier: "genesis" } }), { status: 200 })
+    ))
+    await expect(canCurrentUserIngestWiki()).resolves.toBe(true)
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, user: { tier: "community" } }), { status: 200 })
+    ))
+    await expect(canCurrentUserIngestWiki()).resolves.toBe(false)
+  })
+
+  it("denies ingest when unauthenticated or request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: false, error: "missing_auth_token" }), { status: 200 })
+    ))
+    await expect(canCurrentUserIngestWiki()).resolves.toBe(false)
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: false, error: "invalid_auth_token" }), { status: 401 })
+    ))
+    await expect(canCurrentUserIngestWiki()).resolves.toBe(false)
   })
 })

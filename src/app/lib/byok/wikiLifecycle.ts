@@ -14,6 +14,13 @@ export interface WikiLifecycleState {
   lastError: string | null
 }
 
+interface AuthMeResponse {
+  ok?: boolean
+  user?: {
+    tier?: string
+  }
+}
+
 export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleState {
   const [wikiPage, setWikiPage] = useState<WikiPage | null>(null)
   const [status, setStatus] = useState<WikiLifecycleStatus>("idle")
@@ -69,15 +76,18 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
 
       const keyConfig = KeyStore.get()
       const canGenerate = Boolean(keyConfig?.key && keyConfig.provider !== "unknown")
+      const canIngest = canGenerate ? await canCurrentUserIngestWiki() : false
+      if (cancelled) return
+      const canRegenerate = canGenerate && canIngest
 
       const shouldRefresh = shouldAttemptWikiRegeneration({
         health,
-        canGenerate,
+        canGenerate: canRegenerate,
         page: fetched.page,
         fetchError: fetched.error,
       })
 
-      if (canGenerate && shouldRefresh) {
+      if (canRegenerate && shouldRefresh) {
         setStatus("refreshing")
         await regenerateWikiPage({
           chronicle,
@@ -103,7 +113,7 @@ export function useWikiLifecycle(chronicle: Chronicle | null): WikiLifecycleStat
         const report = await maybeRunWikiLint()
         if (cancelled) return
 
-        if (!canGenerate || !isSlugFlaggedForRegeneration(slug, report)) return
+        if (!canRegenerate || !isSlugFlaggedForRegeneration(slug, report)) return
         if (regenerateInFlightRef.current === slug) return
 
         setStatus("refreshing")
@@ -187,8 +197,8 @@ async function regenerateWikiPage(args: RegenerateArgs): Promise<void> {
     }
 
     const ingested = await ingestWikiDraft(draft)
-    if (!ingested) {
-      onFailure("wiki_ingest_failed")
+    if (!ingested.ok) {
+      onFailure(ingested.error ?? "wiki_ingest_failed")
       return
     }
 
@@ -247,6 +257,22 @@ export async function fetchWikiPage(slug: string): Promise<FetchWikiResult> {
   }
 }
 
+export async function canCurrentUserIngestWiki(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/me", {
+      method: "GET",
+      credentials: "same-origin",
+    })
+    if (!response.ok) return false
+    const payload = await response.json().catch(() => ({})) as AuthMeResponse
+    if (!payload.ok) return false
+    const tier = payload.user?.tier
+    return tier === "og" || tier === "genesis"
+  } catch {
+    return false
+  }
+}
+
 export function isWikiHealthReady(health: WikiHealth): boolean {
   return health.ready === true && health.status === "ready"
 }
@@ -270,7 +296,7 @@ export function isWikiPageStale(page: WikiPage, now = Date.now()): boolean {
   return now - ts > WIKI_STALE_MS
 }
 
-async function ingestWikiDraft(draft: WikiPageDraft): Promise<boolean> {
+async function ingestWikiDraft(draft: WikiPageDraft): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const response = await fetch("/api/wiki/ingest", {
       method: "POST",
@@ -280,22 +306,26 @@ async function ingestWikiDraft(draft: WikiPageDraft): Promise<boolean> {
     })
     if (!response.ok) {
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+      const error = typeof payload.error === "string" ? payload.error : "unknown_error"
       logWikiLifecycleDiagnostic("warn", "wiki_ingest_failed", {
         slug: draft.slug,
         status: response.status,
-        error: typeof payload.error === "string" ? payload.error : "unknown_error",
+        error,
       })
-      return false
+      return { ok: false, error }
     }
 
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
     return payload.ok === true
+      ? { ok: true }
+      : { ok: false, error: "wiki_ingest_failed" }
   } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown_error"
     logWikiLifecycleDiagnostic("warn", "wiki_ingest_request_failed", {
       slug: draft.slug,
-      reason: error instanceof Error ? error.message : "unknown_error",
+      reason,
     })
-    return false
+    return { ok: false, error: "wiki_ingest_request_failed" }
   }
 }
 
