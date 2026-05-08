@@ -49,77 +49,83 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     return json({ ok: false, error: "source_event_ids_required" }, 422)
   }
 
-  const placeholders = draft.source_event_ids.map(() => "?").join(",")
-  const found = await env.DB.prepare(
-    `SELECT id FROM raw_chronicle_events WHERE id IN (${placeholders})`
-  )
-    .bind(...draft.source_event_ids)
-    .all<{ id: string }>()
-
-  const foundSet = new Set((found.results ?? []).map((row) => row.id))
-  const unverifiedIds = draft.source_event_ids.filter((id) => !foundSet.has(id))
-
-  const normalizedSections = draft.sections.map((section) => {
-    const verifiedIds = section.source_event_ids.filter((id) => foundSet.has(id))
-    return {
-      ...section,
-      source_event_ids: verifiedIds,
-      unverified_claims: section.source_event_ids.some((id) => !foundSet.has(id)),
-    }
-  })
-
-  const now = new Date().toISOString()
-
-  await env.DB.prepare(`
-    INSERT INTO wiki_pages
-      (slug, entity_type, title, summary, sections_json, cross_refs_json,
-       source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(slug) DO UPDATE SET
-      entity_type = excluded.entity_type,
-      title = excluded.title,
-      summary = excluded.summary,
-      sections_json = excluded.sections_json,
-      cross_refs_json = excluded.cross_refs_json,
-      source_event_ids_json = excluded.source_event_ids_json,
-      generated_at = excluded.generated_at,
-      byok_provider = excluded.byok_provider,
-      unverified_count = excluded.unverified_count,
-      updated_at = excluded.updated_at
-  `)
-    .bind(
-      draft.slug,
-      draft.entity_type,
-      draft.title,
-      draft.summary,
-      JSON.stringify(normalizedSections),
-      JSON.stringify(draft.cross_refs),
-      JSON.stringify(draft.source_event_ids),
-      draft.generated_at,
-      draft.byok_provider,
-      unverifiedIds.length,
-      now
+  try {
+    const placeholders = draft.source_event_ids.map(() => "?").join(",")
+    const found = await env.DB.prepare(
+      `SELECT id FROM raw_chronicle_events WHERE id IN (${placeholders})`
     )
-    .run()
+      .bind(...draft.source_event_ids)
+      .all<{ id: string }>()
 
-  void env.DB.prepare(`
-    INSERT INTO wiki_log (operation, slug, detail_json)
-    VALUES ('ingest', ?, ?)
-  `)
-    .bind(
-      draft.slug,
-      JSON.stringify({
-        provider: draft.byok_provider,
-        section_count: normalizedSections.length,
-        unverified_count: unverifiedIds.length,
-      })
-    )
-    .run()
-    .catch(() => {
-      // Audit logs are best-effort; page ingestion has already succeeded.
+    const foundSet = new Set((found.results ?? []).map((row) => row.id))
+    const unverifiedIds = draft.source_event_ids.filter((id) => !foundSet.has(id))
+
+    const normalizedSections = draft.sections.map((section) => {
+      const verifiedIds = section.source_event_ids.filter((id) => foundSet.has(id))
+      return {
+        ...section,
+        source_event_ids: verifiedIds,
+        unverified_claims: section.source_event_ids.some((id) => !foundSet.has(id)),
+      }
     })
 
-  return json({ ok: true, slug: draft.slug, unverified_count: unverifiedIds.length })
+    const now = new Date().toISOString()
+
+    await env.DB.prepare(`
+      INSERT INTO wiki_pages
+        (slug, entity_type, title, summary, sections_json, cross_refs_json,
+         source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(slug) DO UPDATE SET
+        entity_type = excluded.entity_type,
+        title = excluded.title,
+        summary = excluded.summary,
+        sections_json = excluded.sections_json,
+        cross_refs_json = excluded.cross_refs_json,
+        source_event_ids_json = excluded.source_event_ids_json,
+        generated_at = excluded.generated_at,
+        byok_provider = excluded.byok_provider,
+        unverified_count = excluded.unverified_count,
+        updated_at = excluded.updated_at
+    `)
+      .bind(
+        draft.slug,
+        draft.entity_type,
+        draft.title,
+        draft.summary,
+        JSON.stringify(normalizedSections),
+        JSON.stringify(draft.cross_refs),
+        JSON.stringify(draft.source_event_ids),
+        draft.generated_at,
+        draft.byok_provider,
+        unverifiedIds.length,
+        now
+      )
+      .run()
+
+    void env.DB.prepare(`
+      INSERT INTO wiki_log (operation, slug, detail_json)
+      VALUES ('ingest', ?, ?)
+    `)
+      .bind(
+        draft.slug,
+        JSON.stringify({
+          provider: draft.byok_provider,
+          section_count: normalizedSections.length,
+          unverified_count: unverifiedIds.length,
+        })
+      )
+      .run()
+      .catch(() => {
+        // Audit logs are best-effort; page ingestion has already succeeded.
+      })
+
+    return json({ ok: true, slug: draft.slug, unverified_count: unverifiedIds.length })
+  } catch (error) {
+    console.error("[WikiIngest] Ingest failed:", error)
+    const detail = error instanceof Error ? error.message : String(error)
+    return json({ ok: false, error: "wiki_ingest_failed", detail: detail.slice(0, 220) }, 500)
+  }
 }
 
 function sanitizeDraft(payload: unknown): WikiPageDraft | null {

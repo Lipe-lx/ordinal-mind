@@ -6,30 +6,30 @@ import { performWebSearch } from "../agents/webResearch"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 
 export async function handleWikiTool(toolName: string, request: Request, env: Env): Promise<Response> {
-  const requestUrl = new URL(request.url)
-  if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
-    console.warn(JSON.stringify({ at: new Date().toISOString(), event: "security.write_origin_blocked", route: "/api/wiki/tools/*" }))
-    return json({ ok: false, error: "untrusted_origin" }, 403)
-  }
-
-  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
-    keyPrefix: "wiki_tools",
-    limit: 45,
-    windowSeconds: 60,
-    alertThreshold: 30,
-  })
-  if (!rate.ok) {
-    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
-  }
-
-  let payload: Record<string, unknown>
   try {
-    payload = (await request.json()) as Record<string, unknown>
-  } catch {
-    payload = {}
-  }
+    const requestUrl = new URL(request.url)
+    if (!isTrustedWriteRequest(request, requestUrl, env.ALLOWED_ORIGINS)) {
+      console.warn(JSON.stringify({ at: new Date().toISOString(), event: "security.write_origin_blocked", route: "/api/wiki/tools/*" }))
+      return json({ ok: false, error: "untrusted_origin" }, 403)
+    }
 
-  try {
+    const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+      keyPrefix: "wiki_tools",
+      limit: 45,
+      windowSeconds: 60,
+      alertThreshold: 30,
+    })
+    if (!rate.ok) {
+      return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+    }
+
+    let payload: Record<string, unknown>
+    try {
+      payload = (await request.json()) as Record<string, unknown>
+    } catch {
+      payload = {}
+    }
+
     switch (toolName) {
       case "search_wiki":
         return json(await searchWiki(payload, env))
@@ -48,6 +48,7 @@ export async function handleWikiTool(toolName: string, request: Request, env: En
         return json({ ok: false, error: "unknown_tool", tool: toolName }, 404)
     }
   } catch (err) {
+    console.error("[WikiTools] request failed:", err)
     if (isMissingWikiSchemaError(err)) {
       return json(
         {
@@ -64,7 +65,7 @@ export async function handleWikiTool(toolName: string, request: Request, env: En
     return json(
       {
         ok: false,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error && err.message ? err.message : "wiki_tools_failed",
         partial: true,
       },
       200

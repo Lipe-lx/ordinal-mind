@@ -25,17 +25,55 @@ interface PendingReviewsResponse {
   items: WikiReviewItem[]
 }
 
-async function fetchPendingReviews(): Promise<PendingReviewsResponse> {
+interface PendingReviewsPartialResponse {
+  ok?: boolean
+  pending_count?: number
+  items?: WikiReviewItem[]
+  partial?: boolean
+  error?: string
+}
+
+interface PendingReviewsFetchResult {
+  kind: "ok" | "partial"
+  payload: PendingReviewsResponse
+}
+
+function normalizePendingReviewsPayload(payload: unknown): PendingReviewsPartialResponse {
+  if (!payload || typeof payload !== "object") return {}
+  return payload as PendingReviewsPartialResponse
+}
+
+async function fetchPendingReviews(): Promise<PendingReviewsFetchResult> {
   const response = await fetch("/api/wiki/reviews/pending", {
     credentials: "same-origin",
   })
 
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok || payload?.ok !== true) {
-    throw new Error(typeof payload?.error === "string" ? payload.error : "review_fetch_failed")
+  const payload = normalizePendingReviewsPayload(await response.json().catch(() => ({})))
+  if (response.ok && payload.ok === true) {
+    return {
+      kind: "ok",
+      payload: {
+        ok: true,
+        pending_count: Number.isFinite(payload.pending_count) ? Number(payload.pending_count) : 0,
+        items: Array.isArray(payload.items) ? payload.items : [],
+      },
+    }
   }
 
-  return payload as PendingReviewsResponse
+  // Backends in partial mode may not expose pending reviews reliably.
+  // Treat this as degraded-but-non-fatal to avoid repetitive UI error noise.
+  if (payload.partial === true) {
+    return {
+      kind: "partial",
+      payload: {
+        ok: true,
+        pending_count: 0,
+        items: [],
+      },
+    }
+  }
+
+  throw new Error(typeof payload.error === "string" ? payload.error : "review_fetch_failed")
 }
 
 async function sendReviewAction(reviewId: string, action: "approve" | "reject"): Promise<void> {
@@ -61,7 +99,7 @@ export function useWikiReviewQueue(enabled: boolean) {
   const [error, setError] = useState<string | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!enabled) {
       setItems([])
       setPendingCount(0)
@@ -72,12 +110,18 @@ export function useWikiReviewQueue(enabled: boolean) {
 
     setLoading(true)
     try {
-      const payload = await fetchPendingReviews()
-      setItems(payload.items)
-      setPendingCount(payload.pending_count)
-      setError(null)
+      const result = await fetchPendingReviews()
+      setItems(result.payload.items)
+      setPendingCount(result.payload.pending_count)
+      if (result.kind === "ok") {
+        setError(null)
+      } else if (!options?.silent) {
+        setError("Review queue is temporarily unavailable.")
+      }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "review_fetch_failed")
+      if (!options?.silent) {
+        setError(nextError instanceof Error ? nextError.message : "review_fetch_failed")
+      }
     } finally {
       setLoading(false)
     }
@@ -88,7 +132,7 @@ export function useWikiReviewQueue(enabled: boolean) {
     if (!enabled) return
 
     const intervalId = window.setInterval(() => {
-      void refresh()
+      void refresh({ silent: true })
     }, POLL_INTERVAL_MS)
 
     return () => window.clearInterval(intervalId)

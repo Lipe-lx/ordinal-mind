@@ -305,8 +305,9 @@ async function ingestWikiDraft(draft: WikiPageDraft): Promise<{ ok: true } | { o
       body: JSON.stringify(draft),
     })
     if (!response.ok) {
-      const payload = await response.json().catch(() => ({})) as Record<string, unknown>
-      const error = typeof payload.error === "string" ? payload.error : "unknown_error"
+      const raw = await response.text().catch(() => "")
+      const payload = safeParseJsonRecord(raw)
+      const error = resolveHttpErrorLabel(response.status, payload, raw)
       logWikiLifecycleDiagnostic("warn", "wiki_ingest_failed", {
         slug: draft.slug,
         status: response.status,
@@ -327,6 +328,33 @@ async function ingestWikiDraft(draft: WikiPageDraft): Promise<{ ok: true } | { o
     })
     return { ok: false, error: "wiki_ingest_request_failed" }
   }
+}
+
+function safeParseJsonRecord(raw: string): Record<string, unknown> {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+function resolveHttpErrorLabel(
+  status: number,
+  payload: Record<string, unknown>,
+  raw: string
+): string {
+  if (typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error.trim()
+  }
+  if (raw.trim()) {
+    return `http_${status}:${raw.replace(/\s+/g, " ").slice(0, 120)}`
+  }
+  return `http_${status}`
 }
 
 function scheduleIdle(callback: () => void): void {

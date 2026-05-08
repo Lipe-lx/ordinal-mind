@@ -114,7 +114,11 @@ async function queryPendingRows(env: Env, limit: number): Promise<PendingReviewR
     const rows = await env.DB.prepare(sqlWithUsers).bind(limit).all<PendingReviewRow>()
     return rows.results ?? []
   } catch (error) {
-    if (!(error instanceof Error) || !error.message.toLowerCase().includes("no such table: users")) {
+    if (!(error instanceof Error)) {
+      throw error
+    }
+    const msg = error.message.toLowerCase()
+    if (!msg.includes("no such table: users") && !msg.includes("no such column: wc.safety_status") && !msg.includes("no such column: wc.safety_metadata")) {
       throw error
     }
   }
@@ -159,7 +163,58 @@ async function queryPendingRows(env: Env, limit: number): Promise<PendingReviewR
     LIMIT ?
   `
 
-  const rows = await env.DB.prepare(sqlFallback).bind(limit).all<PendingReviewRow>()
+  try {
+    const rows = await env.DB.prepare(sqlFallback).bind(limit).all<PendingReviewRow>()
+    return rows.results ?? []
+  } catch (error) {
+    if (!(error instanceof Error)) throw error
+    const msg = error.message.toLowerCase()
+    if (!msg.includes("no such column: wc.safety_status") && !msg.includes("no such column: wc.safety_metadata")) {
+      throw error
+    }
+  }
+
+  const sqlLegacyFallback = `
+    SELECT
+      wc.id,
+      wc.collection_slug,
+      wc.field,
+      wc.value,
+      wc.confidence,
+      wc.verifiable,
+      wc.contributor_id,
+      wc.og_tier,
+      wc.session_id,
+      wc.source_excerpt,
+      wc.created_at,
+      NULL AS contributor_username,
+      (
+        SELECT wc2.value
+        FROM wiki_contributions wc2
+        WHERE wc2.collection_slug = wc.collection_slug
+          AND wc2.field = wc.field
+          AND wc2.status = 'published'
+        ORDER BY ${toTierOrderSql("wc2")} DESC, wc2.created_at DESC
+        LIMIT 1
+      ) AS current_value,
+      (
+        SELECT wc2.og_tier
+        FROM wiki_contributions wc2
+        WHERE wc2.collection_slug = wc.collection_slug
+          AND wc2.field = wc.field
+          AND wc2.status = 'published'
+        ORDER BY ${toTierOrderSql("wc2")} DESC, wc2.created_at DESC
+        LIMIT 1
+      ) AS current_tier,
+      'safe' AS safety_status,
+      NULL AS safety_metadata
+    FROM wiki_contributions wc
+    WHERE wc.status = 'quarantine'
+    ORDER BY wc.created_at DESC
+    LIMIT ?
+  `
+
+  const rows = await env.DB.prepare(sqlLegacyFallback).bind(limit).all<PendingReviewRow>()
   return rows.results ?? []
 }
 
@@ -186,42 +241,47 @@ export async function handlePendingReviews(request: Request, env: Env): Promise<
     return json({ ok: false, error: "wiki_db_unavailable" }, 503)
   }
 
-  const countRow = await env.DB.prepare(`
-    SELECT COUNT(*) AS count
-    FROM wiki_contributions
-    WHERE status = 'quarantine'
-  `).first<{ count: number }>()
+  try {
+    const countRow = await env.DB.prepare(`
+      SELECT COUNT(*) AS count
+      FROM wiki_contributions
+      WHERE status = 'quarantine'
+    `).first<{ count: number }>()
 
-  const pendingCount = Number(countRow?.count ?? 0)
-  const rows = await queryPendingRows(env, 50)
+    const pendingCount = Number(countRow?.count ?? 0)
+    const rows = await queryPendingRows(env, 50)
 
-  return json({
-    ok: true,
-    reviewer: {
-      discord_id: reviewer.discordId,
-      username: reviewer.username,
-      tier: reviewer.tier,
-    },
-    pending_count: pendingCount,
-    items: rows.map((row) => ({
-      id: row.id,
-      collection_slug: row.collection_slug,
-      field: row.field,
-      proposed_value: row.value,
-      confidence: row.confidence,
-      verifiable: Boolean(row.verifiable),
-      contributor_id: row.contributor_id,
-      contributor_username: row.contributor_username,
-      contributor_tier: row.og_tier,
-      session_id: row.session_id,
-      source_excerpt: row.source_excerpt,
-      created_at: row.created_at,
-      safety_status: row.safety_status,
-      safety_metadata: row.safety_metadata,
-      current_value: row.current_value,
-      current_tier: row.current_tier,
-    })),
-  })
+    return json({
+      ok: true,
+      reviewer: {
+        discord_id: reviewer.discordId,
+        username: reviewer.username,
+        tier: reviewer.tier,
+      },
+      pending_count: pendingCount,
+      items: rows.map((row) => ({
+        id: row.id,
+        collection_slug: row.collection_slug,
+        field: row.field,
+        proposed_value: row.value,
+        confidence: row.confidence,
+        verifiable: Boolean(row.verifiable),
+        contributor_id: row.contributor_id,
+        contributor_username: row.contributor_username,
+        contributor_tier: row.og_tier,
+        session_id: row.session_id,
+        source_excerpt: row.source_excerpt,
+        created_at: row.created_at,
+        safety_status: row.safety_status,
+        safety_metadata: row.safety_metadata,
+        current_value: row.current_value,
+        current_tier: row.current_tier,
+      })),
+    })
+  } catch (error) {
+    console.error("[WikiReviews] pending query failed:", error)
+    return json({ ok: false, error: "wiki_reviews_unavailable", partial: true }, 200)
+  }
 }
 
 export async function handleReviewDecision(
