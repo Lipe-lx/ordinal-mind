@@ -6,7 +6,16 @@ import { getConsolidatedSnapshot } from "../../src/worker/wiki/consolidateEndpoi
 import { type Env } from "../../src/worker/index"
 
 class FakeD1Database {
-  wikiPages: Array<{ slug: string; title: string; entity_type: string; summary: string; updated_at?: string | null }> = []
+  wikiPages: Array<{
+    slug: string
+    title: string
+    entity_type: string
+    summary: string
+    updated_at?: string | null
+    byok_provider?: string
+    sections_json?: string
+    source_event_ids_json?: string
+  }> = []
   wikiFts: Array<{ slug: string; title: string }> = []
   consolidatedCache: Array<{ collection_slug: string; completeness: number }> = []
   wikiContributions: Array<{
@@ -63,6 +72,19 @@ class FakeD1Database {
         return { results }
       }
       if (s.includes("count(*) as total") && s.includes("from wiki_pages")) {
+        if (s.includes("where byok_provider = 'system_seed'")) {
+          const total = this.wikiPages.filter((row) => {
+            const byok = row.byok_provider ?? ""
+            const summary = row.summary ?? ""
+            const sectionsJson = row.sections_json ?? "[]"
+            const sourceEventIdsJson = row.source_event_ids_json ?? "[]"
+            return byok === "system_seed"
+              && summary === ""
+              && sectionsJson === "[]"
+              && sourceEventIdsJson === "[]"
+          }).length
+          return { results: [{ total }] }
+        }
         if (s.includes("where entity_type = ?")) {
           const entityType = String(params[0] ?? "")
           return {
@@ -142,11 +164,11 @@ class FakeD1Database {
           entity_type: page.entity_type,
           title: page.title,
           summary: page.summary,
-          sections_json: JSON.stringify([]),
+          sections_json: page.sections_json ?? JSON.stringify([]),
           cross_refs_json: JSON.stringify([]),
-          source_event_ids_json: JSON.stringify([]),
+          source_event_ids_json: page.source_event_ids_json ?? JSON.stringify([]),
           generated_at: page.updated_at ?? "2026-05-07T00:00:00.000Z",
-          byok_provider: "test",
+          byok_provider: page.byok_provider ?? "test",
           unverified_count: 0,
           view_count: 0,
           updated_at: page.updated_at ?? null,
@@ -318,6 +340,8 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(stats.indexed_pages).toBe(2)
     expect(stats.published_pages).toBe(2)
     expect(stats.quarantine_pages).toBe(1)
+    expect(stats.seed_pages).toBe(0)
+    expect(stats.published_shape_pages).toBe(3)
     expect(stats.updated_at).toBe("2026-05-07T15:00:00.000Z")
 
     const helpResult = await handlers.help({})

@@ -490,6 +490,9 @@ export function registerTools(options: {
           wiki_propose_update: "Follows app tier rules: community -> quarantine, og/genesis -> published.",
           review_contribution: "Genesis-only moderation action.",
         },
+        legacy_aliases: {
+          wiki_search_collections: "Prefer wiki_search_pages with entity_type='collection'. Kept for backward compatibility.",
+        },
         available_tools_now: {
           read_only: [
             "help",
@@ -700,7 +703,7 @@ export function registerTools(options: {
   server.registerTool(
     "wiki_search_collections",
     {
-      description: "Read-only wiki collection search by text query with pagination",
+      description: "Read-only collection search (legacy alias; prefer wiki_search_pages with entity_type='collection')",
       inputSchema: wikiSearchCollectionsSchema,
     },
     async (args) => {
@@ -777,6 +780,8 @@ export function registerTools(options: {
 
       return jsonToolResult({
         ok: true,
+        deprecated: true,
+        alias_of: "wiki_search_pages",
         query,
         limit,
         offset,
@@ -790,7 +795,7 @@ export function registerTools(options: {
   server.registerTool(
     "wiki_stats",
     {
-      description: "Read-only global wiki coverage counters for pages, index visibility, and moderation states",
+      description: "Read-only global wiki counters, including seed-vs-published-shape page visibility",
       inputSchema: wikiStatsSchema,
     },
     async () => {
@@ -834,14 +839,28 @@ export function registerTools(options: {
       `)
         .all<{ total: number }>()
 
+      const seedPagesRows = await env.DB.prepare(`
+        SELECT COUNT(*) AS total
+        FROM wiki_pages
+        WHERE byok_provider = 'system_seed'
+          AND COALESCE(summary, '') = ''
+          AND COALESCE(sections_json, '[]') = '[]'
+          AND COALESCE(source_event_ids_json, '[]') = '[]'
+      `)
+        .all<{ total: number }>()
+
       const updatedAt = await readWikiStatsUpdatedAt(env)
+      const totalPages = Number(totalPagesRows.results?.[0]?.total ?? 0)
+      const seedPages = Number(seedPagesRows.results?.[0]?.total ?? 0)
 
       return jsonToolResult({
         ok: true,
-        total_pages: Number(totalPagesRows.results?.[0]?.total ?? 0),
+        total_pages: totalPages,
         indexed_pages: Number(indexedPagesRows.results?.[0]?.total ?? 0),
         published_pages: Number(publishedPagesRows.results?.[0]?.total ?? 0),
         quarantine_pages: Number(quarantinePagesRows.results?.[0]?.total ?? 0),
+        seed_pages: seedPages,
+        published_shape_pages: Math.max(0, totalPages - seedPages),
         updated_at: updatedAt,
       })
     }

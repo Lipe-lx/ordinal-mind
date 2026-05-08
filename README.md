@@ -131,11 +131,11 @@ npm run typecheck
 - `help`: read-only usage and strategy guide for agents (`anon` and authenticated).
 - `query_chronicle`: public read-only query tool (`anon` and authenticated).
 - `search_collection_inscriptions`: public read-only query tool (`anon` and authenticated).
-- `wiki_search_collections`: public read-only wiki discovery tool (`anon` and authenticated).
+- `wiki_search_collections`: legacy read-only collection discovery alias (prefer `wiki_search_pages` with `entity_type="collection"`).
 - `wiki_search_pages`: public read-only wiki search across all page entity types (`anon` and authenticated).
 - `wiki_list_pages`: public read-only paginated inventory of wiki pages (`anon` and authenticated).
 - `wiki_get_page`: public read-only exact wiki page fetch by slug (`anon` and authenticated).
-- `wiki_stats`: public read-only global wiki counters (`anon` and authenticated).
+- `wiki_stats`: public read-only global wiki counters (`anon` and authenticated), including `seed_pages` and `published_shape_pages`.
 - `wiki_get_field_status`: public read-only wiki coverage/status tool (`anon` and authenticated).
 - `wiki_get_collection_context`: public read-only wiki context snapshot tool (`anon` and authenticated).
 - `wiki_propose_update`: moderated proposal tool (`community`, `og`, `genesis`) following app tier rules (`community -> quarantine`, `og/genesis -> published`).
