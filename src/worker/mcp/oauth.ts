@@ -24,9 +24,11 @@ interface PendingMcpAuthorization {
   oauth_request: AuthRequest
 }
 
-const OAUTH_STATE_TTL_SECONDS = 10 * 60
+const OAUTH_STATE_TTL_SECONDS = 15 * 60
 const MCP_ACCESS_TOKEN_TTL_SECONDS = 30 * 60
 const MCP_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
+const CALLBACK_STATE_READ_ATTEMPTS = 3
+const CALLBACK_STATE_READ_RETRY_MS = 120
 
 export const MCP_OAUTH_PATHS = {
   authorize: "/mcp/oauth/authorize",
@@ -150,6 +152,27 @@ async function readPendingState(kv: KVNamespace, key: string): Promise<PendingMc
   } catch {
     return null
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function readPendingStateWithRetry(
+  kv: KVNamespace,
+  key: string,
+  attempts = CALLBACK_STATE_READ_ATTEMPTS,
+  retryMs = CALLBACK_STATE_READ_RETRY_MS
+): Promise<PendingMcpAuthorization | null> {
+  const totalAttempts = Math.max(1, attempts)
+  for (let i = 0; i < totalAttempts; i += 1) {
+    const pending = await readPendingState(kv, key)
+    if (pending) return pending
+    if (i < totalAttempts - 1) {
+      await sleep(retryMs)
+    }
+  }
+  return null
 }
 
 async function deletePendingState(kv: KVNamespace, key: string): Promise<void> {
@@ -288,12 +311,14 @@ export async function handleMcpCallbackRoute(
   }
 
   const stateKey = `mcp_oauth_state:${state}`
-  const pending = await readPendingState(kv, stateKey)
-  await deletePendingState(kv, stateKey)
+  const pending = await readPendingStateWithRetry(kv, stateKey)
 
   if (!pending) {
     return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.")
   }
+
+  // Consume the state once resolved to prevent replay.
+  await deletePendingState(kv, stateKey)
 
   try {
     const callbackUrl = buildCallbackUrl(request)
