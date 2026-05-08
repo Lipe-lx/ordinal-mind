@@ -134,7 +134,10 @@ graph TD
   - `help`: `anon|community|og|genesis`
   - `query_chronicle`: `anon|community|og|genesis`
   - `search_collection_inscriptions`: `anon|community|og|genesis`
-  - `wiki_search_collections`: `anon|community|og|genesis`
+  - `wiki_search_pages`: `anon|community|og|genesis`
+  - `wiki_list_pages`: `anon|community|og|genesis`
+  - `wiki_get_page`: `anon|community|og|genesis`
+  - `wiki_stats`: `anon|community|og|genesis`
   - `wiki_get_field_status`: `anon|community|og|genesis`
   - `wiki_get_collection_context`: `anon|community|og|genesis`
   - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> quarantine`, `og/genesis -> published`)

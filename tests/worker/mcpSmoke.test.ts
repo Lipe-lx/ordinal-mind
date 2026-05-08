@@ -108,6 +108,9 @@ class FakeD1Database {
             summary: row.summary,
             updated_at: row.updated_at ?? null,
             unverified_count: 0,
+            byok_provider: row.byok_provider ?? null,
+            sections_json: row.sections_json ?? "[]",
+            source_event_ids_json: row.source_event_ids_json ?? "[]",
           })),
         }
       }
@@ -269,28 +272,6 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(prepareSpy).toHaveBeenCalledWith(expect.stringContaining("INSERT OR IGNORE INTO wiki_pages"))
   })
 
-  it("wiki_search_collections deve retornar completeness e flag is_seed", async () => {
-    const db = new FakeD1Database()
-    db.wikiPages.push({ slug: "ordinal-mind", title: "Ordinal Mind", entity_type: "collection", summary: "" })
-    db.wikiFts.push({ slug: "ordinal-mind", title: "Ordinal Mind" })
-    db.consolidatedCache.push({ collection_slug: "ordinal-mind", completeness: 0.1 })
-
-    const env = createMcpEnv(db)
-    const server = new McpServer({ name: "test", version: "1.0.0" })
-    const handlers = captureHandlers(server, ["wiki_search_collections"])
-
-    registerTools({ server, env, request: new Request("https://mcp.local") })
-
-    const result = await handlers.wiki_search_collections({ query: "ordinal", limit: 5, offset: 0 })
-    const content = result.structuredContent as Record<string, any>
-
-    const item = content.items[0]
-    expect(item.slug).toBe("ordinal-mind")
-    expect(item.completeness).toBe(0.1)
-    expect(item.is_seed).toBe(true)
-    expect(item.summary).toContain("Discovery Draft")
-  })
-
   it("wiki_stats retorna contagens globais e updated_at com fallback para created_at", async () => {
     const db = new FakeD1Database()
     db.contributionHasUpdatedAt = false
@@ -299,8 +280,11 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
         slug: "collection:ordinal-mind",
         title: "Ordinal Mind",
         entity_type: "collection",
-        summary: "seed",
+        summary: "",
         updated_at: "2026-05-07T10:00:00.000Z",
+        byok_provider: "system_seed",
+        sections_json: "[]",
+        source_event_ids_json: "[]",
       },
       {
         slug: "node-monkes",
@@ -339,9 +323,12 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(stats.total_pages).toBe(3)
     expect(stats.indexed_pages).toBe(2)
     expect(stats.published_pages).toBe(2)
+    expect(stats.published_contribution_pages).toBe(2)
     expect(stats.quarantine_pages).toBe(1)
-    expect(stats.seed_pages).toBe(0)
-    expect(stats.published_shape_pages).toBe(3)
+    expect(stats.seed_pages).toBe(1)
+    expect(stats.published_shape_pages).toBe(2)
+    expect(stats.inventory_pages).toBe(3)
+    expect(stats.inventory_editorial_pages).toBe(2)
     expect(stats.updated_at).toBe("2026-05-07T15:00:00.000Z")
 
     const helpResult = await handlers.help({})
@@ -351,22 +338,30 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(readOnly).toContain("wiki_search_pages")
     expect(readOnly).toContain("wiki_list_pages")
     expect(readOnly).toContain("wiki_get_page")
+    expect(readOnly).not.toContain("wiki_search_collections")
 
     const listResult = await handlers.wiki_list_pages({ limit: 10, offset: 0 })
     const list = listResult.structuredContent as Record<string, any>
     expect(list.ok).toBe(true)
     expect(list.total).toBe(3)
     expect(list.items.some((item: Record<string, unknown>) => item.slug === "inscription:abc123i0")).toBe(true)
+    const seedItem = list.items.find((item: Record<string, unknown>) => item.slug === "collection:ordinal-mind")
+    expect(seedItem.publication_status).toBe("seed")
+    expect(seedItem.is_seed).toBe(true)
 
     const searchResult = await handlers.wiki_search_pages({ query: "inscription", limit: 10, offset: 0 })
     const search = searchResult.structuredContent as Record<string, any>
     expect(search.ok).toBe(true)
     expect(search.items.some((item: Record<string, unknown>) => item.entity_type === "inscription")).toBe(true)
+    const searchInscription = search.items.find((item: Record<string, unknown>) => item.entity_type === "inscription")
+    expect(searchInscription.publication_status).toBe("published")
 
     const pageResult = await handlers.wiki_get_page({ slug: "inscription:abc123i0" })
     const pageBody = pageResult.structuredContent as Record<string, any>
     expect(pageBody.ok).toBe(true)
+    expect(pageBody.publication_status).toBe("published")
     expect(pageBody.page.slug).toBe("inscription:abc123i0")
+    expect(pageBody.page.publication_status).toBe("published")
   })
 
   it("wiki://page/{slug} resource retorna payload da página", async () => {
@@ -390,6 +385,7 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     const payload = JSON.parse(response.contents[0].text) as Record<string, any>
     expect(payload.ok).toBe(true)
     expect(payload.page.slug).toBe("collection:runestone")
+    expect(payload.page.publication_status).toBe("published")
   })
 
   it("wiki_stats mantém fail-soft quando DB não está disponível", async () => {

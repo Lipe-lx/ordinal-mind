@@ -120,8 +120,16 @@ async function readWikiPageBySlug(rawSlug: string, env: Env): Promise<Record<str
     }
   }
 
+  const shape = derivePageShapeStatus({
+    summary: row.summary,
+    byok_provider: row.byok_provider,
+    sections_json: row.sections_json,
+    source_event_ids_json: row.source_event_ids_json,
+  })
+
   return {
     ok: true,
+    publication_status: shape.publication_status,
     page: {
       slug: row.slug,
       entity_type: row.entity_type,
@@ -135,6 +143,9 @@ async function readWikiPageBySlug(rawSlug: string, env: Env): Promise<Record<str
       unverified_count: Number(row.unverified_count ?? 0),
       view_count: Number(row.view_count ?? 0),
       updated_at: row.updated_at,
+      publication_status: shape.publication_status,
+      page_kind: shape.page_kind,
+      is_seed: shape.is_seed,
     },
   }
 }
@@ -243,6 +254,34 @@ function safeParse<T>(raw: string, fallback: T): T {
     return JSON.parse(raw) as T
   } catch {
     return fallback
+  }
+}
+
+function isEmptyArrayPayload(raw: string | null | undefined): boolean {
+  if (!raw) return true
+  const parsed = safeParse(raw, null as unknown)
+  return Array.isArray(parsed) && parsed.length === 0
+}
+
+function derivePageShapeStatus(input: {
+  summary?: string | null
+  byok_provider?: string | null
+  sections_json?: string | null
+  source_event_ids_json?: string | null
+}): {
+  publication_status: "seed" | "published"
+  page_kind: "seed" | "editorial"
+  is_seed: boolean
+} {
+  const isSeed = (input.byok_provider ?? "") === "system_seed"
+    && (input.summary ?? "").trim().length === 0
+    && isEmptyArrayPayload(input.sections_json)
+    && isEmptyArrayPayload(input.source_event_ids_json)
+
+  return {
+    publication_status: isSeed ? "seed" : "published",
+    page_kind: isSeed ? "seed" : "editorial",
+    is_seed: isSeed,
   }
 }
 

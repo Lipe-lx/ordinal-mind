@@ -71,12 +71,6 @@ const searchCollectionSchema = {
   include_meta: z.boolean().default(false),
 }
 
-const wikiSearchCollectionsSchema = {
-  query: z.string().min(1),
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).max(500).default(0),
-}
-
 const WIKI_ENTITY_TYPES = ["collection", "inscription", "artist", "sat"] as const
 
 const wikiSearchPagesSchema = {
@@ -185,6 +179,34 @@ function safeParse<T>(raw: string, fallback: T): T {
     return JSON.parse(raw) as T
   } catch {
     return fallback
+  }
+}
+
+function isEmptyArrayPayload(raw: string | null | undefined): boolean {
+  if (!raw) return true
+  const parsed = safeParse(raw, null as unknown)
+  return Array.isArray(parsed) && parsed.length === 0
+}
+
+function derivePageShapeStatus(input: {
+  summary?: string | null
+  byok_provider?: string | null
+  sections_json?: string | null
+  source_event_ids_json?: string | null
+}): {
+  publication_status: "seed" | "published"
+  page_kind: "seed" | "editorial"
+  is_seed: boolean
+} {
+  const isSeed = (input.byok_provider ?? "") === "system_seed"
+    && (input.summary ?? "").trim().length === 0
+    && isEmptyArrayPayload(input.sections_json)
+    && isEmptyArrayPayload(input.source_event_ids_json)
+
+  return {
+    publication_status: isSeed ? "seed" : "published",
+    page_kind: isSeed ? "seed" : "editorial",
+    is_seed: isSeed,
   }
 }
 
@@ -469,7 +491,7 @@ export function registerTools(options: {
           intent: "Factual-first research for Bitcoin Ordinals with optional wiki governance actions.",
           steps: [
             "If the slug is unknown, enumerate with wiki_list_pages and/or discover with wiki_search_pages.",
-            "For collection-only search compatibility, wiki_search_collections remains available as a legacy alias.",
+            "For reliable reading, prioritize pages where publication_status='published' (seed pages are placeholders).",
             "For an exact page payload, use wiki_get_page (or resource wiki://page/{slug}).",
             "For collection consensus/coverage, use wiki_get_collection_context (or wiki://collection/{slug}).",
             "From a known slug, get inscription IDs with search_collection_inscriptions.",
@@ -492,20 +514,20 @@ export function registerTools(options: {
           wiki_propose_update: "Follows app tier rules: community -> quarantine, og/genesis -> published.",
           review_contribution: "Genesis-only moderation action.",
         },
-        legacy_aliases: {
-          wiki_search_collections: "Prefer wiki_search_pages with entity_type='collection'. Kept for backward compatibility.",
-        },
         wiki_stats_semantics: {
           total_pages: "All rows in wiki_pages.",
           indexed_pages: "All rows in wiki_fts visible to full-text search.",
           published_pages: "Distinct collection_slug values with published contributions (governance-level metric).",
+          published_contribution_pages: "Alias of published_pages (governance metric).",
           quarantine_pages: "Distinct collection_slug values with quarantined contributions.",
           seed_pages: "Discovery placeholders (system_seed) with empty editorial shape.",
           published_shape_pages: "total_pages - seed_pages; practical count of non-seed public pages.",
+          inventory_pages: "Alias of total_pages (inventory metric).",
+          inventory_editorial_pages: "Alias of published_shape_pages (inventory metric).",
         },
         wiki_stats_metric_selection: [
           "Use total_pages/indexed_pages to measure inventory and discoverability.",
-          "Use published_pages/quarantine_pages to measure governance workflow state.",
+          "Use published_pages (or published_contribution_pages)/quarantine_pages to measure governance workflow state.",
           "Use published_shape_pages (not published_pages) when you need 'how many pages are actually readable with non-seed content'.",
         ],
         available_tools_now: {
@@ -513,7 +535,6 @@ export function registerTools(options: {
             "help",
             "query_chronicle",
             "search_collection_inscriptions",
-            "wiki_search_collections",
             "wiki_search_pages",
             "wiki_list_pages",
             "wiki_get_page",
@@ -719,98 +740,6 @@ export function registerTools(options: {
   )
 
   server.registerTool(
-    "wiki_search_collections",
-    {
-      description: "Read-only collection search (legacy alias; prefer wiki_search_pages with entity_type='collection')",
-      inputSchema: wikiSearchCollectionsSchema,
-    },
-    async (args) => {
-      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
-        keyPrefix: "mcp_wiki_search_collections",
-        limit: 60,
-        windowSeconds: 60,
-        alertThreshold: 40,
-      })
-      if (!rate.ok) {
-        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
-      }
-
-      if (!env.DB) {
-        return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
-      }
-
-      const query = String(args.query).trim()
-      const ftsQuery = sanitizeFtsQuery(query)
-      if (!ftsQuery) return jsonToolResult({ ok: false, error: "query_invalid" })
-
-      const limit = Number(args.limit)
-      const offset = Number(args.offset)
-
-      const rows = await env.DB.prepare(`
-        SELECT 
-          wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at, 
-          bm25(wiki_fts) AS score,
-          cc.completeness
-        FROM wiki_fts
-        JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
-        LEFT JOIN consolidated_cache cc ON wp.slug = cc.collection_slug
-        WHERE wiki_fts MATCH ?
-          AND wp.entity_type = 'collection'
-        ORDER BY score
-        LIMIT ?
-        OFFSET ?
-      `)
-        .bind(ftsQuery, limit, offset)
-        .all<{
-          slug: string
-          title: string | null
-          summary: string | null
-          entity_type: string
-          updated_at: string | null
-          score: number | null
-          completeness: number | null
-        }>()
-
-      const totalRows = await env.DB.prepare(`
-        SELECT COUNT(*) AS total
-        FROM wiki_fts
-        JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
-        WHERE wiki_fts MATCH ?
-          AND wp.entity_type = 'collection'
-      `)
-        .bind(ftsQuery)
-        .all<{ total: number }>()
-
-      const items = (rows.results ?? []).map((row) => {
-        const normalizedSlug = normalizeCollectionSlug(row.slug)
-        const score = typeof row.score === "number" && Number.isFinite(row.score) ? row.score : 25
-        const confidence = Number((1 / (1 + Math.max(0, score))).toFixed(4))
-        return {
-          slug: normalizedSlug,
-          title: row.title ?? normalizedSlug,
-          summary: row.summary || "Discovery Draft: Narrative pending consensus growth.",
-          confidence,
-          completeness: row.completeness ?? 0,
-          is_seed: row.updated_at === null || row.summary === "",
-          updated_at: row.updated_at,
-        }
-      })
-
-      return jsonToolResult({
-        ok: true,
-        deprecated: true,
-        alias_of: "wiki_search_pages",
-        query,
-        limit,
-        offset,
-        total: Number(totalRows.results?.[0]?.total ?? 0),
-        items,
-        resource_uris: items.map((item) => `wiki://collection/${item.slug}`),
-      })
-    }
-  )
-
-  server.registerTool(
     "wiki_stats",
     {
       description: "Read-only global wiki counters, including seed-vs-published-shape page visibility",
@@ -870,15 +799,20 @@ export function registerTools(options: {
       const updatedAt = await readWikiStatsUpdatedAt(env)
       const totalPages = Number(totalPagesRows.results?.[0]?.total ?? 0)
       const seedPages = Number(seedPagesRows.results?.[0]?.total ?? 0)
+      const publishedShapePages = Math.max(0, totalPages - seedPages)
+      const publishedContributionPages = Number(publishedPagesRows.results?.[0]?.total ?? 0)
 
       return jsonToolResult({
         ok: true,
         total_pages: totalPages,
         indexed_pages: Number(indexedPagesRows.results?.[0]?.total ?? 0),
-        published_pages: Number(publishedPagesRows.results?.[0]?.total ?? 0),
+        published_pages: publishedContributionPages,
+        published_contribution_pages: publishedContributionPages,
         quarantine_pages: Number(quarantinePagesRows.results?.[0]?.total ?? 0),
         seed_pages: seedPages,
-        published_shape_pages: Math.max(0, totalPages - seedPages),
+        published_shape_pages: publishedShapePages,
+        inventory_pages: totalPages,
+        inventory_editorial_pages: publishedShapePages,
         updated_at: updatedAt,
       })
     }
@@ -917,6 +851,7 @@ export function registerTools(options: {
         ? await env.DB.prepare(`
             SELECT
               wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at,
+              wp.byok_provider, wp.sections_json, wp.source_event_ids_json,
               wp.unverified_count,
               bm25(wiki_fts) AS score
             FROM wiki_fts
@@ -934,12 +869,16 @@ export function registerTools(options: {
             summary: string | null
             entity_type: string
             updated_at: string | null
+            byok_provider: string | null
+            sections_json: string | null
+            source_event_ids_json: string | null
             unverified_count: number | null
             score: number | null
           }>()
         : await env.DB.prepare(`
             SELECT
               wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at,
+              wp.byok_provider, wp.sections_json, wp.source_event_ids_json,
               wp.unverified_count,
               bm25(wiki_fts) AS score
             FROM wiki_fts
@@ -956,6 +895,9 @@ export function registerTools(options: {
             summary: string | null
             entity_type: string
             updated_at: string | null
+            byok_provider: string | null
+            sections_json: string | null
+            source_event_ids_json: string | null
             unverified_count: number | null
             score: number | null
           }>()
@@ -979,17 +921,29 @@ export function registerTools(options: {
           .bind(ftsQuery)
           .all<{ total: number }>()
 
-      const items = (rows.results ?? []).map((row) => ({
-        slug: row.slug,
-        entity_type: row.entity_type,
-        title: row.title ?? row.slug,
-        summary: row.summary ?? "",
-        updated_at: row.updated_at,
-        unverified_count: Number(row.unverified_count ?? 0),
-        confidence: typeof row.score === "number" && Number.isFinite(row.score)
-          ? Number((1 / (1 + Math.max(0, row.score))).toFixed(4))
-          : 0.04,
-      }))
+      const items = (rows.results ?? []).map((row) => {
+        const shape = derivePageShapeStatus({
+          summary: row.summary,
+          byok_provider: row.byok_provider,
+          sections_json: row.sections_json,
+          source_event_ids_json: row.source_event_ids_json,
+        })
+
+        return {
+          slug: row.slug,
+          entity_type: row.entity_type,
+          title: row.title ?? row.slug,
+          summary: row.summary ?? "",
+          updated_at: row.updated_at,
+          unverified_count: Number(row.unverified_count ?? 0),
+          publication_status: shape.publication_status,
+          page_kind: shape.page_kind,
+          is_seed: shape.is_seed,
+          confidence: typeof row.score === "number" && Number.isFinite(row.score)
+            ? Number((1 / (1 + Math.max(0, row.score))).toFixed(4))
+            : 0.04,
+        }
+      })
 
       return jsonToolResult({
         ok: true,
@@ -1029,7 +983,8 @@ export function registerTools(options: {
 
       const rows = entityType
         ? await env.DB.prepare(`
-            SELECT slug, entity_type, title, summary, updated_at, unverified_count
+            SELECT slug, entity_type, title, summary, updated_at, unverified_count,
+                   byok_provider, sections_json, source_event_ids_json
             FROM wiki_pages
             WHERE entity_type = ?
             ORDER BY datetime(updated_at) DESC, slug ASC
@@ -1044,9 +999,13 @@ export function registerTools(options: {
             summary: string
             updated_at: string | null
             unverified_count: number
+            byok_provider: string | null
+            sections_json: string | null
+            source_event_ids_json: string | null
           }>()
         : await env.DB.prepare(`
-            SELECT slug, entity_type, title, summary, updated_at, unverified_count
+            SELECT slug, entity_type, title, summary, updated_at, unverified_count,
+                   byok_provider, sections_json, source_event_ids_json
             FROM wiki_pages
             ORDER BY datetime(updated_at) DESC, slug ASC
             LIMIT ?
@@ -1060,6 +1019,9 @@ export function registerTools(options: {
             summary: string
             updated_at: string | null
             unverified_count: number
+            byok_provider: string | null
+            sections_json: string | null
+            source_event_ids_json: string | null
           }>()
 
       const totalRows = entityType
@@ -1076,14 +1038,26 @@ export function registerTools(options: {
           `)
           .all<{ total: number }>()
 
-      const items = (rows.results ?? []).map((row) => ({
-        slug: row.slug,
-        entity_type: row.entity_type,
-        title: row.title,
-        summary: row.summary,
-        updated_at: row.updated_at,
-        unverified_count: Number(row.unverified_count ?? 0),
-      }))
+      const items = (rows.results ?? []).map((row) => {
+        const shape = derivePageShapeStatus({
+          summary: row.summary,
+          byok_provider: row.byok_provider,
+          sections_json: row.sections_json,
+          source_event_ids_json: row.source_event_ids_json,
+        })
+
+        return {
+          slug: row.slug,
+          entity_type: row.entity_type,
+          title: row.title,
+          summary: row.summary,
+          updated_at: row.updated_at,
+          unverified_count: Number(row.unverified_count ?? 0),
+          publication_status: shape.publication_status,
+          page_kind: shape.page_kind,
+          is_seed: shape.is_seed,
+        }
+      })
 
       return jsonToolResult({
         ok: true,
@@ -1171,8 +1145,16 @@ export function registerTools(options: {
         })
       }
 
+      const shape = derivePageShapeStatus({
+        summary: page.summary,
+        byok_provider: page.byok_provider,
+        sections_json: page.sections_json,
+        source_event_ids_json: page.source_event_ids_json,
+      })
+
       return jsonToolResult({
         ok: true,
+        publication_status: shape.publication_status,
         page: {
           slug: page.slug,
           entity_type: page.entity_type,
@@ -1186,6 +1168,9 @@ export function registerTools(options: {
           unverified_count: Number(page.unverified_count ?? 0),
           view_count: Number(page.view_count ?? 0),
           updated_at: page.updated_at,
+          publication_status: shape.publication_status,
+          page_kind: shape.page_kind,
+          is_seed: shape.is_seed,
         },
         resource_uris: [
           `wiki://page/${encodeURIComponent(page.slug)}`,
