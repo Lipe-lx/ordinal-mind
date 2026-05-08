@@ -538,7 +538,7 @@ export function registerTools(options: {
               defaults: {
                 scope: "wiki.contribute wiki.review chronicle.refresh collection.reindex",
               },
-              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier.",
+              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier. Persist oauth_client.code_verifier from flow/start for /mcp/oauth/token exchange.",
             },
             token: {
               content_type: "application/x-www-form-urlencoded",
@@ -552,11 +552,23 @@ export function registerTools(options: {
             "Start with protected resource metadata discovery.",
             "Agent standard path: register client -> /mcp/oauth/flow/start -> present authorize_url to user -> poll /mcp/oauth/flow/status.",
             "Wait until /mcp/oauth/flow/status returns token_ready (or failed/expired/cancelled).",
-            "After token_ready, exchange the authorization code at /mcp/oauth/token.",
+            "After token_ready, exchange the authorization code at /mcp/oauth/token using the same code_verifier returned by /mcp/oauth/flow/start.",
             "Direct /mcp/oauth/authorize is supported as a low-level/manual path, but flow session is recommended for agents.",
             "Call MCP with Authorization: Bearer <mcp_access_token>.",
             "Use tools/list or help again to confirm writable tools unlocked for your tier.",
           ],
+          token_exchange_required: {
+            note: "token_ready does not authenticate MCP requests by itself. You must exchange the callback code for an access token.",
+            required_fields: [
+              "grant_type=authorization_code",
+              "client_id=<client_id from /mcp/oauth/register>",
+              "code=<code from callback URL>",
+              "redirect_uri=<same redirect_uri used in register/flow_start>",
+              "code_verifier=<oauth_client.code_verifier from /mcp/oauth/flow/start>",
+            ],
+            request_format: "POST /mcp/oauth/token with application/x-www-form-urlencoded",
+            success_path: "Use returned access_token as Authorization: Bearer <token> in MCP calls; otherwise tier stays anon.",
+          },
           agent_best_practices: [
             "Always start a fresh flow session using /mcp/oauth/flow/start.",
             "Request the full scope set for agent sessions: wiki.contribute wiki.review chronicle.refresh collection.reindex.",

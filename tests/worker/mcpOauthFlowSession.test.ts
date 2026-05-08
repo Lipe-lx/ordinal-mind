@@ -162,6 +162,8 @@ describe("MCP OAuth flow sessions", () => {
     expect(body.flow_id).toBeTruthy()
     expect(body.authorize_url).toContain("https://discord.com/oauth2/authorize")
     expect(body.status_endpoint).toContain("/mcp/oauth/flow/status")
+    expect(body.oauth_client?.code_verifier).toBeTruthy()
+    expect(body.oauth_client?.state).toBeTruthy()
   })
 
   it("status reflects token_ready after successful callback", async () => {

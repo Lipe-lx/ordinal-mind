@@ -80,6 +80,9 @@ interface FlowStartInput {
   redirect_uri: string
   scope?: string
   resource?: string
+  state?: string
+  code_challenge?: string
+  code_challenge_method?: "S256"
 }
 
 async function loadOAuthProviderLib(): Promise<{
@@ -672,9 +675,12 @@ export async function handleMcpFlowStartRoute(
     return oauthError(400, "invalid_flow_start_request", "client_id and redirect_uri are required.", false)
   }
 
-  const clientState = crypto.randomUUID().replaceAll("-", "")
-  const codeVerifier = generateCodeVerifier()
-  const codeChallenge = await deriveCodeChallenge(codeVerifier)
+  const clientState = input.state?.trim() || crypto.randomUUID().replaceAll("-", "")
+  const generatedClientCodeVerifier = !input.code_challenge
+  const clientCodeVerifier = generatedClientCodeVerifier ? generateCodeVerifier() : null
+  const clientCodeChallenge = input.code_challenge?.trim() || await deriveCodeChallenge(clientCodeVerifier as string)
+  const discordCodeVerifier = generateCodeVerifier()
+  const discordCodeChallenge = await deriveCodeChallenge(discordCodeVerifier)
   const callbackUrl = buildCallbackUrl(request)
   const callbackOrigin = new URL(callbackUrl).origin
   const redirectOriginFingerprint = await sha256Hex(callbackOrigin)
@@ -687,8 +693,8 @@ export async function handleMcpFlowStartRoute(
   synth.searchParams.set("client_id", input.client_id)
   synth.searchParams.set("redirect_uri", input.redirect_uri)
   synth.searchParams.set("state", clientState)
-  synth.searchParams.set("code_challenge", codeChallenge)
-  synth.searchParams.set("code_challenge_method", "S256")
+  synth.searchParams.set("code_challenge", clientCodeChallenge)
+  synth.searchParams.set("code_challenge_method", input.code_challenge_method ?? "S256")
   synth.searchParams.set("scope", input.scope?.trim() || DEFAULT_AGENT_SCOPE)
   if (input.resource && input.resource.trim()) synth.searchParams.set("resource", input.resource.trim())
 
@@ -713,7 +719,7 @@ export async function handleMcpFlowStartRoute(
   const pendingState: PendingMcpAuthorization = {
     created_at: new Date().toISOString(),
     discord_state: state,
-    code_verifier: codeVerifier,
+    code_verifier: discordCodeVerifier,
     oauth_request: oauthReq,
     redirect_origin_fingerprint: redirectOriginFingerprint,
     version: 2,
@@ -737,7 +743,7 @@ export async function handleMcpFlowStartRoute(
     clientId: env.DISCORD_CLIENT_ID,
     redirectUri: callbackUrl,
     state,
-    codeChallenge,
+    codeChallenge: discordCodeChallenge,
   })
 
   const statusEndpoint = `${new URL(request.url).origin}${MCP_OAUTH_PATHS.flowStatus}?flow_id=${flowId}`
@@ -762,6 +768,16 @@ export async function handleMcpFlowStartRoute(
     expires_at: new Date(expiresAt).toISOString(),
     poll_after_ms: 1500,
     status_endpoint: statusEndpoint,
+    oauth_client: {
+      client_id: input.client_id,
+      redirect_uri: input.redirect_uri,
+      state: clientState,
+      code_challenge_method: "S256",
+      code_verifier: generatedClientCodeVerifier ? clientCodeVerifier : null,
+      note: generatedClientCodeVerifier
+        ? "Persist code_verifier and use it at /mcp/oauth/token with the callback code."
+        : "Client-supplied code_challenge detected; use your original code_verifier at /mcp/oauth/token.",
+    },
   })
 }
 
