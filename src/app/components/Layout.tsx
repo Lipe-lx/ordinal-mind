@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from "react"
-import { Outlet, Link, useLocation } from "react-router"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { Outlet, Link, useLocation, useNavigate } from "react-router"
 import { BYOKModal } from "./BYOKModal"
 import { PortalTooltip } from "./Tooltip"
 import { KeyStore } from "../lib/byok"
@@ -7,6 +7,7 @@ import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { LogoIcon } from "./Logo"
 import { WikiReviewModal } from "./WikiReviewModal"
 import { useWikiReviewQueue } from "../lib/useWikiReviewQueue"
+import { ToastContainer, type ToastProps } from "./Toast"
 import type { ReactNode } from "react"
 
 export interface LayoutOutletContext {
@@ -15,8 +16,11 @@ export interface LayoutOutletContext {
   openBYOK: (tab?: "llm" | "research" | "identity" | "wiki-export") => void
 }
 
+type ToastData = Omit<ToastProps, "onClose">
+
 export function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isHome = location.pathname === "/"
   const [showBYOK, setShowBYOK] = useState(false)
   const [targetTab, setTargetTab] = useState<"llm" | "research" | "identity" | "wiki-export" | undefined>()
@@ -25,9 +29,52 @@ export function Layout() {
   const byokRef = useRef<HTMLButtonElement>(null)
   const [headerCenter, setHeaderCenterState] = useState<ReactNode>(null)
   const [headerRight, setHeaderRightState] = useState<ReactNode>(null)
+  const [toasts, setToasts] = useState<ToastData[]>([])
+  const lastErrorRef = useRef<string | null>(null)
+  
   const hasKey = KeyStore.has()
-  const { identity, isLoading: identityLoading, connect } = useDiscordIdentity()
+  const { identity, isLoading: identityLoading, connect, authError } = useDiscordIdentity()
   const reviewQueue = useWikiReviewQueue(identity?.tier === "genesis")
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const addToast = useCallback((toast: ToastData) => {
+    setToasts((prev) => [...prev, toast])
+  }, [])
+
+  useEffect(() => {
+    if (authError && authError !== lastErrorRef.current) {
+      lastErrorRef.current = authError
+      
+      // Defer toast creation to avoid synchronous setState in effect warning
+      setTimeout(() => {
+        if (authError === "CAPACITY_REACHED") {
+          addToast({
+            id: `auth-capacity-${Date.now()}`,
+            type: "warning",
+            title: "Service Busy",
+            message: "System capacity reached. We're experiencing high demand, please try connecting again later.",
+            duration: 10000
+          })
+        } else {
+          addToast({
+            id: `auth-error-${Date.now()}`,
+            type: "error",
+            title: "Connection Failed",
+            message: authError.length < 100 ? authError : "An unexpected error occurred during authentication."
+          })
+        }
+      }, 0)
+      
+      if (location.hash.includes("auth_error") || location.search.includes("auth_error")) {
+        navigate("/", { replace: true })
+      }
+    } else if (!authError) {
+      lastErrorRef.current = null
+    }
+  }, [authError, addToast, navigate, location.hash, location.search])
 
   const setHeaderCenter = useCallback((node: ReactNode) => {
     setHeaderCenterState(node)
@@ -218,6 +265,7 @@ export function Layout() {
         onRefresh={reviewQueue.refresh}
         onClose={() => setShowReviewModal(false)}
       />
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   )
 }

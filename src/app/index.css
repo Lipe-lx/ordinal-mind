@@ -27,6 +27,7 @@
 @import "./styles/components/skeleton.css";
 @import "./styles/components/identity.css";
 @import "./styles/components/agent-surface.css";
+@import "./styles/components/toast.css";
 
 @import "./styles/layout/error-boundary.css";
 @import "./styles/pages/address.css";

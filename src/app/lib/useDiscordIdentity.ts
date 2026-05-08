@@ -94,11 +94,19 @@ async function exchangeAuthCode(code: string): Promise<{ ok: true } | { ok: fals
     })
     const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
     if (!res.ok || payload.ok !== true) {
-      return { ok: false, error: typeof payload.error === "string" ? payload.error : "auth_exchange_failed" }
+      const msg = typeof payload.error === "string" ? payload.error : ""
+      if (msg.includes("KV put() limit exceeded")) {
+        return { ok: false, error: "CAPACITY_REACHED" }
+      }
+      return { ok: false, error: msg || "auth_exchange_failed" }
     }
     return { ok: true }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "auth_exchange_failed" }
+    const msg = error instanceof Error ? error.message : ""
+    if (msg.includes("KV put() limit exceeded")) {
+      return { ok: false, error: "CAPACITY_REACHED" }
+    }
+    return { ok: false, error: msg || "auth_exchange_failed" }
   }
 }
 
@@ -158,7 +166,8 @@ export function useDiscordIdentity() {
 
       if (error) {
         if (!cancelled) {
-          setAuthError(error)
+          const mappedError = error.includes("KV put() limit exceeded") ? "CAPACITY_REACHED" : error
+          setAuthError(mappedError)
           setIdentity(null)
           setConnectedMarker(null)
           setIsLoading(false)
