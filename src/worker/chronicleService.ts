@@ -1,4 +1,3 @@
-import { cachePut } from "./cache"
 import { db } from "./db"
 import { persistRawEvents } from "./wiki/persistEvents"
 import {
@@ -110,6 +109,9 @@ export async function runChroniclePipeline(options: {
     })
   }
 
+  // Manual caching removed to save KV write quota.
+  // We still read from cache in index.ts if available, but we stop writing new entries here.
+  /*
   if (options.writeCache !== false && !options.lite) {
     try {
       await cachePut(options.env.CHRONICLES_KV, options.id, result.chronicle)
@@ -117,6 +119,7 @@ export async function runChroniclePipeline(options: {
       console.error("Cache write failed:", cacheErr)
     }
   }
+  */
 
   if (options.writeValidation !== false && result.validation) {
     try {

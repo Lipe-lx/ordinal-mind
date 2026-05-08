@@ -370,9 +370,9 @@ async function handleAuthExchange(request: Request, env: Env): Promise<Response>
 
   const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
     keyPrefix: "auth_exchange",
-    limit: 40,
+    limit: 100,
     windowSeconds: 60,
-    alertThreshold: 25,
+    alertThreshold: 80,
   })
   if (!rate.ok) {
     return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)

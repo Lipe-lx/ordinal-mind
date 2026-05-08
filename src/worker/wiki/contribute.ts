@@ -339,9 +339,9 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   if (!isSeedOrigin) {
     const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
       keyPrefix: "wiki_contribute",
-      limit: 40,
+      limit: 100,
       windowSeconds: 60,
-      alertThreshold: 30,
+      alertThreshold: 80,
     })
     if (!rate.ok) {
       return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
@@ -415,7 +415,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     ? "published"
     : (safety.safe ? status : "quarantine")
 
-  let activeRow: ActiveContributionRow | null = null
+  let activeRow: ActiveContributionRow | null
   let publishedFieldRow: PublishedFieldRow | null = null
   try {
     if (isSeedOrigin) {
