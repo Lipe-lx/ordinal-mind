@@ -542,14 +542,16 @@ export function registerTools(options: {
           },
           flow: [
             "Start with protected resource metadata discovery.",
-            "For agent UX, prefer /mcp/oauth/flow/start and poll /mcp/oauth/flow/status until token_ready/failed/expired.",
-            "Run OAuth authorization against /mcp/oauth/authorize and complete Discord login/consent.",
-            "Exchange the authorization code at /mcp/oauth/token.",
+            "Agent standard path: register client -> /mcp/oauth/flow/start -> present authorize_url to user -> poll /mcp/oauth/flow/status.",
+            "Wait until /mcp/oauth/flow/status returns token_ready (or failed/expired/cancelled).",
+            "After token_ready, exchange the authorization code at /mcp/oauth/token.",
+            "Direct /mcp/oauth/authorize is supported as a low-level/manual path, but flow session is recommended for agents.",
             "Call MCP with Authorization: Bearer <mcp_access_token>.",
             "Use tools/list or help again to confirm writable tools unlocked for your tier.",
           ],
           agent_best_practices: [
             "Always start a fresh flow session using /mcp/oauth/flow/start.",
+            "Treat authorize_url as one-time and short-lived.",
             "Never reuse callback URLs or previous authorize links.",
             "Poll /mcp/oauth/flow/status with backoff (>= 1.5s) until token_ready/failed/expired.",
             "Keep only one active flow per user-agent pairing.",
@@ -571,7 +573,7 @@ export function registerTools(options: {
             state_expired_callback_400: [
               "The OAuth callback state was not found or expired.",
               "State is one-time and consumed from a strongly consistent store to prevent replay.",
-              "Start a fresh /mcp/oauth/authorize URL for every attempt.",
+              "Start a fresh /mcp/oauth/flow/start session for every attempt.",
               "Do not reuse old callback URLs and avoid parallel tabs for the same flow.",
               "Complete login/consent immediately after opening the authorize URL.",
               "During transition, the callback can fallback to legacy KV/cookie paths for in-flight sessions.",
