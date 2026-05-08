@@ -73,6 +73,9 @@ Canonical fields and their allowed scopes:
 
 Rules:
 - Only extract facts explicitly stated in the narrative. Do not invent or infer unstated facts.
+- Evaluate collection scope and inscription scope independently. If both have extractable facts, include both.
+- Try to fill as many canonical fields as evidence allows. Omit only when the narrative has no explicit support.
+- For each (scope, field), return at most one best value.
 - If the narrative mentions a collection founder, artist, or launch date, extract them with scope "collection".
 - If the narrative mentions the specific inscriber of this inscription, extract it with scope "inscription".
 - Do not extract generic descriptions or timeline events — only structured wiki-relevant facts.
@@ -191,7 +194,7 @@ function dedupeSeedFields(fields: ValidatedSeedField[]): ValidatedSeedField[] {
 
   const grouped = new Map<string, ValidatedSeedField[]>()
   for (const field of fields) {
-    const key = `${field.collection_slug}|${field.field}|${field.value_norm}`
+    const key = `${field.collection_slug}|${field.field}`
     const list = grouped.get(key) ?? []
     list.push(field)
     grouped.set(key, list)
@@ -199,11 +202,6 @@ function dedupeSeedFields(fields: ValidatedSeedField[]): ValidatedSeedField[] {
 
   const deduped: ValidatedSeedField[] = []
   for (const candidates of grouped.values()) {
-    if (candidates.length === 1) {
-      deduped.push(candidates[0])
-      continue
-    }
-
     const canonicalValue = chooseCanonicalWikiValue(candidates.map((item) => item.value))
     const best = [...candidates].sort((left, right) => {
       const verifiableDiff = Number(right.verifiable) - Number(left.verifiable)
@@ -216,14 +214,51 @@ function dedupeSeedFields(fields: ValidatedSeedField[]): ValidatedSeedField[] {
       ...best,
       value: canonicalValue,
       value_norm: normalizeWikiValue(canonicalValue),
+      verifiable: candidates.some((item) => item.verifiable),
     })
   }
 
   return deduped.sort((left, right) =>
     left.collection_slug.localeCompare(right.collection_slug)
     || left.field.localeCompare(right.field)
-    || left.value_norm.localeCompare(right.value_norm)
+    || left.scope.localeCompare(right.scope)
   )
+}
+
+function tryParseJsonArray(value: string): unknown[] | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) return parsed
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>
+      if (Array.isArray(record.fields)) return record.fields
+      if (Array.isArray(record.items)) return record.items
+    }
+  } catch {
+    // keep trying below
+  }
+
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fenceMatch?.[1]) {
+    const fenced = tryParseJsonArray(fenceMatch[1])
+    if (fenced) return fenced
+  }
+
+  const start = trimmed.indexOf("[")
+  const end = trimmed.lastIndexOf("]")
+  if (start !== -1 && end !== -1 && end > start) {
+    try {
+      const parsed = JSON.parse(trimmed.slice(start, end + 1))
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      // fall through
+    }
+  }
+
+  return null
 }
 
 async function fetchConsolidatedBySlug(slug: string): Promise<ConsolidatedCollection | null> {
@@ -290,23 +325,9 @@ async function extractFieldsFromNarrative(
 
   if (!raw) return []
 
-  const parsed = parseFirstJsonObject(raw)
-  if (!Array.isArray(parsed)) {
-    // The model might have returned a JSON array directly — check for that too
-    const trimmed = raw.trim()
-    if (trimmed.startsWith("[")) {
-      try {
-        const arr = JSON.parse(trimmed)
-        if (Array.isArray(arr)) {
-          return arr
-            .map((item) => validateExtractedField(item, chronicle))
-            .filter((item): item is ValidatedSeedField => item !== null)
-        }
-      } catch {
-        // fall through
-      }
-    }
-
+  const firstParse = parseFirstJsonObject(raw)
+  const parsedArray = Array.isArray(firstParse) ? firstParse : tryParseJsonArray(raw)
+  if (!parsedArray) {
     console.warn("[OrdinalMind][WikiSeedAgent] Failed to parse extraction result", {
       at: new Date().toISOString(),
       provider: config.provider,
@@ -315,7 +336,7 @@ async function extractFieldsFromNarrative(
     return []
   }
 
-  return parsed
+  return parsedArray
     .map((item) => validateExtractedField(item, chronicle))
     .filter((item): item is ValidatedSeedField => item !== null)
 }

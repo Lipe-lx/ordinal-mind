@@ -113,5 +113,86 @@ describe("wikiSeedAgent", () => {
     expect(submitWikiContribution).toHaveBeenCalledTimes(1)
     expect(vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.origin).toBe("narrative_seed_agent")
   })
-})
 
+  it("submits both collection and inscription fields when both are present", async () => {
+    mockConsolidatedResponse(null)
+    vi.mocked(runByokPrompt).mockResolvedValue("[{}]")
+    vi.mocked(parseFirstJsonObject).mockReturnValue([
+      {
+        field: "founder",
+        value: "Collection Founder",
+        verifiable: true,
+        scope: "collection",
+      },
+      {
+        field: "inscriber",
+        value: "Inscription Author",
+        verifiable: true,
+        scope: "inscription",
+      },
+    ])
+    vi.mocked(submitWikiContribution).mockResolvedValue({ ok: true, status: "published" })
+
+    await runWikiSeedAgent({
+      narrative: "Collection founder is Collection Founder. This inscription was inscribed by Inscription Author.",
+      chronicle: buildChronicle(),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+    })
+
+    expect(submitWikiContribution).toHaveBeenCalledTimes(2)
+    const slugs = vi.mocked(submitWikiContribution).mock.calls.map((call) => call?.[0]?.data?.collection_slug)
+    expect(slugs).toContain("collection:test-seed")
+    expect(slugs).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0")
+  })
+
+  it("keeps only one deterministic write per field+scope", async () => {
+    mockConsolidatedResponse(null)
+    vi.mocked(runByokPrompt).mockResolvedValue("[{}]")
+    vi.mocked(parseFirstJsonObject).mockReturnValue([
+      {
+        field: "founder",
+        value: "A",
+        verifiable: false,
+        scope: "collection",
+      },
+      {
+        field: "founder",
+        value: "Founder Alpha",
+        verifiable: true,
+        scope: "collection",
+      },
+    ])
+    vi.mocked(submitWikiContribution).mockResolvedValue({ ok: true, status: "published" })
+
+    await runWikiSeedAgent({
+      narrative: "Founder Alpha.",
+      chronicle: buildChronicle(),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+    })
+
+    expect(submitWikiContribution).toHaveBeenCalledTimes(1)
+    const sentValue = vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.value
+    expect(sentValue).toBe("Founder Alpha")
+  })
+
+  it("parses JSON arrays wrapped in markdown fences", async () => {
+    mockConsolidatedResponse(null)
+    vi.mocked(runByokPrompt).mockResolvedValue(
+      "```json\n[{\"field\":\"founder\",\"value\":\"Casey Rodarmor\",\"verifiable\":true,\"scope\":\"collection\"}]\n```"
+    )
+    vi.mocked(parseFirstJsonObject).mockReturnValue(null)
+    vi.mocked(submitWikiContribution).mockResolvedValue({ ok: true, status: "published" })
+
+    await runWikiSeedAgent({
+      narrative: "Founder is Casey Rodarmor.",
+      chronicle: buildChronicle(),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+    })
+
+    expect(submitWikiContribution).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.field).toBe("founder")
+  })
+})
