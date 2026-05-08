@@ -314,7 +314,7 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
 
     const env = createMcpEnv(db)
     const server = new McpServer({ name: "test", version: "1.0.0" })
-    const handlers = captureHandlers(server, ["wiki_stats", "help", "wiki_list_pages", "wiki_search_pages", "wiki_get_page"])
+    const handlers = captureHandlers(server, ["wiki_stats", "help", "wiki_list_pages", "wiki_search_pages", "wiki_get_page", "wiki_list_fields"])
     registerTools({ server, env, request: new Request("https://mcp.local") })
 
     const statsResult = await handlers.wiki_stats({})
@@ -345,6 +345,7 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(readOnly).toContain("wiki_search_pages")
     expect(readOnly).toContain("wiki_list_pages")
     expect(readOnly).toContain("wiki_get_page")
+    expect(readOnly).toContain("wiki_list_fields")
     expect(readOnly).not.toContain("wiki_search_collections")
 
     const listResult = await handlers.wiki_list_pages({ limit: 10, offset: 0 })
@@ -369,6 +370,14 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(pageBody.publication_status).toBe("published")
     expect(pageBody.page.slug).toBe("inscription:abc123i0")
     expect(pageBody.page.publication_status).toBe("published")
+
+    const fieldsResult = await handlers.wiki_list_fields({ entity_type: "inscription" })
+    const fieldsBody = fieldsResult.structuredContent as Record<string, any>
+    expect(fieldsBody.ok).toBe(true)
+    expect(Array.isArray(fieldsBody.entities)).toBe(true)
+    expect(fieldsBody.entities[0].entity_type).toBe("inscription")
+    expect(Array.isArray(fieldsBody.entities[0].fields)).toBe(true)
+    expect(fieldsBody.entities[0].fields.length).toBeGreaterThan(0)
   })
 
   it("wiki://page/{slug} resource retorna payload da página", async () => {

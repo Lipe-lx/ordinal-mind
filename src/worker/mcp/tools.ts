@@ -94,6 +94,10 @@ const wikiFieldStatusSchema = {
   collection_slug: z.string().min(1),
 }
 
+const wikiListFieldsSchema = {
+  entity_type: z.enum(["collection", "inscription"]).optional(),
+}
+
 const wikiCollectionContextSchema = {
   collection_slug: z.string().min(1),
   include_graph_summary: z.boolean().default(true),
@@ -639,6 +643,7 @@ export function registerTools(options: {
             "wiki_list_pages",
             "wiki_get_page",
             "wiki_stats",
+            "wiki_list_fields",
             "wiki_get_field_status",
             "wiki_get_collection_context",
           ],
@@ -649,6 +654,7 @@ export function registerTools(options: {
           "Search pages by type: wiki_search_pages { query: '<keyword>', entity_type: 'collection', limit: 10, offset: 0 }.",
           "Read one exact page: wiki_get_page { slug: 'inscription:<id>' }.",
           "Check wiki visibility health: wiki_stats {} (compare total_pages, published_shape_pages, and seed_pages).",
+          "List valid fields before write attempts: wiki_list_fields { entity_type: 'collection' }.",
           "Load context: wiki_get_collection_context { collection_slug: '<slug-from-search>', include_graph_summary: true }.",
           "List related inscriptions: search_collection_inscriptions { collection_slug: '<slug-from-search>', limit: 20, offset: 0, sort: 'recent' }.",
           "Audit one inscription: query_chronicle { inscription_id: '<inscription-id>', event_types: ['genesis','transfer'], sort: 'asc', limit: 25 }.",
@@ -1278,6 +1284,56 @@ export function registerTools(options: {
             ? `wiki://collection/${normalizeCollectionSlug(page.slug)}`
             : null,
         ].filter((value): value is string => Boolean(value)),
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_list_fields",
+    {
+      description: "Read-only list of valid canonical wiki fields by entity type (preflight for write tools)",
+      inputSchema: wikiListFieldsSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_list_fields",
+        limit: 90,
+        windowSeconds: 60,
+        alertThreshold: 65,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      const toItem = (entityType: "collection" | "inscription") => {
+        const probeSlug = entityType === "inscription"
+          ? "inscription:0000000000000000000000000000000000000000000000000000000000000000i0"
+          : "collection:sample"
+        const fields = CANONICAL_FIELDS
+          .filter((field) => isFieldAllowedForSlug(field, probeSlug))
+          .map((name) => ({
+            name,
+            required: false,
+            recommended: name === "origin_narrative" || name === "technical_details" || name === "current_status",
+          }))
+        return {
+          entity_type: entityType,
+          fields,
+        }
+      }
+
+      const requestedEntityType = args.entity_type as ("collection" | "inscription" | undefined)
+      const entities = requestedEntityType
+        ? [toItem(requestedEntityType)]
+        : [toItem("collection"), toItem("inscription")]
+
+      return jsonToolResult({
+        ok: true,
+        entities,
+        guidance: [
+          "Use this tool before wiki_propose_update to avoid field_scope_mismatch.",
+          "Field availability is strict by entity type.",
+        ],
       })
     }
   )

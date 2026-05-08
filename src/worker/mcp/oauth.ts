@@ -876,6 +876,7 @@ export async function handleMcpCallbackRoute(
   const stateHash = (await sha256Hex(state)).slice(0, 12)
   const codeFingerprint = (await sha256Hex(code)).slice(0, 12)
   const consumed = await consumeStateFromDo(stateDo, state, codeFingerprint)
+  const consumedCause = consumed.ok ? null : consumed.cause
   const flowLookup = await doFlowStatusByState(stateDo, state)
   const flowId = flowLookup.ok ? flowLookup.flow.flow_id : null
   const pendingFromDo = consumed.ok
@@ -923,7 +924,7 @@ export async function handleMcpCallbackRoute(
     at: new Date().toISOString(),
     event: "mcp.oauth.state.consume",
     result: consumed.ok ? "ok" : "miss",
-    cause_class: consumed.ok ? null : consumed.cause,
+    cause_class: consumedCause,
     state_hash: stateHash,
     request_id: requestId,
     cf_ray: cfRay,
@@ -931,8 +932,8 @@ export async function handleMcpCallbackRoute(
   }))
 
   if (!pendingFromDo && !stateLookup.pending && !pendingFromCookie) {
-    const isReplay = consumed.cause === "replay" || consumed.cause === "replay_duplicate"
-    const isDuplicateReplay = consumed.cause === "replay_duplicate"
+    const isReplay = consumedCause === "replay" || consumedCause === "replay_duplicate"
+    const isDuplicateReplay = consumedCause === "replay_duplicate"
     if (flowId) {
       await doFlowUpdate(stateDo, flowId, isReplay ? "replay_detected" : "expired", {
         error: isReplay ? "replay_blocked" : "state_expired",
