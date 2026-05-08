@@ -49,6 +49,7 @@ class RecordingKv {
 
 class FakeStateDoNamespace {
   private store = new Map<string, { payload: any; expires_at: number }>()
+  private consumed = new Map<string, { code_fingerprint: string | null; expires_at: number }>()
   private failIssue = false
   private failConsume = false
   private forceExpired = false
@@ -84,6 +85,18 @@ class FakeStateDoNamespace {
           if (failConsume) {
             return new Response(JSON.stringify({ ok: false, cause: "missing" }), { status: 404 })
           }
+          const consumedRow = this.consumed.get(body.state)
+          if (consumedRow && consumedRow.expires_at > Date.now()) {
+            const same = Boolean(
+              consumedRow.code_fingerprint
+              && body.code_fingerprint
+              && consumedRow.code_fingerprint === body.code_fingerprint
+            )
+            return new Response(
+              JSON.stringify({ ok: false, cause: same ? "replay_duplicate" : "replay" }),
+              { status: 404 }
+            )
+          }
           const row = store.get(body.state)
           if (!row) return new Response(JSON.stringify({ ok: false, cause: "missing" }), { status: 404 })
           const now = Date.now()
@@ -91,6 +104,10 @@ class FakeStateDoNamespace {
           if (row.expires_at <= now) {
             return new Response(JSON.stringify({ ok: false, cause: "expired" }), { status: 404 })
           }
+          this.consumed.set(body.state, {
+            code_fingerprint: body.code_fingerprint ?? null,
+            expires_at: now + 60_000,
+          })
           return new Response(JSON.stringify({ ok: true, payload: row.payload }), { status: 200 })
         }
 
@@ -207,7 +224,7 @@ describe("MCP OAuth callback state handling", () => {
     const replayText = await callbackRes2.text()
 
     expect(callbackRes2.status).toBe(400)
-    expect(replayText).toContain("Authorization state expired")
+    expect(replayText).toContain("Authorization callback already processed")
   })
 
   it("returns state expired when durable object entry is already expired", async () => {

@@ -18,6 +18,7 @@ type IssueBody = {
 
 type ConsumeBody = {
   state: string
+  code_fingerprint?: string
 }
 
 type PeekBody = {
@@ -28,6 +29,14 @@ type StoredState = {
   payload: McpOAuthPendingState
   expires_at: number
 }
+
+type ConsumedMarker = {
+  consumed_at: number
+  expires_at: number
+  code_fingerprint: string | null
+}
+
+const CONSUMED_MARKER_TTL_MS = 60 * 1000
 
 const DurableObjectBase = (globalThis as { DurableObject?: new (...args: any[]) => any }).DurableObject
   ?? class {
@@ -54,6 +63,9 @@ function parseJson<T>(text: string): T | null {
 
 export class McpOAuthStateDO extends DurableObjectBase {
   private kv = this.ctx.storage
+  private consumedKey(state: string): string {
+    return `consumed:${state}`
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -78,12 +90,31 @@ export class McpOAuthStateDO extends DurableObjectBase {
       const now = Date.now()
       const outcome = await this.kv.transaction(async (txn) => {
         const row = await txn.get<StoredState>(body.state)
-        if (!row) return { ok: false as const, cause: "missing" as const }
+        if (!row) {
+          const consumed = await txn.get<ConsumedMarker>(this.consumedKey(body.state))
+          if (consumed && consumed.expires_at > now) {
+            const sameFingerprint = Boolean(
+              consumed.code_fingerprint
+              && body.code_fingerprint
+              && consumed.code_fingerprint === body.code_fingerprint
+            )
+            return {
+              ok: false as const,
+              cause: sameFingerprint ? "replay_duplicate" as const : "replay" as const,
+            }
+          }
+          return { ok: false as const, cause: "missing" as const }
+        }
         if (row.expires_at <= now) {
           await txn.delete(body.state)
           return { ok: false as const, cause: "expired" as const }
         }
         await txn.delete(body.state)
+        await txn.put(this.consumedKey(body.state), {
+          consumed_at: now,
+          expires_at: now + CONSUMED_MARKER_TTL_MS,
+          code_fingerprint: body.code_fingerprint ?? null,
+        } satisfies ConsumedMarker)
         return { ok: true as const, payload: row.payload }
       })
       if (!outcome.ok) return json(outcome, 404)

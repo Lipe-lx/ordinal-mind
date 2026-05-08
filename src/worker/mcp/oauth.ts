@@ -324,9 +324,10 @@ async function issueStateInDo(
 
 async function consumeStateFromDo(
   ns: DurableObjectNamespace,
-  state: string
+  state: string,
+  codeFingerprint: string
 ): Promise<{ ok: true; payload: McpOAuthPendingState } | { ok: false; cause: string }> {
-  const res = await doFetch(ns, "/consume", { state })
+  const res = await doFetch(ns, "/consume", { state, code_fingerprint: codeFingerprint })
   const text = await res.text()
   const parsed = parseJson<{ ok?: boolean; payload?: McpOAuthPendingState; cause?: string }>(text)
   if (res.ok && parsed?.ok && parsed.payload) {
@@ -572,7 +573,8 @@ export async function handleMcpCallbackRoute(
   }
 
   const stateHash = (await sha256Hex(state)).slice(0, 12)
-  const consumed = await consumeStateFromDo(stateDo, state)
+  const codeFingerprint = (await sha256Hex(code)).slice(0, 12)
+  const consumed = await consumeStateFromDo(stateDo, state, codeFingerprint)
   const pendingFromDo = consumed.ok
     ? ({
       created_at: consumed.payload.created_at,
@@ -626,6 +628,7 @@ export async function handleMcpCallbackRoute(
   }))
 
   if (!pendingFromDo && !stateLookup.pending && !pendingFromCookie) {
+    const isReplay = consumed.cause === "replay" || consumed.cause === "replay_duplicate"
     console.warn(JSON.stringify({
       at: new Date().toISOString(),
       event: "mcp.oauth.state.miss",
@@ -636,9 +639,14 @@ export async function handleMcpCallbackRoute(
       lookup_latency_ms: stateLookup.lookupLatencyMs,
       cause_hint: "eventual_consistency_or_expired_or_reused_state",
     }))
-    return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.", {
+    return buildOAuthErrorRedirect(
+      isReplay
+        ? "Authorization callback already processed. Please restart the OAuth flow."
+        : "Authorization state expired. Please restart the OAuth flow.",
+      {
       clearStateCookie,
-    })
+      }
+    )
   }
   const pending = pendingFromDo ?? stateLookup.pending ?? pendingFromCookie
 
