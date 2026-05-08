@@ -523,6 +523,19 @@ export function registerTools(options: {
             register: "/mcp/oauth/register",
             protected_resource_metadata: "/.well-known/oauth-protected-resource",
           },
+          request_contracts: {
+            register: {
+              content_type: "application/json",
+              required: ["redirect_uris (at least one)"],
+            },
+            token: {
+              content_type: "application/x-www-form-urlencoded",
+              note: "Do not send JSON to /mcp/oauth/token.",
+            },
+            bearer: {
+              header: "Authorization: Bearer <mcp_access_token>",
+            },
+          },
           flow: [
             "Start with protected resource metadata discovery.",
             "Run OAuth authorization against /mcp/oauth/authorize and complete Discord login/consent.",
@@ -530,6 +543,20 @@ export function registerTools(options: {
             "Call MCP with Authorization: Bearer <mcp_access_token>.",
             "Use tools/list or help again to confirm writable tools unlocked for your tier.",
           ],
+          troubleshooting: {
+            oauth_provider_unavailable_503: [
+              "OAuth provider is currently unavailable for this deployment.",
+              "Server-side checks: MCP_OAUTH_ENABLED=1, Discord OAuth env configured, OAUTH_KV configured, OAuth provider binding active.",
+            ],
+            invalid_client_metadata_400: [
+              "Dynamic client registration payload is invalid.",
+              "Include at least one redirect URI in redirect_uris.",
+            ],
+            invalid_request_token_400: [
+              "Token exchange request is malformed.",
+              "Use application/x-www-form-urlencoded body for /mcp/oauth/token.",
+            ],
+          },
           current_session: {
             tier,
             writable_tools_now: writableTools,

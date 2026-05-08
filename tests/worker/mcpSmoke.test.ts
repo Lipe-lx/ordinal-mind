@@ -336,6 +336,9 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(help.oauth_mcp?.endpoints?.authorize).toBe("/mcp/oauth/authorize")
     expect(help.oauth_mcp?.endpoints?.token).toBe("/mcp/oauth/token")
     expect(Array.isArray(help.oauth_mcp?.flow)).toBe(true)
+    expect(help.oauth_mcp?.request_contracts?.token?.content_type).toBe("application/x-www-form-urlencoded")
+    expect(help.oauth_mcp?.request_contracts?.register?.required).toContain("redirect_uris (at least one)")
+    expect(Array.isArray(help.oauth_mcp?.troubleshooting?.oauth_provider_unavailable_503)).toBe(true)
     const readOnly = help.available_tools_now.read_only as string[]
     expect(readOnly).toContain("wiki_stats")
     expect(readOnly).toContain("wiki_search_pages")
