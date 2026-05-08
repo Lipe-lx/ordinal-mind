@@ -514,6 +514,30 @@ export function registerTools(options: {
           wiki_propose_update: "Follows app tier rules: community -> quarantine, og/genesis -> published.",
           review_contribution: "Genesis-only moderation action.",
         },
+        oauth_mcp: {
+          purpose: "Unlock tier-gated writable tools by obtaining an MCP OAuth access token.",
+          endpoints: {
+            authorize: "/mcp/oauth/authorize",
+            callback: "/mcp/oauth/callback",
+            token: "/mcp/oauth/token",
+            register: "/mcp/oauth/register",
+            protected_resource_metadata: "/.well-known/oauth-protected-resource",
+          },
+          flow: [
+            "Start with protected resource metadata discovery.",
+            "Run OAuth authorization against /mcp/oauth/authorize and complete Discord login/consent.",
+            "Exchange the authorization code at /mcp/oauth/token.",
+            "Call MCP with Authorization: Bearer <mcp_access_token>.",
+            "Use tools/list or help again to confirm writable tools unlocked for your tier.",
+          ],
+          current_session: {
+            tier,
+            writable_tools_now: writableTools,
+            note: tier === "anon"
+              ? "Current token/session is anonymous; run MCP OAuth to unlock tier-gated tools."
+              : "Current token/session is authenticated; writable tool availability depends on tier claims.",
+          },
+        },
         wiki_stats_semantics: {
           total_pages: "All rows in wiki_pages.",
           indexed_pages: "All rows in wiki_fts visible to full-text search.",

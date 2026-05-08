@@ -333,6 +333,9 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
 
     const helpResult = await handlers.help({})
     const help = helpResult.structuredContent as Record<string, any>
+    expect(help.oauth_mcp?.endpoints?.authorize).toBe("/mcp/oauth/authorize")
+    expect(help.oauth_mcp?.endpoints?.token).toBe("/mcp/oauth/token")
+    expect(Array.isArray(help.oauth_mcp?.flow)).toBe(true)
     const readOnly = help.available_tools_now.read_only as string[]
     expect(readOnly).toContain("wiki_stats")
     expect(readOnly).toContain("wiki_search_pages")
