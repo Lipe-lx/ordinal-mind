@@ -676,12 +676,7 @@ export async function handleMcpFlowStartRoute(
     return oauthError(503, "oauth_kv_not_configured", "OAuth KV unavailable.", true)
   }
 
-  let input: FlowStartInput | null = null
-  try {
-    input = parseJson<FlowStartInput>(await request.text())
-  } catch {
-    input = null
-  }
+  const input = parseJson<FlowStartInput>(await request.text())
   if (!input?.client_id) {
     return oauthError(400, "invalid_flow_start_request", "client_id is required.", false)
   }
