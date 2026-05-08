@@ -56,7 +56,7 @@
   "migrations": [
     {
       "tag": "v1-mcp-oauth-state-do",
-      "new_classes": ["McpOAuthStateDO"]
+      "new_sqlite_classes": ["McpOAuthStateDO"]
     }
   ]
 }
