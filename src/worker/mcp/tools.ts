@@ -532,6 +532,14 @@ export function registerTools(options: {
               content_type: "application/json",
               required: ["redirect_uris (at least one)"],
             },
+            flow_start: {
+              content_type: "application/json",
+              required: ["client_id", "redirect_uri"],
+              defaults: {
+                scope: "wiki.contribute wiki.review chronicle.refresh collection.reindex",
+              },
+              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier.",
+            },
             token: {
               content_type: "application/x-www-form-urlencoded",
               note: "Do not send JSON to /mcp/oauth/token.",
@@ -551,6 +559,8 @@ export function registerTools(options: {
           ],
           agent_best_practices: [
             "Always start a fresh flow session using /mcp/oauth/flow/start.",
+            "Request the full scope set for agent sessions: wiki.contribute wiki.review chronicle.refresh collection.reindex.",
+            "Tier still enforces final access: community/og get contribute; genesis also gets review/refresh/reindex.",
             "Treat authorize_url as one-time and short-lived.",
             "Never reuse callback URLs or previous authorize links.",
             "Poll /mcp/oauth/flow/status with backoff (>= 1.5s) until token_ready/failed/expired.",

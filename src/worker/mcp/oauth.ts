@@ -62,6 +62,7 @@ const SUPPORTED_SCOPES = [
   "chronicle.refresh",
   "collection.reindex",
 ] as const
+const DEFAULT_AGENT_SCOPE = SUPPORTED_SCOPES.join(" ")
 
 export type McpOAuthRuntime = {
   provider: OAuthProvider<Env>
@@ -688,7 +689,7 @@ export async function handleMcpFlowStartRoute(
   synth.searchParams.set("state", clientState)
   synth.searchParams.set("code_challenge", codeChallenge)
   synth.searchParams.set("code_challenge_method", "S256")
-  if (input.scope && input.scope.trim()) synth.searchParams.set("scope", input.scope.trim())
+  synth.searchParams.set("scope", input.scope?.trim() || DEFAULT_AGENT_SCOPE)
   if (input.resource && input.resource.trim()) synth.searchParams.set("resource", input.resource.trim())
 
   const synthReq = new Request(synth.toString(), {
