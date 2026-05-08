@@ -19,6 +19,7 @@ import {
   MCP_OAUTH_PATHS,
   type McpOAuthRuntime,
   createMcpOAuthProvider,
+  getMcpOAuthApi,
   handleMcpAuthorizeRoute,
   handleMcpCallbackRoute,
   resolveMcpAuthFromRequest,
@@ -135,7 +136,8 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.authorize) {
       try {
         const runtime = await getMcpOAuthRuntime()
-        return handleMcpAuthorizeRoute(request, env, runtime.provider)
+        const oauthApi = await getMcpOAuthApi(runtime.options, env)
+        return handleMcpAuthorizeRoute(request, env, oauthApi)
       } catch {
         return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
       }
@@ -144,7 +146,8 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.callback) {
       try {
         const runtime = await getMcpOAuthRuntime()
-        return handleMcpCallbackRoute(request, env, runtime.provider)
+        const oauthApi = await getMcpOAuthApi(runtime.options, env)
+        return handleMcpCallbackRoute(request, env, oauthApi)
       } catch {
         return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
       }

@@ -47,7 +47,7 @@ export type McpOAuthRuntime = {
   options: OAuthProviderOptions<Env>
 }
 
-type McpRouteOAuthProvider = Pick<OAuthProvider<Env>, "parseAuthRequest" | "completeAuthorization">
+type McpRouteOAuthApi = Pick<OAuthHelpers, "parseAuthRequest" | "completeAuthorization">
 
 type ExportedFetchHandler<EnvT> = {
   fetch: (request: Request, env: EnvT, ctx: ExecutionContext) => Response | Promise<Response>
@@ -199,12 +199,17 @@ export async function createMcpOAuthProvider(defaultHandler: ExportedFetchHandle
   }
 }
 
+export async function getMcpOAuthApi(options: OAuthProviderOptions<Env>, env: Env): Promise<OAuthHelpers> {
+  const { getOAuthApi } = await loadOAuthProviderLib()
+  return getOAuthApi(options, env)
+}
+
 export async function handleMcpAuthorizeRoute(
   request: Request,
   env: Env,
-  provider: McpRouteOAuthProvider | null
+  oauthApi: McpRouteOAuthApi | null
 ): Promise<Response> {
-  if (!provider) {
+  if (!oauthApi) {
     return json({ ok: false, error: "oauth_provider_unavailable" }, 503)
   }
 
@@ -219,7 +224,7 @@ export async function handleMcpAuthorizeRoute(
 
   let oauthReq: AuthRequest
   try {
-    oauthReq = await provider.parseAuthRequest(request)
+    oauthReq = await oauthApi.parseAuthRequest(request)
   } catch (error) {
     return json({
       ok: false,
@@ -254,9 +259,9 @@ export async function handleMcpAuthorizeRoute(
 export async function handleMcpCallbackRoute(
   request: Request,
   env: Env,
-  provider: McpRouteOAuthProvider | null
+  oauthApi: McpRouteOAuthApi | null
 ): Promise<Response> {
-  if (!provider) {
+  if (!oauthApi) {
     return json({ ok: false, error: "oauth_provider_unavailable" }, 503)
   }
 
@@ -323,7 +328,7 @@ export async function handleMcpCallbackRoute(
       auth_source: "discord_oauth",
     }
 
-    const { redirectTo } = await provider.completeAuthorization({
+    const { redirectTo } = await oauthApi.completeAuthorization({
       request: pending.oauth_request,
       userId: user.id,
       metadata: {
@@ -353,8 +358,7 @@ export async function resolveMcpAuthFromRequest(
   const token = authHeader.slice(7).trim()
   if (!token) return undefined
 
-  const { getOAuthApi } = await loadOAuthProviderLib()
-  const oauthApi = getOAuthApi(options, env)
+  const oauthApi = await getMcpOAuthApi(options, env)
   const unwrapped = await oauthApi.unwrapToken<McpAuthProps>(token)
   const tokenProps = unwrapped?.grant?.props
   if (!tokenProps) return undefined
