@@ -86,6 +86,8 @@ const wikiCollectionContextSchema = {
   include_graph_summary: z.boolean().default(true),
 }
 
+const wikiStatsSchema = {}
+
 const wikiProposeUpdateSchema = {
   collection_slug: z.string().min(1),
   field: z.enum(CANONICAL_FIELDS),
@@ -222,8 +224,55 @@ function toSourceExcerpt(input: {
 
 function timestampToMs(value: string | undefined): number | null {
   if (!value) return null
-  const ms = new Date(value).getTime()
+  let ms = new Date(value).getTime()
+  if (Number.isFinite(ms)) return ms
+  ms = new Date(value.replace(" ", "T") + "Z").getTime()
   return Number.isFinite(ms) ? ms : null
+}
+
+async function hasWikiContributionUpdatedAtColumn(env: Env): Promise<boolean> {
+  if (!env.DB) return false
+  try {
+    const tableInfo = await env.DB.prepare("PRAGMA table_info('wiki_contributions')")
+      .all<{ name: string }>()
+    const names = new Set((tableInfo.results ?? []).map((row) => row.name))
+    return names.has("updated_at")
+  } catch {
+    return false
+  }
+}
+
+async function readWikiStatsUpdatedAt(env: Env): Promise<string | null> {
+  if (!env.DB) return null
+
+  const pageRow = await env.DB.prepare(`
+    SELECT MAX(updated_at) AS updated_at
+    FROM wiki_pages
+  `)
+    .all<{ updated_at: string | null }>()
+
+  const contributionTimeField = await hasWikiContributionUpdatedAtColumn(env) ? "updated_at" : "created_at"
+  const contributionRow = await env.DB.prepare(`
+    SELECT MAX(${contributionTimeField}) AS updated_at
+    FROM wiki_contributions
+    WHERE status IN ('published', 'quarantine')
+  `)
+    .all<{ updated_at: string | null }>()
+
+  const pageUpdatedAt = pageRow.results?.[0]?.updated_at ?? null
+  const contributionUpdatedAt = contributionRow.results?.[0]?.updated_at ?? null
+  const candidates = [pageUpdatedAt, contributionUpdatedAt]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+
+  let latest: number | null = null
+  for (const value of candidates) {
+    const ts = timestampToMs(value)
+    if (ts === null) continue
+    latest = latest === null ? ts : Math.max(latest, ts)
+  }
+
+  if (latest === null) return null
+  return new Date(latest).toISOString()
 }
 
 function filterChronicleEvents(
@@ -410,6 +459,7 @@ export function registerTools(options: {
             "query_chronicle",
             "search_collection_inscriptions",
             "wiki_search_collections",
+            "wiki_stats",
             "wiki_get_field_status",
             "wiki_get_collection_context",
           ],
@@ -693,6 +743,66 @@ export function registerTools(options: {
         total: Number(totalRows.results?.[0]?.total ?? 0),
         items,
         resource_uris: items.map((item) => `wiki://collection/${item.slug}`),
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_stats",
+    {
+      description: "Read-only global wiki coverage counters for pages, index visibility, and moderation states",
+      inputSchema: wikiStatsSchema,
+    },
+    async () => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_stats",
+        limit: 60,
+        windowSeconds: 60,
+        alertThreshold: 40,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) {
+        return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+      }
+
+      const totalPagesRows = await env.DB.prepare(`
+        SELECT COUNT(*) AS total
+        FROM wiki_pages
+      `)
+        .all<{ total: number }>()
+
+      const indexedPagesRows = await env.DB.prepare(`
+        SELECT COUNT(*) AS total
+        FROM wiki_fts
+      `)
+        .all<{ total: number }>()
+
+      const publishedPagesRows = await env.DB.prepare(`
+        SELECT COUNT(DISTINCT collection_slug) AS total
+        FROM wiki_contributions
+        WHERE status = 'published'
+      `)
+        .all<{ total: number }>()
+
+      const quarantinePagesRows = await env.DB.prepare(`
+        SELECT COUNT(DISTINCT collection_slug) AS total
+        FROM wiki_contributions
+        WHERE status = 'quarantine'
+      `)
+        .all<{ total: number }>()
+
+      const updatedAt = await readWikiStatsUpdatedAt(env)
+
+      return jsonToolResult({
+        ok: true,
+        total_pages: Number(totalPagesRows.results?.[0]?.total ?? 0),
+        indexed_pages: Number(indexedPagesRows.results?.[0]?.total ?? 0),
+        published_pages: Number(publishedPagesRows.results?.[0]?.total ?? 0),
+        quarantine_pages: Number(quarantinePagesRows.results?.[0]?.total ?? 0),
+        updated_at: updatedAt,
       })
     }
   )

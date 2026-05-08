@@ -131,6 +131,7 @@ npm run typecheck
 - `query_chronicle`: public read-only query tool (`anon` and authenticated).
 - `search_collection_inscriptions`: public read-only query tool (`anon` and authenticated).
 - `wiki_search_collections`: public read-only wiki discovery tool (`anon` and authenticated).
+- `wiki_stats`: public read-only global wiki counters (`anon` and authenticated).
 - `wiki_get_field_status`: public read-only wiki coverage/status tool (`anon` and authenticated).
 - `wiki_get_collection_context`: public read-only wiki context snapshot tool (`anon` and authenticated).
 - `wiki_propose_update`: moderated proposal tool (`community`, `og`, `genesis`) following app tier rules (`community -> quarantine`, `og/genesis -> published`).

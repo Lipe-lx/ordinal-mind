@@ -184,7 +184,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
 
 ### 5) Use Wiki Read-Only Tools (Phase 1)
 
-#### Search wiki collections
+#### Get global wiki stats
 
 ```bash
 curl -sS -X POST 'https://ordinalmind.com/mcp' \
@@ -193,6 +193,30 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   --data '{
     "jsonrpc":"2.0",
     "id":9,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_stats",
+      "arguments":{}
+    }
+  }'
+```
+
+Returns:
+- `total_pages`: rows in `wiki_pages`
+- `indexed_pages`: rows in `wiki_fts` (public searchable index)
+- `published_pages`: unique `collection_slug` with published consensus contributions
+- `quarantine_pages`: unique `collection_slug` with quarantined contributions
+- `updated_at`: latest update timestamp across pages and public contribution states
+
+#### Search wiki collections
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":10,
     "method":"tools/call",
     "params":{
       "name":"wiki_search_collections",
@@ -218,7 +242,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":10,
+    "id":11,
     "method":"tools/call",
     "params":{
       "name":"wiki_get_field_status",
@@ -237,7 +261,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":11,
+    "id":12,
     "method":"tools/call",
     "params":{
       "name":"wiki_get_collection_context",
