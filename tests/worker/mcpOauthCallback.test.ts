@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { handleMcpCallbackRoute } from "../../src/worker/mcp/oauth"
+import { handleMcpAuthorizeRoute, handleMcpCallbackRoute } from "../../src/worker/mcp/oauth"
 import type { Env } from "../../src/worker/index"
 
 vi.mock("../../src/worker/auth/discord", () => ({
-  buildAuthorizationUrl: vi.fn(),
-  deriveCodeChallenge: vi.fn(),
+  buildAuthorizationUrl: vi.fn((params: { state: string }) => (
+    `https://discord.com/oauth2/authorize?state=${encodeURIComponent(params.state)}`
+  )),
+  deriveCodeChallenge: vi.fn(async () => "challenge-123"),
   discordSnowflakeToDate: vi.fn(() => new Date("2026-01-01T00:00:00.000Z")),
   exchangeCode: vi.fn(async () => ({ access_token: "discord-access-token" })),
   fetchDiscordGuilds: vi.fn(async () => ([{ id: "guild-1" }])),
@@ -14,7 +16,7 @@ vi.mock("../../src/worker/auth/discord", () => ({
     global_name: "User One",
     avatar: null,
   })),
-  generateCodeVerifier: vi.fn(),
+  generateCodeVerifier: vi.fn(() => "verifier-123"),
 }))
 
 vi.mock("../../src/worker/auth/tierEngine", () => ({
@@ -96,5 +98,34 @@ describe("MCP OAuth callback state handling", () => {
     expect(res.status).toBe(400)
     expect(text).toContain("MCP OAuth failed")
     expect(text).toContain("Authorization state expired")
+  })
+
+  it("recovers state from signed cookie fallback when KV misses", async () => {
+    const kvMiss = new NeverConsistentKv() as any
+    const env = createEnvWithKv(kvMiss)
+    const oauthApi = {
+      parseAuthRequest: vi.fn(async () => ({ scope: ["wiki.contribute"] })),
+      completeAuthorization: vi.fn(async () => ({ redirectTo: "https://client.example/callback?code=abc" })),
+    }
+
+    const authorizeReq = new Request("https://ordinalmind.com/mcp/oauth/authorize?response_type=code&client_id=test")
+    const authorizeRes = await handleMcpAuthorizeRoute(authorizeReq, env, oauthApi as any)
+    const discordLocation = authorizeRes.headers.get("Location") ?? ""
+    const setCookie = authorizeRes.headers.get("Set-Cookie") ?? ""
+    const state = new URL(discordLocation).searchParams.get("state")
+
+    expect(authorizeRes.status).toBe(302)
+    expect(state).toBeTruthy()
+    expect(setCookie).toContain("ordinal_mind_mcp_oauth_state=")
+
+    const callbackReq = new Request(
+      `https://ordinalmind.com/mcp/oauth/callback?code=discord-code-1&state=${encodeURIComponent(state ?? "")}`,
+      { headers: { Cookie: setCookie } }
+    )
+    const callbackRes = await handleMcpCallbackRoute(callbackReq, env, oauthApi as any)
+
+    expect(callbackRes.status).toBe(302)
+    expect(callbackRes.headers.get("Location")).toContain("https://client.example/callback")
+    expect(callbackRes.headers.get("Set-Cookie")).toContain("ordinal_mind_mcp_oauth_state=;")
   })
 })

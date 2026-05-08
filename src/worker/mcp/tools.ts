@@ -561,6 +561,7 @@ export function registerTools(options: {
               "Start a fresh /mcp/oauth/authorize URL for every attempt.",
               "Do not reuse old callback URLs and avoid parallel tabs for the same flow.",
               "Complete login/consent immediately after opening the authorize URL.",
+              "The server uses a signed HttpOnly state cookie as fallback when KV propagation is delayed; keep cookies enabled for ordinalmind.com.",
             ],
           },
           current_session: {

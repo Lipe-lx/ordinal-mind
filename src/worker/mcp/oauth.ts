@@ -14,6 +14,7 @@ import {
   fetchDiscordUser,
   generateCodeVerifier,
 } from "../auth/discord"
+import { getCookie } from "../auth/session"
 import { calculateTier } from "../auth/tierEngine"
 import { normalizeTier, type McpResolvedAuth, type McpAuthProps } from "./types"
 
@@ -29,6 +30,12 @@ const MCP_ACCESS_TOKEN_TTL_SECONDS = 30 * 60
 const MCP_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 const CALLBACK_STATE_READ_ATTEMPTS = 3
 const CALLBACK_STATE_READ_RETRY_MS = 120
+const MCP_OAUTH_STATE_COOKIE_NAME = "ordinal_mind_mcp_oauth_state"
+
+interface PendingMcpAuthorizationCookie {
+  v: 1
+  pending: PendingMcpAuthorization
+}
 
 export const MCP_OAUTH_PATHS = {
   authorize: "/mcp/oauth/authorize",
@@ -103,10 +110,10 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
-function redirect(url: string, status = 302): Response {
+function redirect(url: string, status = 302, extraHeaders?: Record<string, string>): Response {
   return new Response(null, {
     status,
-    headers: { Location: url },
+    headers: { Location: url, ...(extraHeaders ?? {}) },
   })
 }
 
@@ -119,11 +126,20 @@ function buildCallbackUrl(request: Request): string {
   return `${reqUrl.origin}${MCP_OAUTH_PATHS.callback}`
 }
 
-function buildOAuthErrorRedirect(message: string): Response {
+function buildOAuthErrorRedirect(
+  message: string,
+  options?: { clearStateCookie?: string }
+): Response {
   const body = `<html><body><h1>MCP OAuth failed</h1><p>${escapeHtml(message)}</p></body></html>`
+  const headers: Record<string, string> = {
+    "Content-Type": "text/html; charset=utf-8",
+  }
+  if (options?.clearStateCookie) {
+    headers["Set-Cookie"] = options.clearStateCookie
+  }
   return new Response(body, {
     status: 400,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers,
   })
 }
 
@@ -134,6 +150,127 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;")
+}
+
+function base64Encode(bytes: Uint8Array): string {
+  const BufferCtor = (globalThis as { Buffer?: { from: (v: Uint8Array) => { toString: (enc: string) => string } } })
+    .Buffer
+  if (BufferCtor) {
+    return BufferCtor.from(bytes).toString("base64")
+  }
+  let binary = ""
+  for (const b of bytes) binary += String.fromCharCode(b)
+  return btoa(binary)
+}
+
+function base64Decode(value: string): Uint8Array {
+  const BufferCtor = (globalThis as {
+    Buffer?: { from: (v: string, enc: string) => { values: () => IterableIterator<number> } }
+  }).Buffer
+  if (BufferCtor) {
+    return Uint8Array.from(BufferCtor.from(value, "base64").values())
+  }
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+function base64UrlEncode(bytes: Uint8Array): string {
+  return base64Encode(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "")
+}
+
+function base64UrlDecode(value: string): Uint8Array {
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/")
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+  return base64Decode(padded)
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length)
+  let diff = a.length ^ b.length
+  for (let i = 0; i < len; i += 1) {
+    const ac = i < a.length ? a.charCodeAt(i) : 0
+    const bc = i < b.length ? b.charCodeAt(i) : 0
+    diff |= ac ^ bc
+  }
+  return diff === 0
+}
+
+async function signPayload(payload: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload))
+  return base64UrlEncode(new Uint8Array(signature))
+}
+
+async function buildPendingStateCookie(
+  request: Request,
+  env: Env,
+  pending: PendingMcpAuthorization
+): Promise<string | null> {
+  const secret = env.DISCORD_CLIENT_SECRET?.trim()
+  if (!secret) return null
+
+  const payload: PendingMcpAuthorizationCookie = {
+    v: 1,
+    pending,
+  }
+  const payloadJson = JSON.stringify(payload)
+  const payloadEncoded = base64UrlEncode(new TextEncoder().encode(payloadJson))
+  const signature = await signPayload(payloadEncoded, secret)
+  const cookieValue = encodeURIComponent(`${payloadEncoded}.${signature}`)
+  const reqUrl = new URL(request.url)
+  const secure = reqUrl.protocol === "https:" ? "; Secure" : ""
+  return `${MCP_OAUTH_STATE_COOKIE_NAME}=${cookieValue}; Path=/; Max-Age=${OAUTH_STATE_TTL_SECONDS}; HttpOnly; SameSite=Lax${secure}`
+}
+
+function buildClearPendingStateCookie(request: Request): string {
+  const reqUrl = new URL(request.url)
+  const secure = reqUrl.protocol === "https:" ? "; Secure" : ""
+  return `${MCP_OAUTH_STATE_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`
+}
+
+function isPendingStateFresh(pending: PendingMcpAuthorization): boolean {
+  const createdAt = Date.parse(pending.created_at)
+  if (!Number.isFinite(createdAt)) return false
+  return Date.now() - createdAt <= OAUTH_STATE_TTL_SECONDS * 1000
+}
+
+async function readPendingStateFromCookie(
+  request: Request,
+  env: Env,
+  state: string
+): Promise<PendingMcpAuthorization | null> {
+  const secret = env.DISCORD_CLIENT_SECRET?.trim()
+  if (!secret) return null
+
+  const raw = getCookie(request, MCP_OAUTH_STATE_COOKIE_NAME)
+  if (!raw) return null
+
+  const [payloadEncoded, signature] = raw.split(".")
+  if (!payloadEncoded || !signature) return null
+
+  const expectedSignature = await signPayload(payloadEncoded, secret)
+  if (!constantTimeEqual(signature, expectedSignature)) return null
+
+  try {
+    const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadEncoded))
+    const parsed = JSON.parse(payloadJson) as PendingMcpAuthorizationCookie
+    if (parsed.v !== 1) return null
+    if (!parsed.pending || parsed.pending.discord_state !== state) return null
+    if (!isPendingStateFresh(parsed.pending)) return null
+    return parsed.pending
+  } catch {
+    return null
+  }
 }
 
 async function savePendingState(
@@ -272,12 +409,13 @@ export async function handleMcpAuthorizeRoute(
   const codeChallenge = await deriveCodeChallenge(codeVerifier)
 
   const stateKey = `mcp_oauth_state:${discordState}`
-  await savePendingState(kv, stateKey, {
+  const pendingState: PendingMcpAuthorization = {
     created_at: new Date().toISOString(),
     discord_state: discordState,
     code_verifier: codeVerifier,
     oauth_request: oauthReq,
-  })
+  }
+  await savePendingState(kv, stateKey, pendingState)
 
   const callbackUrl = buildCallbackUrl(request)
   const authorizationUrl = buildAuthorizationUrl({
@@ -287,7 +425,14 @@ export async function handleMcpAuthorizeRoute(
     codeChallenge,
   })
 
-  return redirect(authorizationUrl)
+  const pendingStateCookie = await buildPendingStateCookie(request, env, pendingState)
+  return redirect(
+    authorizationUrl,
+    302,
+    pendingStateCookie
+      ? { "Set-Cookie": pendingStateCookie }
+      : undefined
+  )
 }
 
 export async function handleMcpCallbackRoute(
@@ -312,17 +457,26 @@ export async function handleMcpCallbackRoute(
   const code = url.searchParams.get("code")
   const state = url.searchParams.get("state")
   const discordError = url.searchParams.get("error")
+  const clearStateCookie = buildClearPendingStateCookie(request)
 
   if (discordError) {
-    return buildOAuthErrorRedirect(`Discord OAuth error: ${discordError}`)
+    return buildOAuthErrorRedirect(`Discord OAuth error: ${discordError}`, { clearStateCookie })
   }
 
   if (!code || !state) {
-    return buildOAuthErrorRedirect("Missing code or state in callback")
+    return buildOAuthErrorRedirect("Missing code or state in callback", { clearStateCookie })
   }
 
   const stateKey = `mcp_oauth_state:${state}`
   const stateLookup = await readPendingStateWithRetry(kv, stateKey)
+  const pendingFromCookie = !stateLookup.pending
+    ? await readPendingStateFromCookie(request, env, state)
+    : null
+  const pendingSource = stateLookup.pending
+    ? "kv"
+    : pendingFromCookie
+      ? "cookie_fallback"
+      : "none"
   const cfRay = request.headers.get("cf-ray")
   const requestId = cfRay ?? crypto.randomUUID()
   const coloGuess = cfRay?.split("-")[1] ?? null
@@ -332,13 +486,14 @@ export async function handleMcpCallbackRoute(
     request_id: requestId,
     cf_ray: cfRay,
     colo: coloGuess,
-    state_found: Boolean(stateLookup.pending),
+    state_found: Boolean(stateLookup.pending || pendingFromCookie),
+    state_source: pendingSource,
     attempt_count: stateLookup.attemptCount,
     lookup_latency_ms: stateLookup.lookupLatencyMs,
-    error_class: stateLookup.pending ? null : "state_not_found",
+    error_class: stateLookup.pending || pendingFromCookie ? null : "state_not_found",
   }))
 
-  if (!stateLookup.pending) {
+  if (!stateLookup.pending && !pendingFromCookie) {
     console.warn(JSON.stringify({
       at: new Date().toISOString(),
       event: "mcp.oauth.state.miss",
@@ -349,14 +504,22 @@ export async function handleMcpCallbackRoute(
       lookup_latency_ms: stateLookup.lookupLatencyMs,
       cause_hint: "eventual_consistency_or_expired_or_reused_state",
     }))
-    return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.")
+    return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.", {
+      clearStateCookie,
+    })
   }
-  const pending = stateLookup.pending
+  const pending = stateLookup.pending ?? pendingFromCookie
 
-  // Consume the state once resolved to prevent replay.
-  await deletePendingState(kv, stateKey)
+  if (!pending) {
+    return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.", {
+      clearStateCookie,
+    })
+  }
 
   try {
+    // Consume the state once resolved to prevent replay.
+    await deletePendingState(kv, stateKey)
+
     const callbackUrl = buildCallbackUrl(request)
     const token = await exchangeCode({
       code,
@@ -402,9 +565,11 @@ export async function handleMcpCallbackRoute(
       revokeExistingGrants: true,
     })
 
-    return redirect(redirectTo)
+    return redirect(redirectTo, 302, { "Set-Cookie": clearStateCookie })
   } catch (error) {
-    return buildOAuthErrorRedirect(error instanceof Error ? error.message : String(error))
+    return buildOAuthErrorRedirect(error instanceof Error ? error.message : String(error), {
+      clearStateCookie,
+    })
   }
 }
 
