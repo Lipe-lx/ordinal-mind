@@ -19,6 +19,7 @@
   top: 0;
   z-index: 100;
   gap: var(--space-md);
+  pointer-events: none;
   transition: padding var(--duration-normal) var(--ease-smooth);
 }
 
@@ -29,6 +30,7 @@
 .layout-header-left {
   display: flex;
   align-items: center;
+  pointer-events: auto;
 }
 
 .layout-logo {
@@ -70,6 +72,7 @@
   justify-content: center;
   gap: var(--space-md);
   min-width: 0;
+  pointer-events: auto;
 }
 
 .layout-header-right {
@@ -77,6 +80,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-md);
+  pointer-events: auto;
 }
 
 .layout-header-title {
