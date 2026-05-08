@@ -22,6 +22,10 @@ import {
   getMcpOAuthApi,
   handleMcpAuthorizeRoute,
   handleMcpCallbackRoute,
+  handleMcpFlowCancelRoute,
+  handleMcpFlowCompleteRoute,
+  handleMcpFlowStartRoute,
+  handleMcpFlowStatusRoute,
   resolveMcpAuthFromRequest,
 } from "./mcp/oauth"
 import { McpOAuthStateDO } from "./mcp/oauthStateDO"
@@ -155,6 +159,28 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
       } catch {
         return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
       }
+    }
+
+    if (isMcpOauthEnabled(env) && request.method === "POST" && url.pathname === MCP_OAUTH_PATHS.flowStart) {
+      try {
+        const runtime = await getMcpOAuthRuntime()
+        const oauthApi = await getMcpOAuthApi(runtime.options, env)
+        return handleMcpFlowStartRoute(request, env, oauthApi)
+      } catch {
+        return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
+      }
+    }
+
+    if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.flowStatus) {
+      return handleMcpFlowStatusRoute(request, env)
+    }
+
+    if (isMcpOauthEnabled(env) && request.method === "POST" && url.pathname === MCP_OAUTH_PATHS.flowComplete) {
+      return handleMcpFlowCompleteRoute(request, env)
+    }
+
+    if (isMcpOauthEnabled(env) && request.method === "POST" && url.pathname === MCP_OAUTH_PATHS.flowCancel) {
+      return handleMcpFlowCancelRoute(request, env)
     }
 
     if (url.pathname.startsWith("/mcp")) {

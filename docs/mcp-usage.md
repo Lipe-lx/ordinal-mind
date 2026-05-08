@@ -377,6 +377,10 @@ Use OAuth MCP endpoints (separate from web session auth):
 - `GET /mcp/oauth/callback`
 - `POST /mcp/oauth/token`
 - `POST /mcp/oauth/register`
+- `POST /mcp/oauth/flow/start`
+- `GET /mcp/oauth/flow/status?flow_id=<flow_id>`
+- `POST /mcp/oauth/flow/complete`
+- `POST /mcp/oauth/flow/cancel`
 - `GET /.well-known/oauth-protected-resource`
 
 Discovery example:
@@ -397,6 +401,11 @@ State handoff note:
 - Always start a fresh authorize URL per login attempt.
 - Do not reuse callback URLs or run the same flow in parallel tabs.
 - Complete login quickly after opening authorize.
+
+Agent flow session note:
+- For agent-driven UX, start with `POST /mcp/oauth/flow/start` and pass the returned `authorize_url` to the user.
+- Poll `flow/status` until one of: `token_ready`, `failed`, `expired`, `cancelled`, `replay_detected`.
+- Use `flow/cancel` when the user abandons the attempt.
 
 ## Capability Behavior
 

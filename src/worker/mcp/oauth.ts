@@ -17,7 +17,12 @@ import {
 import { getCookie } from "../auth/session"
 import { calculateTier } from "../auth/tierEngine"
 import { normalizeTier, type McpResolvedAuth, type McpAuthProps } from "./types"
-import { McpOAuthStateDO, type McpOAuthPendingState } from "./oauthStateDO"
+import {
+  McpOAuthStateDO,
+  type McpOAuthFlowRecord,
+  type McpOAuthFlowStatus,
+  type McpOAuthPendingState,
+} from "./oauthStateDO"
 
 interface PendingMcpAuthorization {
   created_at: string
@@ -45,6 +50,10 @@ export const MCP_OAUTH_PATHS = {
   callback: "/mcp/oauth/callback",
   token: "/mcp/oauth/token",
   register: "/mcp/oauth/register",
+  flowStart: "/mcp/oauth/flow/start",
+  flowStatus: "/mcp/oauth/flow/status",
+  flowComplete: "/mcp/oauth/flow/complete",
+  flowCancel: "/mcp/oauth/flow/cancel",
 } as const
 
 const SUPPORTED_SCOPES = [
@@ -63,6 +72,13 @@ type McpRouteOAuthApi = Pick<OAuthHelpers, "parseAuthRequest" | "completeAuthori
 
 type ExportedFetchHandler<EnvT> = {
   fetch: (request: Request, env: EnvT, ctx: ExecutionContext) => Response | Promise<Response>
+}
+
+interface FlowStartInput {
+  client_id: string
+  redirect_uri: string
+  scope?: string
+  resource?: string
 }
 
 async function loadOAuthProviderLib(): Promise<{
@@ -111,6 +127,23 @@ function json(data: unknown, status = 200): Response {
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   })
+}
+
+function oauthError(
+  status: number,
+  errorCode: string,
+  hint: string,
+  retryable: boolean,
+  flowId?: string | null
+): Response {
+  return json({
+    ok: false,
+    error: "oauth_mcp_flow_error",
+    error_code: errorCode,
+    retryable,
+    hint,
+    flow_id: flowId ?? null,
+  }, status)
 }
 
 function redirect(url: string, status = 302, extraHeaders?: Record<string, string>): Response {
@@ -305,6 +338,62 @@ async function doFetch(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  })
+}
+
+async function doStartFlow(
+  ns: DurableObjectNamespace,
+  flow: {
+    flow_id: string
+    state: string
+    authorize_url: string
+    status_endpoint: string
+    expires_at: number
+    poll_after_ms: number
+  }
+): Promise<boolean> {
+  const res = await doFetch(ns, "/flow/start", flow)
+  return res.ok
+}
+
+async function doFlowStatus(
+  ns: DurableObjectNamespace,
+  flowId: string
+): Promise<{ ok: true; flow: McpOAuthFlowRecord } | { ok: false; error: string }> {
+  const res = await doFetch(ns, "/flow/status", { flow_id: flowId })
+  const text = await res.text()
+  const parsed = parseJson<{ ok?: boolean; flow?: McpOAuthFlowRecord; error?: string }>(text)
+  if (res.ok && parsed?.ok && parsed.flow) {
+    return { ok: true, flow: parsed.flow }
+  }
+  return { ok: false, error: parsed?.error ?? "flow_not_found" }
+}
+
+async function doFlowStatusByState(
+  ns: DurableObjectNamespace,
+  state: string
+): Promise<{ ok: true; flow: McpOAuthFlowRecord } | { ok: false; error: string }> {
+  const res = await doFetch(ns, "/flow/by-state", { state })
+  const text = await res.text()
+  const parsed = parseJson<{ ok?: boolean; flow?: McpOAuthFlowRecord; error?: string }>(text)
+  if (res.ok && parsed?.ok && parsed.flow) {
+    return { ok: true, flow: parsed.flow }
+  }
+  return { ok: false, error: parsed?.error ?? "flow_not_found" }
+}
+
+async function doFlowUpdate(
+  ns: DurableObjectNamespace,
+  flowId: string,
+  status: McpOAuthFlowStatus,
+  result?: { error?: string; hint?: string; retryable?: boolean }
+): Promise<void> {
+  await doFetch(ns, "/flow/update", {
+    flow_id: flowId,
+    status,
+    error: result?.error,
+    hint: result?.hint,
+    retryable: result?.retryable,
   })
 }
 
@@ -535,6 +624,168 @@ export async function handleMcpAuthorizeRoute(
   )
 }
 
+export async function handleMcpFlowStartRoute(
+  request: Request,
+  env: Env,
+  oauthApi: McpRouteOAuthApi | null
+): Promise<Response> {
+  if (!oauthApi) {
+    return oauthError(503, "oauth_provider_unavailable", "OAuth provider unavailable.", true)
+  }
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
+    return oauthError(503, "discord_oauth_not_configured", "Discord OAuth is not configured.", false)
+  }
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return oauthError(503, "oauth_state_store_unavailable", "OAuth state store unavailable.", true)
+  }
+  const kv = requireOAuthKv(env)
+  if (!kv) {
+    return oauthError(503, "oauth_kv_not_configured", "OAuth KV unavailable.", true)
+  }
+
+  let input: FlowStartInput | null = null
+  try {
+    input = parseJson<FlowStartInput>(await request.text())
+  } catch {
+    input = null
+  }
+  if (!input?.client_id || !input.redirect_uri) {
+    return oauthError(400, "invalid_flow_start_request", "client_id and redirect_uri are required.", false)
+  }
+
+  const clientState = crypto.randomUUID().replaceAll("-", "")
+  const codeVerifier = generateCodeVerifier()
+  const codeChallenge = await deriveCodeChallenge(codeVerifier)
+  const callbackUrl = buildCallbackUrl(request)
+  const callbackOrigin = new URL(callbackUrl).origin
+  const redirectOriginFingerprint = await sha256Hex(callbackOrigin)
+  const flowId = crypto.randomUUID().replaceAll("-", "")
+
+  const synth = new URL(request.url)
+  synth.pathname = MCP_OAUTH_PATHS.authorize
+  synth.search = ""
+  synth.searchParams.set("response_type", "code")
+  synth.searchParams.set("client_id", input.client_id)
+  synth.searchParams.set("redirect_uri", input.redirect_uri)
+  synth.searchParams.set("state", clientState)
+  synth.searchParams.set("code_challenge", codeChallenge)
+  synth.searchParams.set("code_challenge_method", "S256")
+  if (input.scope && input.scope.trim()) synth.searchParams.set("scope", input.scope.trim())
+  if (input.resource && input.resource.trim()) synth.searchParams.set("resource", input.resource.trim())
+
+  const synthReq = new Request(synth.toString(), {
+    method: "GET",
+    headers: request.headers,
+  })
+
+  let oauthReq: AuthRequest
+  try {
+    oauthReq = await oauthApi.parseAuthRequest(synthReq)
+  } catch (error) {
+    return oauthError(
+      400,
+      "invalid_oauth_request",
+      error instanceof Error ? error.message : "Invalid OAuth request.",
+      false
+    )
+  }
+
+  const state = crypto.randomUUID().replaceAll("-", "")
+  const pendingState: PendingMcpAuthorization = {
+    created_at: new Date().toISOString(),
+    discord_state: state,
+    code_verifier: codeVerifier,
+    oauth_request: oauthReq,
+    redirect_origin_fingerprint: redirectOriginFingerprint,
+    version: 2,
+  }
+  const doPayload: McpOAuthPendingState = {
+    created_at: pendingState.created_at,
+    code_verifier: pendingState.code_verifier,
+    oauth_request: pendingState.oauth_request,
+    redirect_origin_fingerprint: redirectOriginFingerprint,
+    version: 2,
+  }
+
+  const issueOk = await issueStateInDo(stateDo, state, doPayload)
+  if (!issueOk) {
+    return oauthError(503, "state_issue_failed", "Could not initialize OAuth state.", true, flowId)
+  }
+
+  const stateKey = await buildStateKey(state)
+  await savePendingState(kv, stateKey, pendingState)
+  const authorizationUrl = buildAuthorizationUrl({
+    clientId: env.DISCORD_CLIENT_ID,
+    redirectUri: callbackUrl,
+    state,
+    codeChallenge,
+  })
+
+  const statusEndpoint = `${new URL(request.url).origin}${MCP_OAUTH_PATHS.flowStatus}?flow_id=${flowId}`
+  const expiresAt = Date.now() + McpOAuthStateDO.ttlMs()
+  const started = await doStartFlow(stateDo, {
+    flow_id: flowId,
+    state,
+    authorize_url: authorizationUrl,
+    status_endpoint: statusEndpoint,
+    expires_at: expiresAt,
+    poll_after_ms: 1500,
+  })
+  if (!started) {
+    return oauthError(503, "flow_session_init_failed", "Could not initialize OAuth flow session.", true, flowId)
+  }
+  await doFlowUpdate(stateDo, flowId, "user_redirected")
+
+  return json({
+    ok: true,
+    flow_id: flowId,
+    authorize_url: authorizationUrl,
+    expires_at: new Date(expiresAt).toISOString(),
+    poll_after_ms: 1500,
+    status_endpoint: statusEndpoint,
+  })
+}
+
+export async function handleMcpFlowStatusRoute(request: Request, env: Env): Promise<Response> {
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return oauthError(503, "oauth_state_store_unavailable", "OAuth state store unavailable.", true)
+  }
+  const url = new URL(request.url)
+  const flowId = url.searchParams.get("flow_id")
+  if (!flowId) {
+    return oauthError(400, "missing_flow_id", "flow_id is required.", false)
+  }
+  const flow = await doFlowStatus(stateDo, flowId)
+  if (!flow.ok) {
+    return oauthError(404, "flow_not_found", "Flow session not found.", false, flowId)
+  }
+  return json({ ok: true, flow: flow.flow })
+}
+
+export async function handleMcpFlowCompleteRoute(request: Request, env: Env): Promise<Response> {
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return oauthError(503, "oauth_state_store_unavailable", "OAuth state store unavailable.", true)
+  }
+  const body = parseJson<{ flow_id?: string }>(await request.text())
+  if (!body?.flow_id) return oauthError(400, "missing_flow_id", "flow_id is required.", false)
+  await doFlowUpdate(stateDo, body.flow_id, "token_ready")
+  return json({ ok: true, flow_id: body.flow_id, status: "token_ready" })
+}
+
+export async function handleMcpFlowCancelRoute(request: Request, env: Env): Promise<Response> {
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return oauthError(503, "oauth_state_store_unavailable", "OAuth state store unavailable.", true)
+  }
+  const body = parseJson<{ flow_id?: string }>(await request.text())
+  if (!body?.flow_id) return oauthError(400, "missing_flow_id", "flow_id is required.", false)
+  await doFlowUpdate(stateDo, body.flow_id, "cancelled")
+  return json({ ok: true, flow_id: body.flow_id, status: "cancelled" })
+}
+
 export async function handleMcpCallbackRoute(
   request: Request,
   env: Env,
@@ -575,6 +826,8 @@ export async function handleMcpCallbackRoute(
   const stateHash = (await sha256Hex(state)).slice(0, 12)
   const codeFingerprint = (await sha256Hex(code)).slice(0, 12)
   const consumed = await consumeStateFromDo(stateDo, state, codeFingerprint)
+  const flowLookup = await doFlowStatusByState(stateDo, state)
+  const flowId = flowLookup.ok ? flowLookup.flow.flow_id : null
   const pendingFromDo = consumed.ok
     ? ({
       created_at: consumed.payload.created_at,
@@ -629,6 +882,15 @@ export async function handleMcpCallbackRoute(
 
   if (!pendingFromDo && !stateLookup.pending && !pendingFromCookie) {
     const isReplay = consumed.cause === "replay" || consumed.cause === "replay_duplicate"
+    if (flowId) {
+      await doFlowUpdate(stateDo, flowId, isReplay ? "replay_detected" : "expired", {
+        error: isReplay ? "replay_blocked" : "state_expired",
+        hint: isReplay
+          ? "Callback already processed for this flow. Start a new flow."
+          : "Flow state expired. Start a fresh flow.",
+        retryable: true,
+      })
+    }
     console.warn(JSON.stringify({
       at: new Date().toISOString(),
       event: "mcp.oauth.state.miss",
@@ -705,8 +967,18 @@ export async function handleMcpCallbackRoute(
       revokeExistingGrants: true,
     })
 
+    if (flowId) {
+      await doFlowUpdate(stateDo, flowId, "token_ready")
+    }
     return redirect(redirectTo, 302, { "Set-Cookie": clearStateCookie })
   } catch (error) {
+    if (flowId) {
+      await doFlowUpdate(stateDo, flowId, "failed", {
+        error: "callback_processing_failed",
+        hint: error instanceof Error ? error.message : "OAuth callback failed.",
+        retryable: false,
+      })
+    }
     return buildOAuthErrorRedirect(error instanceof Error ? error.message : String(error), {
       clearStateCookie,
     })

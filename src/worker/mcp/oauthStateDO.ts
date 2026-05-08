@@ -1,6 +1,7 @@
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider"
 
 const STATE_TTL_MS = 15 * 60 * 1000
+const FLOW_RESULT_RETENTION_MS = 3 * 60 * 1000
 
 export interface McpOAuthPendingState {
   created_at: string
@@ -8,6 +9,33 @@ export interface McpOAuthPendingState {
   oauth_request: AuthRequest
   redirect_origin_fingerprint: string
   version: number
+}
+
+export type McpOAuthFlowStatus =
+  | "pending"
+  | "user_redirected"
+  | "callback_received"
+  | "token_ready"
+  | "expired"
+  | "cancelled"
+  | "replay_detected"
+  | "failed"
+
+export interface McpOAuthFlowRecord {
+  flow_id: string
+  state: string
+  status: McpOAuthFlowStatus
+  created_at: string
+  updated_at: string
+  expires_at: number
+  authorize_url: string
+  status_endpoint: string
+  poll_after_ms: number
+  result?: {
+    error?: string
+    hint?: string
+    retryable?: boolean
+  }
 }
 
 type IssueBody = {
@@ -23,6 +51,31 @@ type ConsumeBody = {
 
 type PeekBody = {
   state: string
+}
+
+type FlowStartBody = {
+  flow_id: string
+  state: string
+  authorize_url: string
+  status_endpoint: string
+  expires_at: number
+  poll_after_ms: number
+}
+
+type FlowStatusBody = {
+  flow_id: string
+}
+
+type FlowByStateBody = {
+  state: string
+}
+
+type FlowUpdateBody = {
+  flow_id: string
+  status: McpOAuthFlowStatus
+  error?: string
+  hint?: string
+  retryable?: boolean
 }
 
 type StoredState = {
@@ -65,6 +118,16 @@ export class McpOAuthStateDO extends DurableObjectBase {
   private kv = this.ctx.storage
   private consumedKey(state: string): string {
     return `consumed:${state}`
+  }
+  private flowKey(flowId: string): string {
+    return `flow:${flowId}`
+  }
+  private stateFlowKey(state: string): string {
+    return `flow_by_state:${state}`
+  }
+
+  private nowIso(): string {
+    return new Date().toISOString()
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -115,6 +178,17 @@ export class McpOAuthStateDO extends DurableObjectBase {
           expires_at: now + CONSUMED_MARKER_TTL_MS,
           code_fingerprint: body.code_fingerprint ?? null,
         } satisfies ConsumedMarker)
+        const linkedFlowId = await txn.get<string>(this.stateFlowKey(body.state))
+        if (linkedFlowId) {
+          const flowKey = this.flowKey(linkedFlowId)
+          const flow = await txn.get<McpOAuthFlowRecord>(flowKey)
+          if (flow) {
+            const updatedAt = this.nowIso()
+            flow.status = "callback_received"
+            flow.updated_at = updatedAt
+            await txn.put(flowKey, flow)
+          }
+        }
         return { ok: true as const, payload: row.payload }
       })
       if (!outcome.ok) return json(outcome, 404)
@@ -129,6 +203,79 @@ export class McpOAuthStateDO extends DurableObjectBase {
       const row = await this.kv.get<StoredState>(body.state)
       if (!row) return json({ ok: false, cause: "missing" }, 404)
       return json({ ok: true, payload: row.payload, expires_at: row.expires_at })
+    }
+
+    if (request.method === "POST" && url.pathname === "/flow/start") {
+      const body = parseJson<FlowStartBody>(await request.text())
+      if (!body?.flow_id || !body?.state || !body.authorize_url || !body.status_endpoint || !Number.isFinite(body.expires_at)) {
+        return json({ ok: false, error: "invalid_flow_start_payload" }, 400)
+      }
+      const nowIso = this.nowIso()
+      const flow: McpOAuthFlowRecord = {
+        flow_id: body.flow_id,
+        state: body.state,
+        status: "pending",
+        created_at: nowIso,
+        updated_at: nowIso,
+        expires_at: body.expires_at,
+        authorize_url: body.authorize_url,
+        status_endpoint: body.status_endpoint,
+        poll_after_ms: body.poll_after_ms,
+      }
+      await this.kv.put(this.flowKey(body.flow_id), flow)
+      await this.kv.put(this.stateFlowKey(body.state), body.flow_id)
+      return json({ ok: true })
+    }
+
+    if (request.method === "POST" && url.pathname === "/flow/status") {
+      const body = parseJson<FlowStatusBody>(await request.text())
+      if (!body?.flow_id) {
+        return json({ ok: false, error: "invalid_flow_status_payload" }, 400)
+      }
+      const flow = await this.kv.get<McpOAuthFlowRecord>(this.flowKey(body.flow_id))
+      if (!flow) return json({ ok: false, error: "flow_not_found" }, 404)
+      if (flow.expires_at <= Date.now() && flow.status !== "token_ready" && flow.status !== "cancelled") {
+        flow.status = "expired"
+        flow.updated_at = this.nowIso()
+        await this.kv.put(this.flowKey(body.flow_id), flow)
+      }
+      return json({ ok: true, flow })
+    }
+
+    if (request.method === "POST" && url.pathname === "/flow/by-state") {
+      const body = parseJson<FlowByStateBody>(await request.text())
+      if (!body?.state) {
+        return json({ ok: false, error: "invalid_flow_by_state_payload" }, 400)
+      }
+      const flowId = await this.kv.get<string>(this.stateFlowKey(body.state))
+      if (!flowId) return json({ ok: false, error: "flow_not_found" }, 404)
+      const flow = await this.kv.get<McpOAuthFlowRecord>(this.flowKey(flowId))
+      if (!flow) return json({ ok: false, error: "flow_not_found" }, 404)
+      return json({ ok: true, flow })
+    }
+
+    if (request.method === "POST" && url.pathname === "/flow/update") {
+      const body = parseJson<FlowUpdateBody>(await request.text())
+      if (!body?.flow_id || !body?.status) {
+        return json({ ok: false, error: "invalid_flow_update_payload" }, 400)
+      }
+      const key = this.flowKey(body.flow_id)
+      const flow = await this.kv.get<McpOAuthFlowRecord>(key)
+      if (!flow) return json({ ok: false, error: "flow_not_found" }, 404)
+      flow.status = body.status
+      flow.updated_at = this.nowIso()
+      if (body.error || body.hint || body.retryable !== undefined) {
+        flow.result = {
+          error: body.error,
+          hint: body.hint,
+          retryable: body.retryable,
+        }
+      }
+      if (body.status === "token_ready") {
+        flow.expires_at = Date.now() + FLOW_RESULT_RETENTION_MS
+      }
+      await this.kv.put(key, flow)
+      return json({ ok: true, flow })
     }
 
     if (request.method === "POST" && url.pathname === "/sweep") {

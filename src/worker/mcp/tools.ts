@@ -521,6 +521,10 @@ export function registerTools(options: {
             callback: "/mcp/oauth/callback",
             token: "/mcp/oauth/token",
             register: "/mcp/oauth/register",
+            flow_start: "/mcp/oauth/flow/start",
+            flow_status: "/mcp/oauth/flow/status?flow_id=<flow_id>",
+            flow_complete: "/mcp/oauth/flow/complete",
+            flow_cancel: "/mcp/oauth/flow/cancel",
             protected_resource_metadata: "/.well-known/oauth-protected-resource",
           },
           request_contracts: {
@@ -538,10 +542,18 @@ export function registerTools(options: {
           },
           flow: [
             "Start with protected resource metadata discovery.",
+            "For agent UX, prefer /mcp/oauth/flow/start and poll /mcp/oauth/flow/status until token_ready/failed/expired.",
             "Run OAuth authorization against /mcp/oauth/authorize and complete Discord login/consent.",
             "Exchange the authorization code at /mcp/oauth/token.",
             "Call MCP with Authorization: Bearer <mcp_access_token>.",
             "Use tools/list or help again to confirm writable tools unlocked for your tier.",
+          ],
+          agent_best_practices: [
+            "Always start a fresh flow session using /mcp/oauth/flow/start.",
+            "Never reuse callback URLs or previous authorize links.",
+            "Poll /mcp/oauth/flow/status with backoff (>= 1.5s) until token_ready/failed/expired.",
+            "Keep only one active flow per user-agent pairing.",
+            "If flow is abandoned, call /mcp/oauth/flow/cancel.",
           ],
           troubleshooting: {
             oauth_provider_unavailable_503: [
