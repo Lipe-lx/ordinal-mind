@@ -468,8 +468,10 @@ export function registerTools(options: {
         strategy: {
           intent: "Factual-first research for Bitcoin Ordinals with optional wiki governance actions.",
           steps: [
-            "If the slug is unknown, discover candidates with wiki_search_collections. Note: items are searchable as soon as they have technical data (completeness > 0).",
-            "Confirm context with wiki_get_collection_context (or wiki://collection/{slug}).",
+            "If the slug is unknown, enumerate with wiki_list_pages and/or discover with wiki_search_pages.",
+            "For collection-only search compatibility, wiki_search_collections remains available as a legacy alias.",
+            "For an exact page payload, use wiki_get_page (or resource wiki://page/{slug}).",
+            "For collection consensus/coverage, use wiki_get_collection_context (or wiki://collection/{slug}).",
             "From a known slug, get inscription IDs with search_collection_inscriptions.",
             "Audit each known inscription ID with query_chronicle (or chronicle://inscription/{id}).",
           ],
@@ -493,6 +495,19 @@ export function registerTools(options: {
         legacy_aliases: {
           wiki_search_collections: "Prefer wiki_search_pages with entity_type='collection'. Kept for backward compatibility.",
         },
+        wiki_stats_semantics: {
+          total_pages: "All rows in wiki_pages.",
+          indexed_pages: "All rows in wiki_fts visible to full-text search.",
+          published_pages: "Distinct collection_slug values with published contributions (governance-level metric).",
+          quarantine_pages: "Distinct collection_slug values with quarantined contributions.",
+          seed_pages: "Discovery placeholders (system_seed) with empty editorial shape.",
+          published_shape_pages: "total_pages - seed_pages; practical count of non-seed public pages.",
+        },
+        wiki_stats_metric_selection: [
+          "Use total_pages/indexed_pages to measure inventory and discoverability.",
+          "Use published_pages/quarantine_pages to measure governance workflow state.",
+          "Use published_shape_pages (not published_pages) when you need 'how many pages are actually readable with non-seed content'.",
+        ],
         available_tools_now: {
           read_only: [
             "help",
@@ -509,7 +524,10 @@ export function registerTools(options: {
           writable: writableTools,
         },
         examples: [
-          "Discover slug: wiki_search_collections { query: '<collection-name-or-keyword>', limit: 10, offset: 0 }. Check 'completeness' score; items with 'is_seed: true' have data but pending narrative.",
+          "Inventory all public pages: wiki_list_pages { limit: 50, offset: 0 }.",
+          "Search pages by type: wiki_search_pages { query: '<keyword>', entity_type: 'collection', limit: 10, offset: 0 }.",
+          "Read one exact page: wiki_get_page { slug: 'inscription:<id>' }.",
+          "Check wiki visibility health: wiki_stats {} (compare total_pages, published_shape_pages, and seed_pages).",
           "Load context: wiki_get_collection_context { collection_slug: '<slug-from-search>', include_graph_summary: true }.",
           "List related inscriptions: search_collection_inscriptions { collection_slug: '<slug-from-search>', limit: 20, offset: 0, sort: 'recent' }.",
           "Audit one inscription: query_chronicle { inscription_id: '<inscription-id>', event_types: ['genesis','transfer'], sort: 'asc', limit: 25 }.",
