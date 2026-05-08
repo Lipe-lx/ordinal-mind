@@ -87,6 +87,21 @@ function jsonResponse(data: unknown, status = 200): Response {
   })
 }
 
+function looksLikeOAuthAuthorizeAtRoot(url: URL): boolean {
+  return url.pathname === "/"
+    && url.searchParams.get("response_type") === "code"
+    && Boolean(url.searchParams.get("client_id"))
+    && Boolean(url.searchParams.get("redirect_uri"))
+    && Boolean(url.searchParams.get("code_challenge"))
+    && url.searchParams.get("code_challenge_method") === "S256"
+}
+
+function looksLikeOAuthCallbackAtRoot(url: URL): boolean {
+  return url.pathname === "/"
+    && Boolean(url.searchParams.get("code"))
+    && Boolean(url.searchParams.get("state"))
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
@@ -136,6 +151,18 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (isMcpEnabled(env)) {
+    if (isMcpOauthEnabled(env) && looksLikeOAuthAuthorizeAtRoot(url)) {
+      const fixed = new URL(request.url)
+      fixed.pathname = MCP_OAUTH_PATHS.authorize
+      return Response.redirect(fixed.toString(), 307)
+    }
+
+    if (isMcpOauthEnabled(env) && looksLikeOAuthCallbackAtRoot(url)) {
+      const fixed = new URL(request.url)
+      fixed.pathname = MCP_OAUTH_PATHS.callback
+      return Response.redirect(fixed.toString(), 307)
+    }
+
     if (isMcpOauthEnabled(env) && isMcpOAuthProviderManagedPath(url.pathname)) {
       const { provider } = await getMcpOAuthRuntime()
       return provider.fetch(request, env, ctx)
