@@ -77,6 +77,25 @@ const wikiSearchCollectionsSchema = {
   offset: z.number().int().min(0).max(500).default(0),
 }
 
+const WIKI_ENTITY_TYPES = ["collection", "inscription", "artist", "sat"] as const
+
+const wikiSearchPagesSchema = {
+  query: z.string().min(1),
+  entity_type: z.enum(WIKI_ENTITY_TYPES).optional(),
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).max(500).default(0),
+}
+
+const wikiListPagesSchema = {
+  entity_type: z.enum(WIKI_ENTITY_TYPES).optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+  offset: z.number().int().min(0).max(2000).default(0),
+}
+
+const wikiGetPageSchema = {
+  slug: z.string().min(1),
+}
+
 const wikiFieldStatusSchema = {
   collection_slug: z.string().min(1),
 }
@@ -193,6 +212,24 @@ function sanitizeFtsQuery(query: string): string {
 function normalizeCollectionSlug(value: string): string {
   const trimmed = value.trim()
   return trimmed.startsWith("collection:") ? trimmed.slice("collection:".length) : trimmed
+}
+
+function normalizeWikiSlugForLookup(slug: string): string[] {
+  const trimmed = slug.trim()
+  if (!trimmed) return []
+
+  const candidates = [trimmed]
+  if (trimmed.startsWith("collection:")) {
+    candidates.push(trimmed.slice("collection:".length))
+  } else {
+    candidates.push(`collection:${trimmed}`)
+  }
+
+  if (isInscriptionId(trimmed) && !trimmed.startsWith("inscription:")) {
+    candidates.push(`inscription:${trimmed}`)
+  }
+
+  return Array.from(new Set(candidates))
 }
 
 function isLikelySourceRef(value: string): boolean {
@@ -459,6 +496,9 @@ export function registerTools(options: {
             "query_chronicle",
             "search_collection_inscriptions",
             "wiki_search_collections",
+            "wiki_search_pages",
+            "wiki_list_pages",
+            "wiki_get_page",
             "wiki_stats",
             "wiki_get_field_status",
             "wiki_get_collection_context",
@@ -803,6 +843,319 @@ export function registerTools(options: {
         published_pages: Number(publishedPagesRows.results?.[0]?.total ?? 0),
         quarantine_pages: Number(quarantinePagesRows.results?.[0]?.total ?? 0),
         updated_at: updatedAt,
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_search_pages",
+    {
+      description: "Read-only wiki page search across all entity types with optional entity filter",
+      inputSchema: wikiSearchPagesSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_search_pages",
+        limit: 60,
+        windowSeconds: 60,
+        alertThreshold: 40,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) {
+        return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+      }
+
+      const query = String(args.query).trim()
+      const ftsQuery = sanitizeFtsQuery(query)
+      if (!ftsQuery) return jsonToolResult({ ok: false, error: "query_invalid" })
+
+      const limit = Number(args.limit)
+      const offset = Number(args.offset)
+      const entityType = typeof args.entity_type === "string" ? args.entity_type : null
+
+      const rows = entityType
+        ? await env.DB.prepare(`
+            SELECT
+              wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at,
+              wp.unverified_count,
+              bm25(wiki_fts) AS score
+            FROM wiki_fts
+            JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+            WHERE wiki_fts MATCH ?
+              AND wp.entity_type = ?
+            ORDER BY score
+            LIMIT ?
+            OFFSET ?
+          `)
+          .bind(ftsQuery, entityType, limit, offset)
+          .all<{
+            slug: string
+            title: string | null
+            summary: string | null
+            entity_type: string
+            updated_at: string | null
+            unverified_count: number | null
+            score: number | null
+          }>()
+        : await env.DB.prepare(`
+            SELECT
+              wp.slug, wp.title, wp.summary, wp.entity_type, wp.updated_at,
+              wp.unverified_count,
+              bm25(wiki_fts) AS score
+            FROM wiki_fts
+            JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+            WHERE wiki_fts MATCH ?
+            ORDER BY score
+            LIMIT ?
+            OFFSET ?
+          `)
+          .bind(ftsQuery, limit, offset)
+          .all<{
+            slug: string
+            title: string | null
+            summary: string | null
+            entity_type: string
+            updated_at: string | null
+            unverified_count: number | null
+            score: number | null
+          }>()
+
+      const totalRows = entityType
+        ? await env.DB.prepare(`
+            SELECT COUNT(*) AS total
+            FROM wiki_fts
+            JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+            WHERE wiki_fts MATCH ?
+              AND wp.entity_type = ?
+          `)
+          .bind(ftsQuery, entityType)
+          .all<{ total: number }>()
+        : await env.DB.prepare(`
+            SELECT COUNT(*) AS total
+            FROM wiki_fts
+            JOIN wiki_pages wp ON wiki_fts.slug = wp.slug
+            WHERE wiki_fts MATCH ?
+          `)
+          .bind(ftsQuery)
+          .all<{ total: number }>()
+
+      const items = (rows.results ?? []).map((row) => ({
+        slug: row.slug,
+        entity_type: row.entity_type,
+        title: row.title ?? row.slug,
+        summary: row.summary ?? "",
+        updated_at: row.updated_at,
+        unverified_count: Number(row.unverified_count ?? 0),
+        confidence: typeof row.score === "number" && Number.isFinite(row.score)
+          ? Number((1 / (1 + Math.max(0, row.score))).toFixed(4))
+          : 0.04,
+      }))
+
+      return jsonToolResult({
+        ok: true,
+        query,
+        entity_type: entityType,
+        limit,
+        offset,
+        total: Number(totalRows.results?.[0]?.total ?? 0),
+        items,
+        resource_uris: items.map((item) => `wiki://page/${encodeURIComponent(item.slug)}`),
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_list_pages",
+    {
+      description: "Read-only page inventory for public wiki content with pagination",
+      inputSchema: wikiListPagesSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_list_pages",
+        limit: 60,
+        windowSeconds: 60,
+        alertThreshold: 40,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+
+      const limit = Number(args.limit)
+      const offset = Number(args.offset)
+      const entityType = typeof args.entity_type === "string" ? args.entity_type : null
+
+      const rows = entityType
+        ? await env.DB.prepare(`
+            SELECT slug, entity_type, title, summary, updated_at, unverified_count
+            FROM wiki_pages
+            WHERE entity_type = ?
+            ORDER BY datetime(updated_at) DESC, slug ASC
+            LIMIT ?
+            OFFSET ?
+          `)
+          .bind(entityType, limit, offset)
+          .all<{
+            slug: string
+            entity_type: string
+            title: string
+            summary: string
+            updated_at: string | null
+            unverified_count: number
+          }>()
+        : await env.DB.prepare(`
+            SELECT slug, entity_type, title, summary, updated_at, unverified_count
+            FROM wiki_pages
+            ORDER BY datetime(updated_at) DESC, slug ASC
+            LIMIT ?
+            OFFSET ?
+          `)
+          .bind(limit, offset)
+          .all<{
+            slug: string
+            entity_type: string
+            title: string
+            summary: string
+            updated_at: string | null
+            unverified_count: number
+          }>()
+
+      const totalRows = entityType
+        ? await env.DB.prepare(`
+            SELECT COUNT(*) AS total
+            FROM wiki_pages
+            WHERE entity_type = ?
+          `)
+          .bind(entityType)
+          .all<{ total: number }>()
+        : await env.DB.prepare(`
+            SELECT COUNT(*) AS total
+            FROM wiki_pages
+          `)
+          .all<{ total: number }>()
+
+      const items = (rows.results ?? []).map((row) => ({
+        slug: row.slug,
+        entity_type: row.entity_type,
+        title: row.title,
+        summary: row.summary,
+        updated_at: row.updated_at,
+        unverified_count: Number(row.unverified_count ?? 0),
+      }))
+
+      return jsonToolResult({
+        ok: true,
+        entity_type: entityType,
+        limit,
+        offset,
+        total: Number(totalRows.results?.[0]?.total ?? 0),
+        items,
+        resource_uris: items.map((item) => `wiki://page/${encodeURIComponent(item.slug)}`),
+      })
+    }
+  )
+
+  server.registerTool(
+    "wiki_get_page",
+    {
+      description: "Read-only exact wiki page fetch by slug (supports collection/inscription/artist/sat pages)",
+      inputSchema: wikiGetPageSchema,
+    },
+    async (args) => {
+      const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+        keyPrefix: "mcp_wiki_get_page",
+        limit: 90,
+        windowSeconds: 60,
+        alertThreshold: 65,
+      })
+      if (!rate.ok) {
+        return jsonToolResult({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds })
+      }
+
+      if (!env.DB) return jsonToolResult({ ok: false, error: "wiki_db_unavailable" })
+
+      const requestedSlug = String(args.slug).trim()
+      if (!requestedSlug) {
+        return jsonToolResult({ ok: false, error: "slug_required" })
+      }
+
+      let page: {
+        slug: string
+        entity_type: string
+        title: string
+        summary: string
+        sections_json: string
+        cross_refs_json: string
+        source_event_ids_json: string
+        generated_at: string
+        byok_provider: string
+        unverified_count: number
+        view_count: number
+        updated_at: string | null
+      } | null = null
+
+      for (const candidate of normalizeWikiSlugForLookup(requestedSlug)) {
+        page = await env.DB.prepare(`
+          SELECT slug, entity_type, title, summary, sections_json,
+                 cross_refs_json, source_event_ids_json, generated_at,
+                 byok_provider, unverified_count, view_count, updated_at
+          FROM wiki_pages
+          WHERE slug = ?
+          LIMIT 1
+        `)
+          .bind(candidate)
+          .first<{
+            slug: string
+            entity_type: string
+            title: string
+            summary: string
+            sections_json: string
+            cross_refs_json: string
+            source_event_ids_json: string
+            generated_at: string
+            byok_provider: string
+            unverified_count: number
+            view_count: number
+            updated_at: string | null
+          }>()
+        if (page) break
+      }
+
+      if (!page) {
+        return jsonToolResult({
+          ok: false,
+          error: "wiki_page_not_found",
+          slug: requestedSlug,
+        })
+      }
+
+      return jsonToolResult({
+        ok: true,
+        page: {
+          slug: page.slug,
+          entity_type: page.entity_type,
+          title: page.title,
+          summary: page.summary,
+          sections: safeParse(page.sections_json, [] as Array<Record<string, unknown>>),
+          cross_refs: safeParse(page.cross_refs_json, [] as string[]),
+          source_event_ids: safeParse(page.source_event_ids_json, [] as string[]),
+          generated_at: page.generated_at,
+          byok_provider: page.byok_provider,
+          unverified_count: Number(page.unverified_count ?? 0),
+          view_count: Number(page.view_count ?? 0),
+          updated_at: page.updated_at,
+        },
+        resource_uris: [
+          `wiki://page/${encodeURIComponent(page.slug)}`,
+          page.entity_type === "collection"
+            ? `wiki://collection/${normalizeCollectionSlug(page.slug)}`
+            : null,
+        ].filter((value): value is string => Boolean(value)),
       })
     }
   )

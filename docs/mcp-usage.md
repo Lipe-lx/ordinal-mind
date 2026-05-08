@@ -58,6 +58,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
 Templates currently exposed:
 
 - `chronicle://inscription/{id}`
+- `wiki://page/{slug}`
 - `wiki://collection/{slug}`
 - `collection://context/{slug}`
 
@@ -91,7 +92,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   }'
 ```
 
-#### Collection context
+#### Wiki page by exact slug
 
 ```bash
 curl -sS -X POST 'https://ordinalmind.com/mcp' \
@@ -100,6 +101,20 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   --data '{
     "jsonrpc":"2.0",
     "id":5,
+    "method":"resources/read",
+    "params":{"uri":"wiki://page/collection%3Aordinal-punks"}
+  }'
+```
+
+#### Collection context
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":6,
     "method":"resources/read",
     "params":{"uri":"collection://context/ordinal-punks"}
   }'
@@ -115,7 +130,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":6,
+    "id":7,
     "method":"tools/list",
     "params":{}
   }'
@@ -129,7 +144,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":6,
+    "id":8,
     "method":"tools/call",
     "params":{
       "name":"help",
@@ -146,7 +161,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":7,
+    "id":9,
     "method":"tools/call",
     "params":{
       "name":"query_chronicle",
@@ -168,7 +183,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":8,
+    "id":10,
     "method":"tools/call",
     "params":{
       "name":"search_collection_inscriptions",
@@ -192,7 +207,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":9,
+    "id":11,
     "method":"tools/call",
     "params":{
       "name":"wiki_stats",
@@ -216,7 +231,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":10,
+    "id":12,
     "method":"tools/call",
     "params":{
       "name":"wiki_search_collections",
@@ -234,6 +249,67 @@ The search tool follows a "Discovery-First" approach. Items appear in search res
 - `completeness`: A score from 0.0 to 1.0 indicating data coverage.
 - `is_seed`: If `true`, the item is a discovery draft with technical data but pending a full narrative.
 
+#### Search wiki pages (all entity types)
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":13,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_search_pages",
+      "arguments":{
+        "query":"runestone",
+        "entity_type":"collection",
+        "limit":10,
+        "offset":0
+      }
+    }
+  }'
+```
+
+#### List wiki pages (inventory)
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":14,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_list_pages",
+      "arguments":{
+        "limit":50,
+        "offset":0
+      }
+    }
+  }'
+```
+
+#### Get wiki page by slug
+
+```bash
+curl -sS -X POST 'https://ordinalmind.com/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc":"2.0",
+    "id":15,
+    "method":"tools/call",
+    "params":{
+      "name":"wiki_get_page",
+      "arguments":{
+        "slug":"inscription:cbd62b57bc1b3ae8f6e0cfc402fbdbeb5ae4172f9200671f5f689f1af6d3332bi0"
+      }
+    }
+  }'
+```
+
 #### Get wiki field status
 
 ```bash
@@ -242,7 +318,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":11,
+    "id":16,
     "method":"tools/call",
     "params":{
       "name":"wiki_get_field_status",
@@ -261,7 +337,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   --data '{
     "jsonrpc":"2.0",
-    "id":12,
+    "id":17,
     "method":"tools/call",
     "params":{
       "name":"wiki_get_collection_context",
@@ -284,7 +360,7 @@ curl -sS -X POST 'https://ordinalmind.com/mcp' \
   -H 'Authorization: Bearer <mcp_access_token>' \
   --data '{
     "jsonrpc":"2.0",
-    "id":12,
+    "id":18,
     "method":"tools/call",
     "params":{
       "name":"wiki_propose_update",
@@ -332,6 +408,9 @@ Authorization: Bearer <mcp_access_token>
   - `query_chronicle` available
   - `search_collection_inscriptions` available
   - `wiki_search_collections` available
+  - `wiki_search_pages` available
+  - `wiki_list_pages` available
+  - `wiki_get_page` available
   - `wiki_get_field_status` available
   - `wiki_get_collection_context` available
   - `prompts/list` returns `[]`

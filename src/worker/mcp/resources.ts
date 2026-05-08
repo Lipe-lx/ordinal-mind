@@ -49,6 +49,96 @@ function formatWikiMarkdown(slug: string, snapshot: Awaited<ReturnType<typeof ge
   return lines.join("\n")
 }
 
+function normalizePageLookupCandidates(slug: string): string[] {
+  const trimmed = slug.trim()
+  if (!trimmed) return []
+
+  const candidates = [trimmed]
+  if (trimmed.startsWith("collection:")) {
+    candidates.push(trimmed.slice("collection:".length))
+  } else {
+    candidates.push(`collection:${trimmed}`)
+  }
+  if (isInscriptionId(trimmed) && !trimmed.startsWith("inscription:")) {
+    candidates.push(`inscription:${trimmed}`)
+  }
+  return Array.from(new Set(candidates))
+}
+
+async function readWikiPageBySlug(rawSlug: string, env: Env): Promise<Record<string, unknown>> {
+  if (!env.DB) {
+    return { ok: false, error: "wiki_db_unavailable" }
+  }
+
+  let row: {
+    slug: string
+    entity_type: string
+    title: string
+    summary: string
+    sections_json: string
+    cross_refs_json: string
+    source_event_ids_json: string
+    generated_at: string
+    byok_provider: string
+    unverified_count: number
+    view_count: number
+    updated_at: string | null
+  } | null = null
+
+  for (const candidate of normalizePageLookupCandidates(rawSlug)) {
+    row = await env.DB.prepare(`
+      SELECT slug, entity_type, title, summary, sections_json,
+             cross_refs_json, source_event_ids_json, generated_at,
+             byok_provider, unverified_count, view_count, updated_at
+      FROM wiki_pages
+      WHERE slug = ?
+      LIMIT 1
+    `)
+      .bind(candidate)
+      .first<{
+        slug: string
+        entity_type: string
+        title: string
+        summary: string
+        sections_json: string
+        cross_refs_json: string
+        source_event_ids_json: string
+        generated_at: string
+        byok_provider: string
+        unverified_count: number
+        view_count: number
+        updated_at: string | null
+      }>()
+    if (row) break
+  }
+
+  if (!row) {
+    return {
+      ok: false,
+      error: "wiki_page_not_found",
+      slug: rawSlug,
+    }
+  }
+
+  return {
+    ok: true,
+    page: {
+      slug: row.slug,
+      entity_type: row.entity_type,
+      title: row.title,
+      summary: row.summary,
+      sections: safeParse(row.sections_json, [] as Array<Record<string, unknown>>),
+      cross_refs: safeParse(row.cross_refs_json, [] as string[]),
+      source_event_ids: safeParse(row.source_event_ids_json, [] as string[]),
+      generated_at: row.generated_at,
+      byok_provider: row.byok_provider,
+      unverified_count: Number(row.unverified_count ?? 0),
+      view_count: Number(row.view_count ?? 0),
+      updated_at: row.updated_at,
+    },
+  }
+}
+
 async function readChronicleById(rawId: string, env: Env): Promise<Record<string, unknown>> {
   const resolved = await resolveInput(rawId)
   if (resolved.type !== "inscription") {
@@ -163,6 +253,22 @@ export function registerResources(server: McpServer, env: Env): void {
     { title: "Chronicle by inscription", description: "Factual chronology for a Bitcoin Ordinal inscription" },
     async (uri, { id }) => {
       const payload = await readChronicleById(String(id), env)
+      return {
+        contents: [{
+          uri: uri.href,
+          mimeType: "application/json",
+          text: serializeGuardedResource(payload),
+        }],
+      }
+    }
+  )
+
+  server.registerResource(
+    "wiki-page",
+    new ResourceTemplate("wiki://page/{slug}", { list: undefined }),
+    { title: "Wiki page by slug", description: "Public wiki page payload for collection/inscription/artist/sat slugs" },
+    async (uri, { slug }) => {
+      const payload = await readWikiPageBySlug(String(slug), env)
       return {
         contents: [{
           uri: uri.href,

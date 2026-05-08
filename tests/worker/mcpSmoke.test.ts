@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { registerTools } from "../../src/worker/mcp/tools"
+import { registerResources } from "../../src/worker/mcp/resources"
 import { getConsolidatedSnapshot } from "../../src/worker/wiki/consolidateEndpoint"
 import { type Env } from "../../src/worker/index"
 
@@ -30,21 +31,63 @@ class FakeD1Database {
       }
       if (s.includes("from wiki_fts")) {
         if (s.includes("count(*) as total")) {
-          return { results: [{ total: this.wikiFts.length }] }
+          const query = String(params[0] ?? "").replace(/\*/g, "").toLowerCase()
+          const entityFilter = s.includes("and wp.entity_type = ?")
+            ? String(params[1] ?? "")
+            : null
+          const total = this.wikiFts
+            .map((fts) => {
+              const page = this.wikiPages.find((p) => p.slug === fts.slug)
+              if (!page) return null
+              if (query && !fts.title.toLowerCase().includes(query)) return null
+              if (entityFilter && page.entity_type !== entityFilter) return null
+              return fts.slug
+            })
+            .filter(Boolean).length
+          return { results: [{ total }] }
         }
         const query = String(params[0] ?? "").replace(/\*/g, "")
+        const entityFilter = s.includes("and wp.entity_type = ?")
+          ? String(params[1] ?? "")
+          : null
         const results = this.wikiFts
           .filter((f) => f.title.toLowerCase().includes(query.toLowerCase()))
           .map((f) => {
             const page = this.wikiPages.find((p) => p.slug === f.slug)
+            if (!page) return null
+            if (entityFilter && page.entity_type !== entityFilter) return null
             const cache = this.consolidatedCache.find((c) => c.collection_slug === f.slug)
-            return page ? { ...page, score: 1, completeness: cache?.completeness ?? 0 } : null
+            return { ...page, score: 1, completeness: cache?.completeness ?? 0, unverified_count: 0 }
           })
           .filter(Boolean)
         return { results }
       }
       if (s.includes("count(*) as total") && s.includes("from wiki_pages")) {
+        if (s.includes("where entity_type = ?")) {
+          const entityType = String(params[0] ?? "")
+          return {
+            results: [{ total: this.wikiPages.filter((row) => row.entity_type === entityType).length }],
+          }
+        }
         return { results: [{ total: this.wikiPages.length }] }
+      }
+      if (s.includes("select slug, entity_type, title, summary, updated_at, unverified_count") && s.includes("from wiki_pages")) {
+        let rows = [...this.wikiPages]
+        if (s.includes("where entity_type = ?")) {
+          const entityType = String(params[0] ?? "")
+          rows = rows.filter((row) => row.entity_type === entityType)
+        }
+        rows.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
+        return {
+          results: rows.map((row) => ({
+            slug: row.slug,
+            entity_type: row.entity_type,
+            title: row.title,
+            summary: row.summary,
+            updated_at: row.updated_at ?? null,
+            unverified_count: 0,
+          })),
+        }
       }
       if (s.includes("count(distinct collection_slug) as total") && s.includes("status = 'published'")) {
         const slugs = new Set(this.wikiContributions
@@ -89,6 +132,25 @@ class FakeD1Database {
     const executeFirst = async (params: any[]) => {
       if (s.includes("from consolidated_cache")) {
         return this.consolidatedCache.find((c) => c.collection_slug === params[0]) || null
+      }
+      if (s.includes("from wiki_pages") && s.includes("where slug = ?") && s.includes("limit 1")) {
+        const slug = String(params[0] ?? "")
+        const page = this.wikiPages.find((row) => row.slug === slug)
+        if (!page) return null
+        return {
+          slug: page.slug,
+          entity_type: page.entity_type,
+          title: page.title,
+          summary: page.summary,
+          sections_json: JSON.stringify([]),
+          cross_refs_json: JSON.stringify([]),
+          source_event_ids_json: JSON.stringify([]),
+          generated_at: page.updated_at ?? "2026-05-07T00:00:00.000Z",
+          byok_provider: "test",
+          unverified_count: 0,
+          view_count: 0,
+          updated_at: page.updated_at ?? null,
+        }
       }
       return null
     }
@@ -151,6 +213,29 @@ function captureHandlers(
   })
 }
 
+function captureResourceHandlers(
+  server: McpServer,
+  targetNames: string[]
+): Record<string, (uri: URL, params: Record<string, unknown>) => Promise<{ contents: Array<{ text: string }> }>> {
+  const handlers = new Map<string, (uri: URL, params: Record<string, unknown>) => Promise<{ contents: Array<{ text: string }> }>>()
+  const originalRegister = server.registerResource.bind(server)
+
+  server.registerResource = ((name: string, template: unknown, metadata: unknown, handler: (uri: URL, params: Record<string, unknown>) => Promise<{ contents: Array<{ text: string }> }>) => {
+    if (targetNames.includes(name)) {
+      handlers.set(name, handler)
+    }
+    return originalRegister(name, template as never, metadata as never, handler as never)
+  }) as typeof server.registerResource
+
+  return new Proxy({} as Record<string, (uri: URL, params: Record<string, unknown>) => Promise<{ contents: Array<{ text: string }> }>>, {
+    get: (_, prop: string) => {
+      const handler = handlers.get(prop)
+      if (!handler) throw new Error(`resource_handler_not_captured:${prop}`)
+      return handler
+    },
+  })
+}
+
 describe("Discovery-first and wiki stats MCP smoke", () => {
   it("deve criar um seed na wiki_pages quando getConsolidatedSnapshot é chamado com dados", async () => {
     const db = new FakeD1Database()
@@ -189,7 +274,7 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     db.contributionHasUpdatedAt = false
     db.wikiPages.push(
       {
-        slug: "ordinal-mind",
+        slug: "collection:ordinal-mind",
         title: "Ordinal Mind",
         entity_type: "collection",
         summary: "seed",
@@ -203,7 +288,15 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
         updated_at: "2026-05-07T12:00:00.000Z",
       }
     )
-    db.wikiFts.push({ slug: "ordinal-mind", title: "Ordinal Mind" })
+    db.wikiPages.push({
+      slug: "inscription:abc123i0",
+      title: "Inscription #1",
+      entity_type: "inscription",
+      summary: "inscription seed",
+      updated_at: "2026-05-07T11:30:00.000Z",
+    })
+    db.wikiFts.push({ slug: "collection:ordinal-mind", title: "Ordinal Mind" })
+    db.wikiFts.push({ slug: "inscription:abc123i0", title: "Inscription #1" })
     db.wikiContributions.push(
       { collection_slug: "ordinal-mind", status: "published", created_at: "2026-05-07T13:00:00.000Z" },
       { collection_slug: "ordinal-mind", status: "published", created_at: "2026-05-07T13:30:00.000Z" },
@@ -215,14 +308,14 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
 
     const env = createMcpEnv(db)
     const server = new McpServer({ name: "test", version: "1.0.0" })
-    const handlers = captureHandlers(server, ["wiki_stats", "help"])
+    const handlers = captureHandlers(server, ["wiki_stats", "help", "wiki_list_pages", "wiki_search_pages", "wiki_get_page"])
     registerTools({ server, env, request: new Request("https://mcp.local") })
 
     const statsResult = await handlers.wiki_stats({})
     const stats = statsResult.structuredContent as Record<string, any>
     expect(stats.ok).toBe(true)
-    expect(stats.total_pages).toBe(2)
-    expect(stats.indexed_pages).toBe(1)
+    expect(stats.total_pages).toBe(3)
+    expect(stats.indexed_pages).toBe(2)
     expect(stats.published_pages).toBe(2)
     expect(stats.quarantine_pages).toBe(1)
     expect(stats.updated_at).toBe("2026-05-07T15:00:00.000Z")
@@ -231,6 +324,48 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     const help = helpResult.structuredContent as Record<string, any>
     const readOnly = help.available_tools_now.read_only as string[]
     expect(readOnly).toContain("wiki_stats")
+    expect(readOnly).toContain("wiki_search_pages")
+    expect(readOnly).toContain("wiki_list_pages")
+    expect(readOnly).toContain("wiki_get_page")
+
+    const listResult = await handlers.wiki_list_pages({ limit: 10, offset: 0 })
+    const list = listResult.structuredContent as Record<string, any>
+    expect(list.ok).toBe(true)
+    expect(list.total).toBe(3)
+    expect(list.items.some((item: Record<string, unknown>) => item.slug === "inscription:abc123i0")).toBe(true)
+
+    const searchResult = await handlers.wiki_search_pages({ query: "inscription", limit: 10, offset: 0 })
+    const search = searchResult.structuredContent as Record<string, any>
+    expect(search.ok).toBe(true)
+    expect(search.items.some((item: Record<string, unknown>) => item.entity_type === "inscription")).toBe(true)
+
+    const pageResult = await handlers.wiki_get_page({ slug: "inscription:abc123i0" })
+    const pageBody = pageResult.structuredContent as Record<string, any>
+    expect(pageBody.ok).toBe(true)
+    expect(pageBody.page.slug).toBe("inscription:abc123i0")
+  })
+
+  it("wiki://page/{slug} resource retorna payload da página", async () => {
+    const db = new FakeD1Database()
+    db.wikiPages.push({
+      slug: "collection:runestone",
+      title: "Runestone",
+      entity_type: "collection",
+      summary: "runestone summary",
+      updated_at: "2026-05-07T12:00:00.000Z",
+    })
+    const env = createMcpEnv(db)
+    const server = new McpServer({ name: "test", version: "1.0.0" })
+    const resources = captureResourceHandlers(server, ["wiki-page"])
+    registerResources(server, env)
+
+    const response = await resources["wiki-page"](
+      new URL("wiki://page/collection%3Arunestone"),
+      { slug: "collection:runestone" }
+    )
+    const payload = JSON.parse(response.contents[0].text) as Record<string, any>
+    expect(payload.ok).toBe(true)
+    expect(payload.page.slug).toBe("collection:runestone")
   })
 
   it("wiki_stats mantém fail-soft quando DB não está disponível", async () => {
