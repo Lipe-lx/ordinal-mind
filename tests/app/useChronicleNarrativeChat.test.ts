@@ -70,7 +70,7 @@ describe("useChronicleNarrativeChat display fallback", () => {
 
     expect(result).toEqual({
       state: "success",
-      label: "Wiki contribution for launch date was recorded for review.",
+      label: "Wiki contribution for launch date was recorded.",
     })
   })
 })

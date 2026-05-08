@@ -84,6 +84,7 @@ export interface WikiContributionInput {
   field: CanonicalField
   value: string
   operation?: "add" | "delete"
+  origin?: "narrative_seed_agent"
   confidence: "stated_by_user" | "inferred" | "correcting_existing"
   verifiable: boolean
   session_id: string
@@ -100,8 +101,12 @@ export interface ContributeResponse {
   contribution_id: string
   status: "published" | "quarantine" | "duplicate" | "deleted"
   tier_applied: OGTier
+  detail?: string
 }
 
+const NARRATIVE_SEED_ORIGIN = "narrative_seed_agent"
+const SYSTEM_SEED_CONTRIBUTOR_ID = "system:narrative-seed-agent"
+const SYSTEM_SEED_CONTRIBUTOR_KEY = "system:narrative-seed-agent"
 
 
 interface ActiveContributionRow {
@@ -109,6 +114,12 @@ interface ActiveContributionRow {
   value: string
   value_norm: string | null
   status: string
+}
+
+interface PublishedFieldRow extends ActiveContributionRow {
+  og_tier: OGTier | string
+  contributor_id: string | null
+  contributor_key: string | null
 }
 
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
@@ -125,6 +136,10 @@ function generateId(): string {
   const ts = Date.now().toString(36)
   const rand = Math.random().toString(36).slice(2, 8)
   return `wc_${ts}_${rand}`
+}
+
+function isNarrativeSeedOrigin(value: unknown): value is typeof NARRATIVE_SEED_ORIGIN {
+  return value === NARRATIVE_SEED_ORIGIN
 }
 
 function validateContributionInput(body: unknown): ContributeRequest | null {
@@ -155,6 +170,7 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
       field: c.field,
       value: typeof c.value === "string" ? (c.value as string).trim() : "",
       operation,
+      origin: isNarrativeSeedOrigin(c.origin) ? NARRATIVE_SEED_ORIGIN : undefined,
       confidence: c.confidence,
       verifiable: Boolean(c.verifiable),
       session_id: c.session_id as string,
@@ -205,6 +221,35 @@ async function readActiveContribution(
   `)
     .bind(slug, field, contributorKey, status)
     .first<ActiveContributionRow>()
+
+  return row ?? null
+}
+
+async function readPublishedFieldContribution(
+  env: Env,
+  slug: string,
+  field: CanonicalField
+): Promise<PublishedFieldRow | null> {
+  if (!env.DB) return null
+  const row = await env.DB.prepare(`
+    SELECT id, value, value_norm, status, og_tier, contributor_id, contributor_key
+    FROM wiki_contributions
+    WHERE collection_slug = ?
+      AND field = ?
+      AND status = 'published'
+    ORDER BY
+      CASE og_tier
+        WHEN 'genesis' THEN 4
+        WHEN 'og' THEN 3
+        WHEN 'community' THEN 2
+        ELSE 1
+      END DESC,
+      datetime(created_at) DESC,
+      id DESC
+    LIMIT 1
+  `)
+    .bind(slug, field)
+    .first<PublishedFieldRow>()
 
   return row ?? null
 }
@@ -301,6 +346,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
   const { contribution, jwt } = parsed
   const { contributor_id, tier } = await resolveContributor(request, jwt, env)
+  const isSeedOrigin = contribution.origin === NARRATIVE_SEED_ORIGIN
 
   if (contribution.collection_slug.length > 140 || contribution.value.length > 2000 || contribution.session_id.length > 120) {
     return json({ ok: false, error: "payload_too_large" }, 413)
@@ -345,25 +391,47 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     }
   }
 
-  const status: "published" | "quarantine" = resolveStatus(tier)
-  const contributorKey = buildContributorKey(contributor_id, contribution.session_id)
+  const resolvedContributorId = isSeedOrigin ? SYSTEM_SEED_CONTRIBUTOR_ID : contributor_id
+  const resolvedTier: OGTier = isSeedOrigin ? "genesis" : tier
+  const contributorKey = isSeedOrigin
+    ? SYSTEM_SEED_CONTRIBUTOR_KEY
+    : buildContributorKey(contributor_id, contribution.session_id)
+  const status: "published" | "quarantine" = resolveStatus(resolvedTier)
   const valueNorm = normalizeWikiValue(contribution.value)
 
-  // Pillar 2.1 — Fiscal Agent (Safety Check)
-  const safety = await checkContributionSafety(contribution.value, env)
+  const safety = isSeedOrigin
+    ? {
+        safe: true,
+        confidence: 1,
+        reason: "trusted_narrative_seed_agent",
+        metadata: { origin: NARRATIVE_SEED_ORIGIN, mode: "system_genesis_autopublish" },
+      }
+    : await checkContributionSafety(contribution.value, env)
   
   // If flagged as unsafe, force quarantine even for Genesis/OG
-  const effectiveStatus = safety.safe ? status : "quarantine"
+  const effectiveStatus: "published" | "quarantine" = isSeedOrigin
+    ? "published"
+    : (safety.safe ? status : "quarantine")
 
-  let activeRow: ActiveContributionRow | null
+  let activeRow: ActiveContributionRow | null = null
+  let publishedFieldRow: PublishedFieldRow | null = null
   try {
-    activeRow = await readActiveContribution(
-      env,
-      contribution.collection_slug,
-      contribution.field,
-      contributorKey,
-      effectiveStatus
-    )
+    if (isSeedOrigin) {
+      publishedFieldRow = await readPublishedFieldContribution(
+        env,
+        contribution.collection_slug,
+        contribution.field
+      )
+      activeRow = publishedFieldRow
+    } else {
+      activeRow = await readActiveContribution(
+        env,
+        contribution.collection_slug,
+        contribution.field,
+        contributorKey,
+        effectiveStatus
+      )
+    }
   } catch (err) {
     console.error("[WikiContribute] Failed to read active contribution:", err)
     return json({ ok: false, error: "db_read_failed" }, 500)
@@ -380,9 +448,31 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         ok: true,
         contribution_id: activeRow.id,
         status: "duplicate",
-        tier_applied: tier,
+        tier_applied: resolvedTier,
       }
       return json(duplicateResponse)
+    }
+
+    if (
+      isSeedOrigin
+      && publishedFieldRow
+      && publishedFieldRow.og_tier === "genesis"
+      && publishedFieldRow.contributor_key !== SYSTEM_SEED_CONTRIBUTOR_KEY
+    ) {
+      console.info("[WikiContribute] Seed write skipped due to genesis human protection", {
+        at: new Date().toISOString(),
+        slug: contribution.collection_slug,
+        field: contribution.field,
+        contribution_id: publishedFieldRow.id,
+      })
+      const protectedResponse: ContributeResponse = {
+        ok: true,
+        contribution_id: publishedFieldRow.id,
+        status: "duplicate",
+        tier_applied: resolvedTier,
+        detail: "protected_genesis_human",
+      }
+      return json(protectedResponse)
     }
 
     try {
@@ -408,9 +498,9 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
           valueNorm,
           contribution.confidence,
           contribution.verifiable ? 1 : 0,
-          contributor_id,
+          resolvedContributorId,
           contributorKey,
-          tier,
+          resolvedTier,
           contribution.session_id,
           contribution.source_excerpt ?? null,
           safety.safe ? "safe" : "flagged",
@@ -429,7 +519,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         next_value: contribution.value,
         next_value_norm: valueNorm,
         status: effectiveStatus,
-        tier,
+        tier: resolvedTier,
       })
 
       if (effectiveStatus === "published") {
@@ -444,7 +534,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       ok: true,
       contribution_id: activeRow.id,
       status: effectiveStatus,
-      tier_applied: tier,
+      tier_applied: resolvedTier,
     }
 
     return json(consolidatedResponse)
@@ -468,9 +558,9 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         valueNorm,
         contribution.confidence,
         contribution.verifiable ? 1 : 0,
-        contributor_id,
+        resolvedContributorId,
         contributorKey,
-        tier,
+        resolvedTier,
         contribution.session_id,
         contribution.source_excerpt ?? null,
         effectiveStatus,
@@ -491,7 +581,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     ok: true,
     contribution_id: id,
     status: effectiveStatus,
-    tier_applied: tier,
+    tier_applied: resolvedTier,
   }
 
   return json(response)

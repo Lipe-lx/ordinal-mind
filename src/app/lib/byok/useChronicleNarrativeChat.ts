@@ -65,6 +65,14 @@ function buildId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+function buildWikiSeedFingerprint(inscriptionId: string, narrative: string): string {
+  const normalized = narrative
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 4000)
+  return `${inscriptionId}:${normalized}`
+}
+
 function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
   const turnIds = Array.from(new Set(messages.map((message) => message.turnId)))
   if (turnIds.length <= MAX_TURNS) return messages
@@ -216,6 +224,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
   const messagesRef = useRef<ChatMessage[]>([])
   const autoTurnRef = useRef<string | null>(null)
   const lastSubmittedRef = useRef<{ prompt: string; options: SendOptions } | null>(null)
+  const lastWikiSeedFingerprintRef = useRef<string | null>(null)
 
   useEffect(() => {
     messagesRef.current = messages
@@ -236,6 +245,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
         setLastInputMode(null)
         setWikiCompletenessInfo("")
         autoTurnRef.current = null
+        lastWikiSeedFingerprintRef.current = null
         return
       }
 
@@ -695,26 +705,34 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
         setPhase("done")
 
         // --- Wiki Seed Agent ---
-        // Fire-and-forget: only on the initial auto-narrative (silentUserMessage, empty history).
-        // The seed agent extracts structured wiki fields from the narrative in a parallel LLM call.
-        // It never blocks the chat and errors are fully isolated.
-        if (options.silentUserMessage && !historyOverride && messagesRef.current.length === 0 && guardedText) {
-          const seedConfig = KeyStore.get()
-          if (seedConfig?.key && chronicle) {
-            void runWikiSeedAgent({
-              narrative: guardedText,
-              chronicle,
-              config: seedConfig,
-              sessionId: activeThreadId,
-              onProgress: (status) => {
-                setWikiActivity({
-                  state:
-                    status.state === "done" ? "success"
-                    : status.state === "error" ? "error"
-                    : "writing",
-                  label: status.label,
-                })
-              },
+        // Runs on every finalized narrative response, with local fingerprint dedupe so
+        // repeated identical narratives are not re-processed.
+        if (mode === "narrative" && clean.trim() && chronicle?.meta.inscription_id) {
+          const fingerprint = buildWikiSeedFingerprint(chronicle.meta.inscription_id, clean)
+          if (lastWikiSeedFingerprintRef.current !== fingerprint) {
+            lastWikiSeedFingerprintRef.current = fingerprint
+            const seedConfig = KeyStore.get()
+            if (seedConfig?.key && chronicle) {
+              void runWikiSeedAgent({
+                narrative: clean,
+                chronicle,
+                config: seedConfig,
+                sessionId: activeThreadId,
+                onProgress: (status) => {
+                  setWikiActivity({
+                    state:
+                      status.state === "done" ? "success"
+                      : status.state === "error" ? "error"
+                      : "writing",
+                    label: status.label,
+                  })
+                },
+              })
+            }
+          } else {
+            console.info("[NarrativeChat][WikiSeed] Skipping repeated narrative fingerprint", {
+              at: new Date().toISOString(),
+              inscription_id: chronicle.meta.inscription_id,
             })
           }
         }

@@ -1,7 +1,7 @@
 // wikiSeedAgent.ts — Parallel Wiki Seed Agent
 // Pillar 2 — Chat Wiki Builder (Seed Layer)
 //
-// Fires after the first narrative response is finalized.
+// Fires after a finalized narrative response is available.
 // Makes a lightweight, dedicated BYOK LLM call to extract structured wiki
 // fields from the narrative and submits them as wiki contributions.
 //
@@ -20,8 +20,10 @@ import {
   CANONICAL_FIELDS,
   COLLECTION_ONLY_FIELDS,
   INSCRIPTION_ONLY_FIELDS,
+  fetchConsolidated,
   type CanonicalField,
 } from "./wikiCompleteness"
+import type { ConsolidatedCollection } from "../types"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,7 +39,7 @@ export interface WikiSeedStatus {
 }
 
 export interface WikiSeedAgentParams {
-  /** The finalized narrative text from the first chat response. */
+  /** The finalized narrative text from a chat response. */
   narrative: string
   /** Full Chronicle data for this inscription. */
   chronicle: Chronicle
@@ -224,6 +226,49 @@ function dedupeSeedFields(fields: ValidatedSeedField[]): ValidatedSeedField[] {
   )
 }
 
+async function fetchConsolidatedBySlug(slug: string): Promise<ConsolidatedCollection | null> {
+  try {
+    return await fetchConsolidated(slug)
+  } catch {
+    return null
+  }
+}
+
+function shouldSkipFieldByCanonicalMatch(
+  field: ValidatedSeedField,
+  consolidated: ConsolidatedCollection | null
+): boolean {
+  if (!consolidated) return false
+  const state = consolidated.narrative?.[field.field]
+  if (!state || typeof state.canonical_value !== "string" || !state.canonical_value.trim()) return false
+  return normalizeWikiValue(state.canonical_value) === field.value_norm
+}
+
+async function prefilterSeedFieldsByCurrentCanonicalState(
+  fields: ValidatedSeedField[]
+): Promise<{ filtered: ValidatedSeedField[]; skipped: number }> {
+  if (fields.length === 0) return { filtered: fields, skipped: 0 }
+
+  const uniqueSlugs = [...new Set(fields.map((field) => field.collection_slug))]
+  const snapshots = new Map<string, ConsolidatedCollection | null>()
+
+  await Promise.all(
+    uniqueSlugs.map(async (slug) => {
+      snapshots.set(slug, await fetchConsolidatedBySlug(slug))
+    })
+  )
+
+  const filtered = fields.filter((field) => {
+    const snapshot = snapshots.get(field.collection_slug) ?? null
+    return !shouldSkipFieldByCanonicalMatch(field, snapshot)
+  })
+
+  return {
+    filtered,
+    skipped: Math.max(0, fields.length - filtered.length),
+  }
+}
+
 async function extractFieldsFromNarrative(
   narrative: string,
   chronicle: Chronicle,
@@ -280,7 +325,7 @@ async function extractFieldsFromNarrative(
 // ---------------------------------------------------------------------------
 
 /**
- * Launch the Wiki Seed Agent after the first narrative is finalized.
+ * Launch the Wiki Seed Agent after a narrative is finalized.
  *
  * This function is designed to be called fire-and-forget:
  *   void runWikiSeedAgent(params)
@@ -323,18 +368,23 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
     })
 
     const extractedFields = await extractFieldsFromNarrative(narrative, chronicle, config)
-    const fields = dedupeSeedFields(extractedFields)
+    const dedupedFields = dedupeSeedFields(extractedFields)
+    const prefiltered = await prefilterSeedFieldsByCurrentCanonicalState(dedupedFields)
+    const fields = prefiltered.filtered
 
     if (fields.length === 0) {
       console.info("[OrdinalMind][WikiSeedAgent] No extractable wiki fields found", {
         at: new Date().toISOString(),
         inscription_id: chronicle.meta.inscription_id,
+        extracted_count: extractedFields.length,
+        deduped_count: dedupedFields.length,
+        skipped_by_canonical_match: prefiltered.skipped,
       })
       onProgress?.({
         state: "done",
-        fieldsExtracted: 0,
+        fieldsExtracted: dedupedFields.length,
         fieldsSubmitted: 0,
-        label: "Wiki seed complete (no new fields found).",
+        label: "Wiki seed complete (all fields already canonical).",
       })
       return
     }
@@ -343,7 +393,9 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       at: new Date().toISOString(),
       inscription_id: chronicle.meta.inscription_id,
       extracted_count: extractedFields.length,
-      deduped_count: fields.length,
+      deduped_count: dedupedFields.length,
+      ready_to_submit_count: fields.length,
+      skipped_by_canonical_match: prefiltered.skipped,
       fields: fields.map((f) => f.field),
     })
 
@@ -367,6 +419,7 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
             confidence: "inferred",
             verifiable: field.verifiable,
             session_id: sessionId,
+            origin: "narrative_seed_agent",
             source_excerpt: `[Narrative seed] ${narrative.slice(0, 200)}`,
           },
           activeThreadId: sessionId,
@@ -376,29 +429,43 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
     )
 
     submitted = results.filter(
-      (r) => r.status === "fulfilled" && r.value.ok
+      (r) =>
+        r.status === "fulfilled"
+        && r.value.ok
+        && (r.value.status === "published" || r.value.status === "quarantine")
     ).length
 
     const duplicates = results.filter(
       (r) =>
         r.status === "fulfilled" &&
         r.value.ok &&
-        (r.value as { status?: string }).status === "duplicate"
+        r.value.status === "duplicate"
+    ).length
+
+    const protectedByGenesis = results.filter(
+      (r) =>
+        r.status === "fulfilled"
+        && r.value.ok
+        && r.value.detail === "protected_genesis_human"
     ).length
 
     console.info("[OrdinalMind][WikiSeedAgent] Seed complete", {
       at: new Date().toISOString(),
       inscription_id: chronicle.meta.inscription_id,
-      extracted: fields.length,
-      submitted,
+      extracted: extractedFields.length,
+      deduped: dedupedFields.length,
+      skipped_by_canonical_match: prefiltered.skipped,
+      attempted: fields.length,
+      updated_or_inserted: submitted,
       duplicates,
+      protected_by_genesis_human: protectedByGenesis,
       errors: results.filter((r) => r.status === "rejected").length,
     })
 
     const label =
       submitted === 0
-        ? "Wiki seed complete (all fields already known)."
-        : `Wiki seeded with ${submitted} field${submitted !== 1 ? "s" : ""} from narrative.`
+        ? "Wiki seed complete (no deterministic updates needed)."
+        : `Wiki seed synced ${submitted} field${submitted !== 1 ? "s" : ""} with system Genesis authority.`
 
     onProgress?.({
       state: "done",

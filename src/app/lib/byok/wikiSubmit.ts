@@ -12,6 +12,7 @@ export interface WikiContributionPayload {
   field: CanonicalField
   value: string
   operation?: "add" | "delete"
+  origin?: "narrative_seed_agent"
   confidence: "stated_by_user" | "inferred" | "correcting_existing"
   verifiable: boolean
   session_id?: string | null
@@ -24,6 +25,7 @@ export interface WikiSubmitResult {
   ok: true
   status?: string
   tier_applied?: string
+  detail?: string
 }
 
 export interface WikiSubmitError {
@@ -82,6 +84,7 @@ export async function submitWikiContribution(params: {
       ok: true,
       status: typeof payload?.status === "string" ? payload.status : undefined,
       tier_applied: typeof payload?.tier_applied === "string" ? payload.tier_applied : undefined,
+      detail: typeof payload?.detail === "string" ? payload.detail : undefined,
     }
   } catch (error) {
     console.warn("[OrdinalMind][WikiSubmit] Request failed", {
