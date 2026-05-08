@@ -546,7 +546,7 @@ export function registerTools(options: {
           troubleshooting: {
             oauth_provider_unavailable_503: [
               "OAuth provider is currently unavailable for this deployment.",
-              "Server-side checks: MCP_OAUTH_ENABLED=1, Discord OAuth env configured, OAUTH_KV configured, OAuth provider binding active.",
+              "Server-side checks: MCP_OAUTH_ENABLED=1, Discord OAuth env configured, OAUTH_KV configured, OAuth runtime/provider initialized in the worker.",
             ],
             invalid_client_metadata_400: [
               "Dynamic client registration payload is invalid.",

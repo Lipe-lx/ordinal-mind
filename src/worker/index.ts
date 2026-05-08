@@ -133,11 +133,21 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
 
     if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.authorize) {
-      return handleMcpAuthorizeRoute(request, env)
+      try {
+        const runtime = await getMcpOAuthRuntime()
+        return handleMcpAuthorizeRoute(request, env, runtime.provider)
+      } catch {
+        return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
+      }
     }
 
     if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.callback) {
-      return handleMcpCallbackRoute(request, env)
+      try {
+        const runtime = await getMcpOAuthRuntime()
+        return handleMcpCallbackRoute(request, env, runtime.provider)
+      } catch {
+        return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
+      }
     }
 
     if (url.pathname.startsWith("/mcp")) {

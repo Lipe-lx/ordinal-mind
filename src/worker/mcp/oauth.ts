@@ -47,6 +47,8 @@ export type McpOAuthRuntime = {
   options: OAuthProviderOptions<Env>
 }
 
+type McpRouteOAuthProvider = Pick<OAuthProvider<Env>, "parseAuthRequest" | "completeAuthorization">
+
 type ExportedFetchHandler<EnvT> = {
   fetch: (request: Request, env: EnvT, ctx: ExecutionContext) => Response | Promise<Response>
 }
@@ -197,8 +199,12 @@ export async function createMcpOAuthProvider(defaultHandler: ExportedFetchHandle
   }
 }
 
-export async function handleMcpAuthorizeRoute(request: Request, env: Env): Promise<Response> {
-  if (!env.OAUTH_PROVIDER) {
+export async function handleMcpAuthorizeRoute(
+  request: Request,
+  env: Env,
+  provider: McpRouteOAuthProvider | null
+): Promise<Response> {
+  if (!provider) {
     return json({ ok: false, error: "oauth_provider_unavailable" }, 503)
   }
 
@@ -213,7 +219,7 @@ export async function handleMcpAuthorizeRoute(request: Request, env: Env): Promi
 
   let oauthReq: AuthRequest
   try {
-    oauthReq = await env.OAUTH_PROVIDER.parseAuthRequest(request)
+    oauthReq = await provider.parseAuthRequest(request)
   } catch (error) {
     return json({
       ok: false,
@@ -245,8 +251,12 @@ export async function handleMcpAuthorizeRoute(request: Request, env: Env): Promi
   return redirect(authorizationUrl)
 }
 
-export async function handleMcpCallbackRoute(request: Request, env: Env): Promise<Response> {
-  if (!env.OAUTH_PROVIDER) {
+export async function handleMcpCallbackRoute(
+  request: Request,
+  env: Env,
+  provider: McpRouteOAuthProvider | null
+): Promise<Response> {
+  if (!provider) {
     return json({ ok: false, error: "oauth_provider_unavailable" }, 503)
   }
 
@@ -313,7 +323,7 @@ export async function handleMcpCallbackRoute(request: Request, env: Env): Promis
       auth_source: "discord_oauth",
     }
 
-    const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
+    const { redirectTo } = await provider.completeAuthorization({
       request: pending.oauth_request,
       userId: user.id,
       metadata: {
