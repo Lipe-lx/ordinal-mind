@@ -198,6 +198,30 @@
   text-transform: uppercase;
 }
 
+.layout-footer-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.layout-footer-text-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: color var(--duration-fast) var(--ease-smooth);
+}
+
+.layout-footer-text-link:hover {
+  color: var(--accent-primary);
+}
+
+.layout-footer-divider {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
 .layout-footer-link {
   color: var(--text-secondary);
   display: flex;

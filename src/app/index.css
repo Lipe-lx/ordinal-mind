@@ -13,6 +13,7 @@
 @import "./styles/components/inputs.css";
 
 @import "./styles/pages/home.css";
+@import "./styles/pages/legal.css";
 
 @import "./styles/features/chronicle/shell.css";
 @import "./styles/features/chronicle/sidebar.css";
