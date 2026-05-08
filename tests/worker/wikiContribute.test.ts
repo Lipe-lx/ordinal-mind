@@ -337,4 +337,72 @@ describe("wikiContribute handler", () => {
     expect(data.contribution_id).toBe("genesis_human")
     expect(run).not.toHaveBeenCalled()
   })
+
+  it("does not apply rate limits to narrative seed agent writes", async () => {
+    const localMockEnv = {
+      DB: {
+        prepare: vi.fn().mockReturnThis(),
+        bind: vi.fn().mockReturnThis(),
+        first: vi.fn().mockResolvedValue(null),
+        run: vi.fn().mockResolvedValue({ success: true }),
+      },
+      CHRONICLES_KV: {
+        get: vi.fn().mockResolvedValue("999"),
+        put: vi.fn().mockResolvedValue(undefined),
+      },
+      JWT_SECRET: "test-secret",
+    } as unknown as Env
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "collection:test",
+        field: "founder",
+        value: "Seed Founder No Limits",
+        confidence: "inferred",
+        verifiable: true,
+        session_id: "seed-session",
+        origin: "narrative_seed_agent",
+      },
+    })
+
+    const res = await handleContribute(req, localMockEnv)
+    const data = await res.json() as any
+    expect(res.status).toBe(200)
+    expect(data.ok).toBe(true)
+    expect(data.status).toBe("published")
+    expect(data.tier_applied).toBe("genesis")
+  })
+
+  it("keeps rate limits for non-seed writes", async () => {
+    const localMockEnv = {
+      DB: {
+        prepare: vi.fn().mockReturnThis(),
+        bind: vi.fn().mockReturnThis(),
+        first: vi.fn().mockResolvedValue(null),
+        run: vi.fn().mockResolvedValue({ success: true }),
+      },
+      CHRONICLES_KV: {
+        get: vi.fn().mockResolvedValue("999"),
+        put: vi.fn().mockResolvedValue(undefined),
+      },
+      JWT_SECRET: "test-secret",
+    } as unknown as Env
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "collection:test",
+        field: "founder",
+        value: "Human Founder",
+        confidence: "stated_by_user",
+        verifiable: true,
+        session_id: "human-session",
+      },
+    })
+
+    const res = await handleContribute(req, localMockEnv)
+    const data = await res.json() as any
+    expect(res.status).toBe(429)
+    expect(data.ok).toBe(false)
+    expect(data.error).toBe("rate_limited")
+  })
 })

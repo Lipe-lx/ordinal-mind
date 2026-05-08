@@ -62,62 +62,82 @@ export async function enforceRateLimit(
   request: Request,
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
-  if (!kv || typeof kv.get !== "function" || typeof kv.put !== "function") {
-    return {
-      ok: true,
-      remaining: Math.max(0, config.limit - 1),
-      retryAfterSeconds: Math.max(1, config.windowSeconds),
-      count: 1,
-    }
-  }
-
-  const now = Date.now()
-  const windowMs = Math.max(1, config.windowSeconds) * 1000
-  const bucket = Math.floor(now / windowMs)
-  const ip = getClientIp(request)
-  const key = `rl:${config.keyPrefix}:${ip}:${bucket}`
-
-  const currentRaw = await kv.get(key)
-  const current = currentRaw ? Number.parseInt(currentRaw, 10) || 0 : 0
-
-  if (current >= config.limit) {
-    const nextBoundary = (bucket + 1) * windowMs
-    const retryAfterSeconds = Math.max(1, Math.ceil((nextBoundary - now) / 1000))
-    return {
-      ok: false,
-      remaining: 0,
-      retryAfterSeconds,
-      count: current,
-    }
-  }
-
-  const nextCount = current + 1
-  await kv.put(key, String(nextCount), {
-    expirationTtl: Math.max(config.windowSeconds + 5, 10),
+  const fallbackOkResult = (): RateLimitResult => ({
+    ok: true,
+    remaining: Math.max(0, config.limit - 1),
+    retryAfterSeconds: Math.max(1, config.windowSeconds),
+    count: 1,
   })
 
-  const nextBoundary = (bucket + 1) * windowMs
-  const retryAfterSeconds = Math.max(1, Math.ceil((nextBoundary - now) / 1000))
-
-  if (typeof config.alertThreshold === "number" && nextCount >= config.alertThreshold) {
+  const logFailOpen = (error: unknown): void => {
+    const detail = error instanceof Error ? error.message : String(error)
     console.warn(
       JSON.stringify({
         at: new Date().toISOString(),
         level: "warn",
-        event: "security.rate_limit_spike",
+        event: "security.rate_limit_fail_open",
         keyPrefix: config.keyPrefix,
-        ip,
-        count: nextCount,
-        limit: config.limit,
+        detail: detail.slice(0, 220),
       })
     )
   }
 
-  return {
-    ok: true,
-    remaining: Math.max(0, config.limit - nextCount),
-    retryAfterSeconds,
-    count: nextCount,
+  if (!kv || typeof kv.get !== "function" || typeof kv.put !== "function") {
+    return fallbackOkResult()
+  }
+
+  try {
+    const now = Date.now()
+    const windowMs = Math.max(1, config.windowSeconds) * 1000
+    const bucket = Math.floor(now / windowMs)
+    const ip = getClientIp(request)
+    const key = `rl:${config.keyPrefix}:${ip}:${bucket}`
+
+    const currentRaw = await kv.get(key)
+    const current = currentRaw ? Number.parseInt(currentRaw, 10) || 0 : 0
+
+    if (current >= config.limit) {
+      const nextBoundary = (bucket + 1) * windowMs
+      const retryAfterSeconds = Math.max(1, Math.ceil((nextBoundary - now) / 1000))
+      return {
+        ok: false,
+        remaining: 0,
+        retryAfterSeconds,
+        count: current,
+      }
+    }
+
+    const nextCount = current + 1
+    await kv.put(key, String(nextCount), {
+      expirationTtl: Math.max(config.windowSeconds + 5, 10),
+    })
+
+    const nextBoundary = (bucket + 1) * windowMs
+    const retryAfterSeconds = Math.max(1, Math.ceil((nextBoundary - now) / 1000))
+
+    if (typeof config.alertThreshold === "number" && nextCount >= config.alertThreshold) {
+      console.warn(
+        JSON.stringify({
+          at: new Date().toISOString(),
+          level: "warn",
+          event: "security.rate_limit_spike",
+          keyPrefix: config.keyPrefix,
+          ip,
+          count: nextCount,
+          limit: config.limit,
+        })
+      )
+    }
+
+    return {
+      ok: true,
+      remaining: Math.max(0, config.limit - nextCount),
+      retryAfterSeconds,
+      count: nextCount,
+    }
+  } catch (error) {
+    logFailOpen(error)
+    return fallbackOkResult()
   }
 }
 

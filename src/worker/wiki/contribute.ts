@@ -322,16 +322,6 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     return json({ ok: false, error: "untrusted_origin" }, 403)
   }
 
-  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
-    keyPrefix: "wiki_contribute",
-    limit: 40,
-    windowSeconds: 60,
-    alertThreshold: 30,
-  })
-  if (!rate.ok) {
-    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
-  }
-
   let body: unknown
   try {
     body = await request.json()
@@ -345,8 +335,20 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   }
 
   const { contribution, jwt } = parsed
-  const { contributor_id, tier } = await resolveContributor(request, jwt, env)
   const isSeedOrigin = contribution.origin === NARRATIVE_SEED_ORIGIN
+  if (!isSeedOrigin) {
+    const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+      keyPrefix: "wiki_contribute",
+      limit: 40,
+      windowSeconds: 60,
+      alertThreshold: 30,
+    })
+    if (!rate.ok) {
+      return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
+    }
+  }
+
+  const { contributor_id, tier } = await resolveContributor(request, jwt, env)
 
   if (contribution.collection_slug.length > 140 || contribution.value.length > 2000 || contribution.session_id.length > 120) {
     return json({ ok: false, error: "payload_too_large" }, 413)
