@@ -183,6 +183,23 @@ function buildOAuthErrorRedirect(
   })
 }
 
+function buildOAuthAlreadyProcessedResponse(
+  message: string,
+  options?: { clearStateCookie?: string }
+): Response {
+  const body = `<html><body><h1>MCP OAuth already completed</h1><p>${escapeHtml(message)}</p></body></html>`
+  const headers: Record<string, string> = {
+    "Content-Type": "text/html; charset=utf-8",
+  }
+  if (options?.clearStateCookie) {
+    headers["Set-Cookie"] = options.clearStateCookie
+  }
+  return new Response(body, {
+    status: 200,
+    headers,
+  })
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -882,6 +899,7 @@ export async function handleMcpCallbackRoute(
 
   if (!pendingFromDo && !stateLookup.pending && !pendingFromCookie) {
     const isReplay = consumed.cause === "replay" || consumed.cause === "replay_duplicate"
+    const isDuplicateReplay = consumed.cause === "replay_duplicate"
     if (flowId) {
       await doFlowUpdate(stateDo, flowId, isReplay ? "replay_detected" : "expired", {
         error: isReplay ? "replay_blocked" : "state_expired",
@@ -901,6 +919,12 @@ export async function handleMcpCallbackRoute(
       lookup_latency_ms: stateLookup.lookupLatencyMs,
       cause_hint: "eventual_consistency_or_expired_or_reused_state",
     }))
+    if (isDuplicateReplay && flowLookup.ok && flowLookup.flow.status === "token_ready") {
+      return buildOAuthAlreadyProcessedResponse(
+        "Authorization already processed successfully. You can return to the agent.",
+        { clearStateCookie }
+      )
+    }
     return buildOAuthErrorRedirect(
       isReplay
         ? "Authorization callback already processed. Please restart the OAuth flow."
