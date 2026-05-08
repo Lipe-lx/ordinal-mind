@@ -96,6 +96,10 @@ graph TD
 - **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
 - **Parallel Wiki Seed Agent**: A client-side background agent that extract facts from the initial narrative to proactively populate the wiki database.
 - **Discovery-First Indexing**: Collections with any consensus data (completeness > 0) are automatically seeded into the search index (`wiki_pages`), enabling immediate discovery via MCP and UI even before full narrative generation.
+- **Fiscal Agent (Automated Moderation)**: All contributions are asynchronously scanned by a **Fiscal Agent** powered by **Llama Guard 3**.
+    - **Nuanced Policy**: Specifically tuned to allow community slang and profanity while strictly blocking illegal content and explicit sexual descriptions.
+    - **Enforcement**: Any flagged content is automatically forced into `quarantine` regardless of user tier, requiring manual approval by a `Genesis` moderator.
+    - **Fail-Safe**: If the AI inference service is unavailable, contributions default to `quarantine` for safety.
 
 ## MCP Plane (Agent Interop)
 

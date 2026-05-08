@@ -24,6 +24,8 @@ interface PendingReviewRow {
   contributor_username: string | null
   current_value: string | null
   current_tier: string | null
+  safety_status: string
+  safety_metadata: string | null
 }
 
 function json(data: unknown, status = 200): Response {
@@ -80,6 +82,8 @@ async function queryPendingRows(env: Env, limit: number): Promise<PendingReviewR
       wc.session_id,
       wc.source_excerpt,
       wc.created_at,
+      wc.safety_status,
+      wc.safety_metadata,
       u.username AS contributor_username,
       (
         SELECT wc2.value
@@ -128,6 +132,8 @@ async function queryPendingRows(env: Env, limit: number): Promise<PendingReviewR
       wc.session_id,
       wc.source_excerpt,
       wc.created_at,
+      wc.safety_status,
+      wc.safety_metadata,
       NULL AS contributor_username,
       (
         SELECT wc2.value
@@ -210,6 +216,8 @@ export async function handlePendingReviews(request: Request, env: Env): Promise<
       session_id: row.session_id,
       source_excerpt: row.source_excerpt,
       created_at: row.created_at,
+      safety_status: row.safety_status,
+      safety_metadata: row.safety_metadata,
       current_value: row.current_value,
       current_tier: row.current_tier,
     })),

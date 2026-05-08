@@ -58,5 +58,8 @@
       "tag": "v1-mcp-oauth-state-do",
       "new_sqlite_classes": ["McpOAuthStateDO"]
     }
-  ]
+  ],
+  "ai": {
+    "binding": "AI"
+  }
 }

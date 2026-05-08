@@ -49,6 +49,7 @@ export interface Env {
   MCP_OAUTH_ENABLED?: string
   MCP_SPEC_TARGET?: string
   MCP_OAUTH_STATE_DO?: DurableObjectNamespace
+  AI?: { run: (model: string, input: unknown) => Promise<unknown> }
 }
 
 const CORS_HEADERS: Record<string, string> = {

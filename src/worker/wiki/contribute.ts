@@ -17,6 +17,7 @@ import type { OGTier } from "../auth/jwt"
 import { requireSessionUser } from "../auth/session"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
+import { checkContributionSafety } from "./safety"
 
 /** Fields strictly for collections (origin, founders, etc.) */
 export const COLLECTION_ONLY_FIELDS = [
@@ -101,7 +102,7 @@ export interface ContributeResponse {
   tier_applied: OGTier
 }
 
-type ContributionStatus = "published" | "quarantine" | "duplicate" | "deleted"
+
 
 interface ActiveContributionRow {
   id: string
@@ -348,14 +349,20 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   const contributorKey = buildContributorKey(contributor_id, contribution.session_id)
   const valueNorm = normalizeWikiValue(contribution.value)
 
-  let activeRow: ActiveContributionRow | null = null
+  // Pillar 2.1 — Fiscal Agent (Safety Check)
+  const safety = await checkContributionSafety(contribution.value, env)
+  
+  // If flagged as unsafe, force quarantine even for Genesis/OG
+  const effectiveStatus = safety.safe ? status : "quarantine"
+
+  let activeRow: ActiveContributionRow | null
   try {
     activeRow = await readActiveContribution(
       env,
       contribution.collection_slug,
       contribution.field,
       contributorKey,
-      status
+      effectiveStatus
     )
   } catch (err) {
     console.error("[WikiContribute] Failed to read active contribution:", err)
@@ -391,6 +398,8 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
           og_tier = ?,
           session_id = ?,
           source_excerpt = ?,
+          safety_status = ?,
+          safety_metadata = ?,
           updated_at = datetime('now')
         WHERE id = ?
       `)
@@ -404,6 +413,8 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
           tier,
           contribution.session_id,
           contribution.source_excerpt ?? null,
+          safety.safe ? "safe" : "flagged",
+          safety.metadata ? JSON.stringify(safety.metadata) : (safety.reason || null),
           activeRow.id
         )
         .run()
@@ -417,11 +428,11 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         previous_value_norm: currentNorm,
         next_value: contribution.value,
         next_value_norm: valueNorm,
-        status,
+        status: effectiveStatus,
         tier,
       })
 
-      if (status === "published") {
+      if (effectiveStatus === "published") {
         await invalidateConsolidatedCache(env, contribution.collection_slug)
       }
     } catch (err) {
@@ -432,7 +443,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     const consolidatedResponse: ContributeResponse = {
       ok: true,
       contribution_id: activeRow.id,
-      status,
+      status: effectiveStatus,
       tier_applied: tier,
     }
 
@@ -445,8 +456,9 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     await env.DB.prepare(`
       INSERT INTO wiki_contributions
         (id, collection_slug, field, value, value_norm, confidence, verifiable,
-         contributor_id, contributor_key, og_tier, session_id, source_excerpt, status, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         contributor_id, contributor_key, og_tier, session_id, source_excerpt, status, 
+         safety_status, safety_metadata, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `)
       .bind(
         id,
@@ -461,11 +473,13 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         tier,
         contribution.session_id,
         contribution.source_excerpt ?? null,
-        status
+        effectiveStatus,
+        safety.safe ? "safe" : "flagged",
+        safety.metadata ? JSON.stringify(safety.metadata) : (safety.reason || null)
       )
       .run()
 
-    if (status === "published") {
+    if (effectiveStatus === "published") {
       await invalidateConsolidatedCache(env, contribution.collection_slug)
     }
   } catch (err) {
@@ -476,7 +490,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   const response: ContributeResponse = {
     ok: true,
     contribution_id: id,
-    status,
+    status: effectiveStatus,
     tier_applied: tier,
   }
 

@@ -47,6 +47,7 @@ graph LR
 | **Identity** | Discord OAuth2 (PKCE), HMAC-SHA256 JWT |
 | **MCP** | MCP TypeScript SDK v1, Cloudflare `createMcpHandler`, OAuth 2.1 |
 | **AI/LLM** | Client-side BYOK (OpenAI, Anthropic, Gemini) |
+| **Moderation** | Cloudflare Workers AI (Llama Guard 3) |
 | **Tooling** | Vite 6, Vitest, Wrangler |
 
 ---
@@ -57,6 +58,7 @@ Ordinal Mind resolves assets through a tiered verification pipeline:
 
 - **Layer 0 (Factual)**: Atomic event resolution from `ordinals.com`, `mempool.space`, and `UniSat`.
 - **Layer 1 (Consensus)**: Human-contributed knowledge via the **Wiki Engine**, weighted by Discord Collector Tiers (`Genesis` > `OG` > `Community`).
+- **Fiscal Agent (Safety)**: Real-time automated moderation of contributions using **Llama Guard 3** to filter illegal and explicit content.
 - **Layer 2 (Narrative)**: Deterministic prompt construction for client-side LLM synthesis.
 - **Layer 3 (Discovery)**: Heuristic web signal discovery and X (Twitter) mention scraping.
 
@@ -70,6 +72,7 @@ Ordinal Mind resolves assets through a tiered verification pipeline:
 - **🛡️ Sealed Security**: LLM keys are encrypted at-rest in `localStorage` using **AES-256-GCM** derived from the user's JWT.
 - **⚡ SSE-Powered Progress**: Real-time resolution status and research activity monitoring via Server-Sent Events.
 - **🌱 Proactive Wiki Population**: Background extraction of structured knowledge from the first narrative to seed the wiki immediately.
+- **🛡️ Fiscal Agent**: Automated edge-based content moderation that allows community slang while blocking harmful content.
 
 ---
 
