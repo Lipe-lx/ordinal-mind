@@ -105,11 +105,19 @@ function wantsJSON(request: Request): boolean {
 
 async function mintOneTimeAuthCode(env: Env, jwt: string): Promise<string> {
   const authCode = crypto.randomUUID().replace(/-/g, "")
-  await env.CHRONICLES_KV.put(
-    `authcode:${authCode}`,
-    JSON.stringify({ jwt, created_at: new Date().toISOString() }),
-    { expirationTtl: AUTH_CODE_TTL_SECONDS }
-  )
+  try {
+    await env.CHRONICLES_KV.put(
+      `authcode:${authCode}`,
+      JSON.stringify({ jwt, created_at: new Date().toISOString() }),
+      { expirationTtl: AUTH_CODE_TTL_SECONDS }
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes("KV put() limit exceeded")) {
+      throw new Error("CAPACITY_REACHED", { cause: err })
+    }
+    throw new Error(msg, { cause: err })
+  }
   return authCode
 }
 
@@ -148,15 +156,25 @@ async function handleDiscordInit(request: Request, env: Env): Promise<Response> 
 
   const pkceKey = `pkce:${state}`
   const redirectUri = canonicalRedirectUri
-  await env.CHRONICLES_KV.put(
-    pkceKey,
-    JSON.stringify({
-      code_verifier: codeVerifier,
-      redirect_uri: redirectUri,
-      created_at: new Date().toISOString(),
-    }),
-    { expirationTtl: PKCE_TTL_SECONDS }
-  )
+
+  try {
+    await env.CHRONICLES_KV.put(
+      pkceKey,
+      JSON.stringify({
+        code_verifier: codeVerifier,
+        redirect_uri: redirectUri,
+        created_at: new Date().toISOString(),
+      }),
+      { expirationTtl: PKCE_TTL_SECONDS }
+    )
+  } catch (kvErr) {
+    const msg = kvErr instanceof Error ? kvErr.message : String(kvErr)
+    if (msg.includes("KV put() limit exceeded")) {
+      const origin = new URL(redirectUri).origin
+      return redirect(`${origin}/#auth_error=CAPACITY_REACHED`)
+    }
+    throw new Error(msg, { cause: kvErr })
+  }
 
   const authUrl = buildAuthorizationUrl({
     clientId: env.DISCORD_CLIENT_ID,
@@ -211,7 +229,11 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
   let redirectUri = getRedirectUri(url, env)
 
   if (pkceRaw) {
-    await env.CHRONICLES_KV.delete(pkceKey)
+    try {
+      await env.CHRONICLES_KV.delete(pkceKey)
+    } catch {
+      // Non-blocking: if delete fails (quota), it will expire anyway.
+    }
     try {
       const pkce = JSON.parse(pkceRaw) as { code_verifier: string; redirect_uri?: string }
       codeVerifier = pkce.code_verifier
@@ -330,6 +352,8 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "OAuth callback failed."
+    const isCapacity = message === "CAPACITY_REACHED" || message.includes("KV put() limit exceeded")
+    
     console.warn(
       JSON.stringify({
         at: new Date().toISOString(),
@@ -337,9 +361,7 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
         detail: message.slice(0, 300),
       })
     )
-    if (wantsJSON(request)) {
-      return json({ error: message }, 500)
-    }
+
     const fallbackOrigin = (() => {
       try {
         return new URL(redirectUri).origin
@@ -347,7 +369,13 @@ async function handleDiscordCallback(request: Request, env: Env): Promise<Respon
         return url.origin
       }
     })()
-    return redirect(`${fallbackOrigin}/#auth_error=${encodeURIComponent(message)}`, {
+
+    if (wantsJSON(request)) {
+      return json({ error: isCapacity ? "CAPACITY_REACHED" : message }, 500)
+    }
+
+    const errorCode = isCapacity ? "CAPACITY_REACHED" : encodeURIComponent(message)
+    return redirect(`${fallbackOrigin}/#auth_error=${errorCode}`, {
       "Referrer-Policy": "no-referrer",
       "Set-Cookie": buildClearPkceCookie(url),
     })
@@ -412,7 +440,15 @@ async function handleAuthExchange(request: Request, env: Env): Promise<Response>
     return json({ ok: false, error: "invalid_or_expired_auth_code" }, 400)
   }
 
-  await env.CHRONICLES_KV.delete(key)
+  try {
+    await env.CHRONICLES_KV.delete(key)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes("KV put() limit exceeded")) {
+      return json({ ok: false, error: "CAPACITY_REACHED" }, 500)
+    }
+    // Non-blocking for other errors or log them
+  }
 
   let token: string
   try {
