@@ -526,6 +526,7 @@ export function registerTools(options: {
             token: "/mcp/oauth/token",
             register: "/mcp/oauth/register",
             flow_start: "/mcp/oauth/flow/start",
+            flow_authorize: "/mcp/oauth/flow/authorize?flow_id=<flow_id>",
             flow_status: "/mcp/oauth/flow/status?flow_id=<flow_id>",
             flow_complete: "/mcp/oauth/flow/complete",
             flow_cancel: "/mcp/oauth/flow/cancel",
@@ -555,7 +556,7 @@ export function registerTools(options: {
           },
           flow: [
             "Start with protected resource metadata discovery.",
-            "Agent standard path: register client -> /mcp/oauth/flow/start -> present authorize_url to user -> poll /mcp/oauth/flow/status.",
+            "Agent standard path: register client -> /mcp/oauth/flow/start -> present authorize_proxy_url (or authorize_url) to user -> poll /mcp/oauth/flow/status.",
             "Wait until /mcp/oauth/flow/status returns token_ready (or failed/expired/cancelled).",
             "After token_ready, exchange the authorization code at /mcp/oauth/token using the same code_verifier returned by /mcp/oauth/flow/start.",
             "Direct /mcp/oauth/authorize is supported as a low-level/manual path, but flow session is recommended for agents.",

@@ -52,6 +52,7 @@ export const MCP_OAUTH_PATHS = {
   token: "/mcp/oauth/token",
   register: "/mcp/oauth/register",
   flowStart: "/mcp/oauth/flow/start",
+  flowAuthorize: "/mcp/oauth/flow/authorize",
   flowStatus: "/mcp/oauth/flow/status",
   flowComplete: "/mcp/oauth/flow/complete",
   flowCancel: "/mcp/oauth/flow/cancel",
@@ -768,6 +769,7 @@ export async function handleMcpFlowStartRoute(
   })
 
   const statusEndpoint = `${new URL(request.url).origin}${MCP_OAUTH_PATHS.flowStatus}?flow_id=${flowId}`
+  const authorizeProxyUrl = `${new URL(request.url).origin}${MCP_OAUTH_PATHS.flowAuthorize}?flow_id=${flowId}`
   const expiresAt = Date.now() + McpOAuthStateDO.ttlMs()
   const started = await doStartFlow(stateDo, {
     flow_id: flowId,
@@ -786,6 +788,7 @@ export async function handleMcpFlowStartRoute(
     ok: true,
     flow_id: flowId,
     authorize_url: authorizationUrl,
+    authorize_proxy_url: authorizeProxyUrl,
     expires_at: new Date(expiresAt).toISOString(),
     poll_after_ms: 1500,
     status_endpoint: statusEndpoint,
@@ -817,6 +820,23 @@ export async function handleMcpFlowStatusRoute(request: Request, env: Env): Prom
     return oauthError(404, "flow_not_found", "Flow session not found.", false, flowId)
   }
   return json({ ok: true, flow: flow.flow })
+}
+
+export async function handleMcpFlowAuthorizeRoute(request: Request, env: Env): Promise<Response> {
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return oauthError(503, "oauth_state_store_unavailable", "OAuth state store unavailable.", true)
+  }
+  const url = new URL(request.url)
+  const flowId = url.searchParams.get("flow_id")
+  if (!flowId) {
+    return oauthError(400, "missing_flow_id", "flow_id is required.", false)
+  }
+  const flow = await doFlowStatus(stateDo, flowId)
+  if (!flow.ok) {
+    return oauthError(404, "flow_not_found", "Flow session not found.", false, flowId)
+  }
+  return redirect(flow.flow.authorize_url, 302)
 }
 
 export async function handleMcpFlowCompleteRoute(request: Request, env: Env): Promise<Response> {

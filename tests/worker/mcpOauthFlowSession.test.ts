@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   handleMcpCallbackRoute,
+  handleMcpFlowAuthorizeRoute,
   handleMcpFlowCancelRoute,
   handleMcpFlowStartRoute,
   handleMcpFlowStatusRoute,
@@ -171,6 +172,7 @@ describe("MCP OAuth flow sessions", () => {
     expect(body.ok).toBe(true)
     expect(body.flow_id).toBeTruthy()
     expect(body.authorize_url).toContain("https://discord.com/oauth2/authorize")
+    expect(body.authorize_proxy_url).toContain("/mcp/oauth/flow/authorize?flow_id=")
     expect(body.status_endpoint).toContain("/mcp/oauth/flow/status")
     expect(body.oauth_client?.code_verifier).toBeTruthy()
     expect(body.oauth_client?.state).toBeTruthy()
@@ -255,5 +257,28 @@ describe("MCP OAuth flow sessions", () => {
     const statusRes = await handleMcpFlowStatusRoute(statusReq, env)
     const statusBody = await statusRes.json() as any
     expect(statusBody.flow.status).toBe("cancelled")
+  })
+
+  it("flow authorize endpoint redirects using flow_id", async () => {
+    const env = makeEnv()
+    const oauthApi = {
+      parseAuthRequest: vi.fn(async () => ({ scope: ["wiki.contribute"] })),
+      completeAuthorization: vi.fn(),
+    }
+    const startReq = new Request("https://ordinalmind.com/mcp/oauth/flow/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: "client-1",
+        redirect_uri: "https://example.com/callback",
+      }),
+    })
+    const startRes = await handleMcpFlowStartRoute(startReq, env, oauthApi as any)
+    const startBody = await startRes.json() as any
+
+    const authorizeReq = new Request(`https://ordinalmind.com/mcp/oauth/flow/authorize?flow_id=${startBody.flow_id}`)
+    const authorizeRes = await handleMcpFlowAuthorizeRoute(authorizeReq, env)
+    expect(authorizeRes.status).toBe(302)
+    expect(authorizeRes.headers.get("location")).toContain("https://discord.com/oauth2/authorize")
   })
 })

@@ -23,6 +23,7 @@ import {
   handleMcpAuthorizeRoute,
   handleMcpCallbackRoute,
   handleMcpFlowCancelRoute,
+  handleMcpFlowAuthorizeRoute,
   handleMcpFlowCompleteRoute,
   handleMcpFlowStartRoute,
   handleMcpFlowStatusRoute,
@@ -196,6 +197,10 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
       } catch {
         return jsonResponse({ ok: false, error: "oauth_provider_unavailable" }, 503)
       }
+    }
+
+    if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.flowAuthorize) {
+      return handleMcpFlowAuthorizeRoute(request, env)
     }
 
     if (isMcpOauthEnabled(env) && request.method === "GET" && url.pathname === MCP_OAUTH_PATHS.flowStatus) {
