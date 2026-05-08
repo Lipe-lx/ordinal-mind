@@ -17,7 +17,6 @@ import type { DiagnosticsContext, ProgressCallback } from "./pipeline/types"
 import { handleMcpRequest, isMcpEnabled } from "./mcp"
 import {
   MCP_OAUTH_PATHS,
-  McpOAuthStateDO,
   type McpOAuthRuntime,
   createMcpOAuthProvider,
   getMcpOAuthApi,
@@ -25,6 +24,7 @@ import {
   handleMcpCallbackRoute,
   resolveMcpAuthFromRequest,
 } from "./mcp/oauth"
+import { McpOAuthStateDO } from "./mcp/oauthStateDO"
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider"
 
 export interface Env {
