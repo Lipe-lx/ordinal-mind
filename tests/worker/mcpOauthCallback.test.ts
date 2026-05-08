@@ -40,6 +40,14 @@ class EventuallyConsistentKv {
   async delete(): Promise<void> {}
 }
 
+class NeverConsistentKv {
+  async get(): Promise<string | null> {
+    return null
+  }
+  async put(): Promise<void> {}
+  async delete(): Promise<void> {}
+}
+
 function createEnvWithKv(kv: KVNamespace): Env {
   return {
     CHRONICLES_KV: { get: async () => null, put: async () => {} } as any,
@@ -72,5 +80,21 @@ describe("MCP OAuth callback state handling", () => {
     expect(res.status).toBe(302)
     expect(res.headers.get("Location")).toContain("https://client.example/callback")
   })
-})
 
+  it("returns state expired when state is missing after all retry attempts", async () => {
+    const kv = new NeverConsistentKv() as any
+    const env = createEnvWithKv(kv)
+    const oauthApi = {
+      parseAuthRequest: vi.fn(),
+      completeAuthorization: vi.fn(async () => ({ redirectTo: "https://client.example/callback?code=abc" })),
+    }
+
+    const req = new Request("https://ordinalmind.com/mcp/oauth/callback?code=discord-code-1&state=state-missing")
+    const res = await handleMcpCallbackRoute(req, env, oauthApi as any)
+    const text = await res.text()
+
+    expect(res.status).toBe(400)
+    expect(text).toContain("MCP OAuth failed")
+    expect(text).toContain("Authorization state expired")
+  })
+})

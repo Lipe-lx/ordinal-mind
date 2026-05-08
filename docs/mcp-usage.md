@@ -391,6 +391,12 @@ After OAuth, send MCP bearer token:
 Authorization: Bearer <mcp_access_token>
 ```
 
+State handoff note:
+- OAuth `state` is persisted in `OAUTH_KV` and validated on callback.
+- Always start a fresh authorize URL per login attempt.
+- Do not reuse callback URLs or run the same flow in parallel tabs.
+- Complete login quickly after opening authorize.
+
 ## Capability Behavior
 
 - Anonymous:
@@ -417,6 +423,9 @@ Authorization: Bearer <mcp_access_token>
   - Expected for anonymous token/session. Read-only query tools remain available.
 - `401/403` on `tools/call`
   - Missing/invalid MCP token or insufficient tier/capability.
+- `MCP OAuth failed: Authorization state expired`
+  - Callback could not resolve state (expired/reused/eventual-consistency race).
+  - Restart from a new `/mcp/oauth/authorize` URL and complete login immediately.
 - `resource_payload_too_large`
   - Response hit MCP guardrails; narrow query scope.
 - `untrusted_origin`

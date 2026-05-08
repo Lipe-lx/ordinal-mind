@@ -163,16 +163,27 @@ async function readPendingStateWithRetry(
   key: string,
   attempts = CALLBACK_STATE_READ_ATTEMPTS,
   retryMs = CALLBACK_STATE_READ_RETRY_MS
-): Promise<PendingMcpAuthorization | null> {
+): Promise<{ pending: PendingMcpAuthorization | null; attemptCount: number; lookupLatencyMs: number }> {
   const totalAttempts = Math.max(1, attempts)
+  const startedAt = Date.now()
   for (let i = 0; i < totalAttempts; i += 1) {
     const pending = await readPendingState(kv, key)
-    if (pending) return pending
+    if (pending) {
+      return {
+        pending,
+        attemptCount: i + 1,
+        lookupLatencyMs: Date.now() - startedAt,
+      }
+    }
     if (i < totalAttempts - 1) {
       await sleep(retryMs)
     }
   }
-  return null
+  return {
+    pending: null,
+    attemptCount: totalAttempts,
+    lookupLatencyMs: Date.now() - startedAt,
+  }
 }
 
 async function deletePendingState(kv: KVNamespace, key: string): Promise<void> {
@@ -311,11 +322,36 @@ export async function handleMcpCallbackRoute(
   }
 
   const stateKey = `mcp_oauth_state:${state}`
-  const pending = await readPendingStateWithRetry(kv, stateKey)
+  const stateLookup = await readPendingStateWithRetry(kv, stateKey)
+  const cfRay = request.headers.get("cf-ray")
+  const requestId = cfRay ?? crypto.randomUUID()
+  const coloGuess = cfRay?.split("-")[1] ?? null
+  console.info(JSON.stringify({
+    at: new Date().toISOString(),
+    event: "mcp.oauth.state.lookup",
+    request_id: requestId,
+    cf_ray: cfRay,
+    colo: coloGuess,
+    state_found: Boolean(stateLookup.pending),
+    attempt_count: stateLookup.attemptCount,
+    lookup_latency_ms: stateLookup.lookupLatencyMs,
+    error_class: stateLookup.pending ? null : "state_not_found",
+  }))
 
-  if (!pending) {
+  if (!stateLookup.pending) {
+    console.warn(JSON.stringify({
+      at: new Date().toISOString(),
+      event: "mcp.oauth.state.miss",
+      request_id: requestId,
+      cf_ray: cfRay,
+      colo: coloGuess,
+      attempt_count: stateLookup.attemptCount,
+      lookup_latency_ms: stateLookup.lookupLatencyMs,
+      cause_hint: "eventual_consistency_or_expired_or_reused_state",
+    }))
     return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.")
   }
+  const pending = stateLookup.pending
 
   // Consume the state once resolved to prevent replay.
   await deletePendingState(kv, stateKey)

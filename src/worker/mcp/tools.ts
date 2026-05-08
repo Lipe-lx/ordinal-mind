@@ -556,6 +556,12 @@ export function registerTools(options: {
               "Token exchange request is malformed.",
               "Use application/x-www-form-urlencoded body for /mcp/oauth/token.",
             ],
+            state_expired_callback_400: [
+              "The OAuth callback state was not found or expired.",
+              "Start a fresh /mcp/oauth/authorize URL for every attempt.",
+              "Do not reuse old callback URLs and avoid parallel tabs for the same flow.",
+              "Complete login/consent immediately after opening the authorize URL.",
+            ],
           },
           current_session: {
             tier,
