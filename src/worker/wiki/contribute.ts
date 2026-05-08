@@ -339,9 +339,9 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   if (!isSeedOrigin) {
     const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
       keyPrefix: "wiki_contribute",
-      limit: 100,
+      limit: 40,
       windowSeconds: 60,
-      alertThreshold: 80,
+      alertThreshold: 30,
     })
     if (!rate.ok) {
       return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
