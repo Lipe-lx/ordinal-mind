@@ -18,6 +18,35 @@ class FakeKv {
   }
 }
 
+class FakeStateDoNamespace {
+  private store = new Map<string, { payload: any; expires_at: number }>()
+
+  idFromName(name: string): DurableObjectId {
+    return { toString: () => name } as DurableObjectId
+  }
+
+  get(): DurableObjectStub {
+    const store = this.store
+    return {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url)
+        const body = init?.body ? JSON.parse(String(init.body)) as any : {}
+        if (url.pathname === "/issue") {
+          store.set(body.state, { payload: body.payload, expires_at: body.expires_at })
+          return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        }
+        if (url.pathname === "/consume") {
+          const row = store.get(body.state)
+          if (!row) return new Response(JSON.stringify({ ok: false, cause: "missing" }), { status: 404 })
+          store.delete(body.state)
+          return new Response(JSON.stringify({ ok: true, payload: row.payload }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404 })
+      },
+    } as DurableObjectStub
+  }
+}
+
 function baseEnv(): Env {
   return {
     CHRONICLES_KV: { get: async () => null, put: async () => {} } as any,
@@ -26,6 +55,7 @@ function baseEnv(): Env {
     DISCORD_CLIENT_ID: "discord-client-id",
     DISCORD_CLIENT_SECRET: "discord-client-secret",
     OAUTH_KV: new FakeKv() as any,
+    MCP_OAUTH_STATE_DO: new FakeStateDoNamespace() as any,
   } as Env
 }
 
@@ -87,5 +117,20 @@ describe("MCP OAuth authorize route", () => {
     expect(res.status).toBe(503)
     expect(body.error).toBe("oauth_provider_unavailable")
   })
-})
 
+  it("returns oauth_state_store_unavailable when MCP_OAUTH_STATE_DO is missing", async () => {
+    const env = baseEnv()
+    delete env.MCP_OAUTH_STATE_DO
+    const provider = {
+      parseAuthRequest: async () => ({ scope: ["wiki.contribute"] } as any),
+      completeAuthorization: async () => ({ redirectTo: "https://example.com/cb" }),
+    }
+
+    const req = new Request("https://ordinalmind.com/mcp/oauth/authorize")
+    const res = await handleMcpAuthorizeRoute(req, env, provider as any)
+    const body = await res.json() as Record<string, unknown>
+
+    expect(res.status).toBe(503)
+    expect(body.error).toBe("oauth_state_store_unavailable")
+  })
+})

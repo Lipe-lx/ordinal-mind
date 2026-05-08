@@ -17,6 +17,7 @@ import type { DiagnosticsContext, ProgressCallback } from "./pipeline/types"
 import { handleMcpRequest, isMcpEnabled } from "./mcp"
 import {
   MCP_OAUTH_PATHS,
+  McpOAuthStateDO,
   type McpOAuthRuntime,
   createMcpOAuthProvider,
   getMcpOAuthApi,
@@ -42,6 +43,7 @@ export interface Env {
   MCP_ENABLED?: string
   MCP_OAUTH_ENABLED?: string
   MCP_SPEC_TARGET?: string
+  MCP_OAUTH_STATE_DO?: DurableObjectNamespace
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -119,6 +121,8 @@ export default {
     }
   },
 }
+
+export { McpOAuthStateDO }
 
 async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url)

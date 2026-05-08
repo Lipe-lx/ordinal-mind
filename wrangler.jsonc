@@ -44,5 +44,19 @@
       "database_name": "ordinal-mind-wiki",
       "database_id": "85fece45-95d7-4067-ab5c-9e44a5a8c7ac"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MCP_OAUTH_STATE_DO",
+        "class_name": "McpOAuthStateDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-mcp-oauth-state-do",
+      "new_classes": ["McpOAuthStateDO"]
+    }
   ]
 }

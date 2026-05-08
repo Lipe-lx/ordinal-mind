@@ -17,12 +17,15 @@ import {
 import { getCookie } from "../auth/session"
 import { calculateTier } from "../auth/tierEngine"
 import { normalizeTier, type McpResolvedAuth, type McpAuthProps } from "./types"
+import { McpOAuthStateDO, type McpOAuthPendingState } from "./oauthStateDO"
 
 interface PendingMcpAuthorization {
   created_at: string
   discord_state: string
   code_verifier: string
   oauth_request: AuthRequest
+  redirect_origin_fingerprint?: string
+  version?: number
 }
 
 const OAUTH_STATE_TTL_SECONDS = 15 * 60
@@ -31,8 +34,6 @@ const MCP_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 const CALLBACK_STATE_READ_ATTEMPTS = 3
 const CALLBACK_STATE_READ_RETRY_MS = 120
 const MCP_OAUTH_STATE_COOKIE_NAME = "ordinal_mind_mcp_oauth_state"
-const MCP_OAUTH_STATE_TOKEN_PREFIX = "mcp2"
-const MCP_EMBEDDED_STATE_MAX_LENGTH = 1400
 
 interface PendingMcpAuthorizationCookie {
   v: 1
@@ -121,6 +122,10 @@ function redirect(url: string, status = 302, extraHeaders?: Record<string, strin
 
 function requireOAuthKv(env: Env): KVNamespace | null {
   return env.OAUTH_KV ?? null
+}
+
+function requireOAuthStateDo(env: Env): DurableObjectNamespace | null {
+  return env.MCP_OAUTH_STATE_DO ?? null
 }
 
 function buildCallbackUrl(request: Request): string {
@@ -289,40 +294,50 @@ function buildStateKey(state: string): Promise<string> {
   return sha256Hex(state).then((hash) => `mcp_oauth_state:${hash}`)
 }
 
-async function buildEmbeddedStateToken(
-  env: Env,
-  pending: PendingMcpAuthorization
-): Promise<string | null> {
-  const secret = env.DISCORD_CLIENT_SECRET?.trim()
-  if (!secret) return null
-  const payloadEncoded = base64UrlEncode(new TextEncoder().encode(JSON.stringify({
-    v: 2,
-    pending,
-  })))
-  const signature = await signPayload(payloadEncoded, secret)
-  return `${MCP_OAUTH_STATE_TOKEN_PREFIX}.${payloadEncoded}.${signature}`
+async function doFetch(
+  ns: DurableObjectNamespace,
+  path: string,
+  body: unknown
+): Promise<Response> {
+  const id = ns.idFromName("mcp-oauth-state")
+  const stub = ns.get(id)
+  return stub.fetch(`https://state.internal${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
 }
 
-async function readPendingStateFromEmbeddedToken(
+async function issueStateInDo(
+  ns: DurableObjectNamespace,
   state: string,
-  env: Env
-): Promise<PendingMcpAuthorization | null> {
-  const secret = env.DISCORD_CLIENT_SECRET?.trim()
-  if (!secret) return null
-  if (!state.startsWith(`${MCP_OAUTH_STATE_TOKEN_PREFIX}.`)) return null
+  payload: McpOAuthPendingState
+): Promise<boolean> {
+  const expiresAt = Date.now() + McpOAuthStateDO.ttlMs()
+  const res = await doFetch(ns, "/issue", {
+    state,
+    payload,
+    expires_at: expiresAt,
+  })
+  return res.ok
+}
 
-  const [, payloadEncoded, signature] = state.split(".")
-  if (!payloadEncoded || !signature) return null
+async function consumeStateFromDo(
+  ns: DurableObjectNamespace,
+  state: string
+): Promise<{ ok: true; payload: McpOAuthPendingState } | { ok: false; cause: string }> {
+  const res = await doFetch(ns, "/consume", { state })
+  const text = await res.text()
+  const parsed = parseJson<{ ok?: boolean; payload?: McpOAuthPendingState; cause?: string }>(text)
+  if (res.ok && parsed?.ok && parsed.payload) {
+    return { ok: true, payload: parsed.payload }
+  }
+  return { ok: false, cause: parsed?.cause ?? "missing" }
+}
 
-  const expectedSignature = await signPayload(payloadEncoded, secret)
-  if (!constantTimeEqual(signature, expectedSignature)) return null
-
+function parseJson<T>(raw: string): T | null {
   try {
-    const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadEncoded))
-    const parsed = JSON.parse(payloadJson) as { v?: number; pending?: PendingMcpAuthorization }
-    if (parsed.v !== 2 || !parsed.pending) return null
-    if (!isPendingStateFresh(parsed.pending)) return null
-    return parsed.pending
+    return JSON.parse(raw) as T
   } catch {
     return null
   }
@@ -443,6 +458,11 @@ export async function handleMcpAuthorizeRoute(
     return json({ ok: false, error: "discord_oauth_not_configured" }, 503)
   }
 
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return json({ ok: false, error: "oauth_state_store_unavailable" }, 503)
+  }
+
   const kv = requireOAuthKv(env)
   if (!kv) {
     return json({ ok: false, error: "oauth_kv_not_configured" }, 503)
@@ -459,31 +479,50 @@ export async function handleMcpAuthorizeRoute(
     }, 400)
   }
 
-  const fallbackState = crypto.randomUUID().replaceAll("-", "")
+  const state = crypto.randomUUID().replaceAll("-", "")
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await deriveCodeChallenge(codeVerifier)
+  const callbackUrl = buildCallbackUrl(request)
+  const callbackOrigin = new URL(callbackUrl).origin
+  const redirectOriginFingerprint = await sha256Hex(callbackOrigin)
 
   const pendingState: PendingMcpAuthorization = {
     created_at: new Date().toISOString(),
-    discord_state: fallbackState,
+    discord_state: state,
     code_verifier: codeVerifier,
     oauth_request: oauthReq,
+    redirect_origin_fingerprint: redirectOriginFingerprint,
+    version: 2,
   }
-  const embeddedState = await buildEmbeddedStateToken(env, pendingState)
-  const authorizationState = embeddedState && embeddedState.length <= MCP_EMBEDDED_STATE_MAX_LENGTH
-    ? embeddedState
-    : fallbackState
 
-  const stateKey = await buildStateKey(authorizationState)
+  const doPayload: McpOAuthPendingState = {
+    created_at: pendingState.created_at,
+    code_verifier: pendingState.code_verifier,
+    oauth_request: pendingState.oauth_request,
+    redirect_origin_fingerprint: redirectOriginFingerprint,
+    version: 2,
+  }
+  const issueOk = await issueStateInDo(stateDo, state, doPayload)
+  if (!issueOk) {
+    return json({ ok: false, error: "oauth_provider_unavailable" }, 503)
+  }
+
+  const stateKey = await buildStateKey(state)
   await savePendingState(kv, stateKey, pendingState)
-
-  const callbackUrl = buildCallbackUrl(request)
   const authorizationUrl = buildAuthorizationUrl({
     clientId: env.DISCORD_CLIENT_ID,
     redirectUri: callbackUrl,
-    state: authorizationState,
+    state,
     codeChallenge,
   })
+
+  const stateHash = (await sha256Hex(state)).slice(0, 12)
+  console.info(JSON.stringify({
+    at: new Date().toISOString(),
+    event: "mcp.oauth.state.issue",
+    result: "ok",
+    state_hash: stateHash,
+  }))
 
   const pendingStateCookie = await buildPendingStateCookie(request, env, pendingState)
   return redirect(
@@ -508,6 +547,11 @@ export async function handleMcpCallbackRoute(
     return json({ ok: false, error: "discord_oauth_not_configured" }, 503)
   }
 
+  const stateDo = requireOAuthStateDo(env)
+  if (!stateDo) {
+    return json({ ok: false, error: "oauth_state_store_unavailable" }, 503)
+  }
+
   const kv = requireOAuthKv(env)
   if (!kv) {
     return json({ ok: false, error: "oauth_kv_not_configured" }, 503)
@@ -527,16 +571,27 @@ export async function handleMcpCallbackRoute(
     return buildOAuthErrorRedirect("Missing code or state in callback", { clearStateCookie })
   }
 
-  const pendingFromStateToken = await readPendingStateFromEmbeddedToken(state, env)
+  const stateHash = (await sha256Hex(state)).slice(0, 12)
+  const consumed = await consumeStateFromDo(stateDo, state)
+  const pendingFromDo = consumed.ok
+    ? ({
+      created_at: consumed.payload.created_at,
+      discord_state: state,
+      code_verifier: consumed.payload.code_verifier,
+      oauth_request: consumed.payload.oauth_request,
+      redirect_origin_fingerprint: consumed.payload.redirect_origin_fingerprint,
+      version: consumed.payload.version,
+    } satisfies PendingMcpAuthorization)
+    : null
   const stateKey = await buildStateKey(state)
-  const stateLookup = pendingFromStateToken
+  const stateLookup = pendingFromDo
     ? { pending: null, attemptCount: 0, lookupLatencyMs: 0 }
     : await readPendingStateWithRetry(kv, stateKey)
-  const pendingFromCookie = !pendingFromStateToken && !stateLookup.pending
+  const pendingFromCookie = !pendingFromDo && !stateLookup.pending
     ? await readPendingStateFromCookie(request, env, state)
     : null
-  const pendingSource = pendingFromStateToken
-    ? "state_token"
+  const pendingSource = pendingFromDo
+    ? "durable_object"
     : stateLookup.pending
     ? "kv"
     : pendingFromCookie
@@ -551,14 +606,26 @@ export async function handleMcpCallbackRoute(
     request_id: requestId,
     cf_ray: cfRay,
     colo: coloGuess,
-    state_found: Boolean(pendingFromStateToken || stateLookup.pending || pendingFromCookie),
+    state_found: Boolean(pendingFromDo || stateLookup.pending || pendingFromCookie),
     state_source: pendingSource,
+    state_hash: stateHash,
     attempt_count: stateLookup.attemptCount,
     lookup_latency_ms: stateLookup.lookupLatencyMs,
-    error_class: pendingFromStateToken || stateLookup.pending || pendingFromCookie ? null : "state_not_found",
+    error_class: pendingFromDo || stateLookup.pending || pendingFromCookie ? null : "state_not_found",
   }))
 
-  if (!pendingFromStateToken && !stateLookup.pending && !pendingFromCookie) {
+  console.info(JSON.stringify({
+    at: new Date().toISOString(),
+    event: "mcp.oauth.state.consume",
+    result: consumed.ok ? "ok" : "miss",
+    cause_class: consumed.ok ? null : consumed.cause,
+    state_hash: stateHash,
+    request_id: requestId,
+    cf_ray: cfRay,
+    colo: coloGuess,
+  }))
+
+  if (!pendingFromDo && !stateLookup.pending && !pendingFromCookie) {
     console.warn(JSON.stringify({
       at: new Date().toISOString(),
       event: "mcp.oauth.state.miss",
@@ -573,7 +640,7 @@ export async function handleMcpCallbackRoute(
       clearStateCookie,
     })
   }
-  const pending = pendingFromStateToken ?? stateLookup.pending ?? pendingFromCookie
+  const pending = pendingFromDo ?? stateLookup.pending ?? pendingFromCookie
 
   if (!pending) {
     return buildOAuthErrorRedirect("Authorization state expired. Please restart the OAuth flow.", {

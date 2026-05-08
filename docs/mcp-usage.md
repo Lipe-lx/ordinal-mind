@@ -392,8 +392,8 @@ Authorization: Bearer <mcp_access_token>
 ```
 
 State handoff note:
-- OAuth `state` carries a signed embedded payload and is validated on callback.
-- The callback can still use `OAUTH_KV` plus a signed HttpOnly cookie fallback for compatibility and short KV propagation races.
+- OAuth `state` is stored as one-time nonce in a strongly consistent Durable Object and consumed atomically on callback.
+- During transition, callback can fallback to legacy `OAUTH_KV` and signed HttpOnly cookie for in-flight sessions.
 - Always start a fresh authorize URL per login attempt.
 - Do not reuse callback URLs or run the same flow in parallel tabs.
 - Complete login quickly after opening authorize.

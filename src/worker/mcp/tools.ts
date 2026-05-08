@@ -558,10 +558,11 @@ export function registerTools(options: {
             ],
             state_expired_callback_400: [
               "The OAuth callback state was not found or expired.",
+              "State is one-time and consumed from a strongly consistent store to prevent replay.",
               "Start a fresh /mcp/oauth/authorize URL for every attempt.",
               "Do not reuse old callback URLs and avoid parallel tabs for the same flow.",
               "Complete login/consent immediately after opening the authorize URL.",
-              "The server primarily uses a signed embedded state token and can fallback to a signed HttpOnly cookie when KV propagation is delayed; keep cookies enabled for ordinalmind.com.",
+              "During transition, the callback can fallback to legacy KV/cookie paths for in-flight sessions.",
             ],
           },
           current_session: {
