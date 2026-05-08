@@ -25,6 +25,7 @@ export function AddressPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [inscriptions, setInscriptions] = useState<AddressInscriptionItem[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
   
   // Set header
   useEffect(() => {
@@ -141,19 +142,39 @@ export function AddressPage() {
     )
   }
 
+  const filteredInscriptions = inscriptions.filter(item => 
+    item.number.toString().includes(searchQuery) || 
+    item.id.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   return (
     <div className="address-page fade-in">
-      <div className="chronicle-header" style={{ justifyContent: "space-between", marginBottom: "1rem" }}>
+      <div className="chronicle-header" style={{ marginBottom: "1rem" }}>
         <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Search</button>
+      </div>
+
+      <div className="address-toolbar fade-in">
+        <div className="address-search">
+          <svg className="address-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input 
+            type="text" 
+            className="address-search-input" 
+            placeholder="Search inscriptions..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
         {data && (
-          <div className="address-stats fade-in">
-            {data.total} inscription{data.total !== 1 ? 's' : ''}
+          <div className="address-stats">
+            {data.total} <span style={{ opacity: 0.6 }}>inscriptions</span>
           </div>
         )}
       </div>
 
       <div className="address-list">
-        {inscriptions.map((item, index) => {
+        {filteredInscriptions.map((item, index) => {
           const kind = detectMediaKind(item.content_type || "unknown")
           const simpleType = item.content_type?.split(";")[0].split("/")[1] || "unknown"
           
