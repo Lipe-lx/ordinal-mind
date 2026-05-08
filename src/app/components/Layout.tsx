@@ -172,6 +172,18 @@ export function Layout() {
               Policies
             </Link>
           </div>
+          <a
+            href="https://x.com/ordinalmind"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="layout-footer-link"
+            title="Follow on X"
+            aria-label="Follow Ordinal Mind on X"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M18.244 2H21l-6.56 7.5L22.5 22h-6.77l-5.3-6.93L4.34 22H1.58l7.02-8.02L1.5 2h6.94l4.79 6.31L18.244 2Zm-2.37 18h1.87L6.48 3.9H4.47L15.874 20Z" />
+            </svg>
+          </a>
           <a 
             href="https://github.com/Lipe-lx/ordinal-mind" 
             target="_blank" 
