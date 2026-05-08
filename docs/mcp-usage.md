@@ -378,6 +378,7 @@ Use OAuth MCP endpoints (separate from web session auth):
 - `POST /mcp/oauth/token`
 - `POST /mcp/oauth/register`
 - `POST /mcp/oauth/flow/start`
+- `GET /mcp/oauth/flow/authorize?flow_id=<flow_id>`
 - `GET /mcp/oauth/flow/status?flow_id=<flow_id>`
 - `POST /mcp/oauth/flow/complete`
 - `POST /mcp/oauth/flow/cancel`
@@ -403,9 +404,24 @@ State handoff note:
 - Complete login quickly after opening authorize.
 
 Agent flow session note:
-- For agent-driven UX, start with `POST /mcp/oauth/flow/start` and pass the returned `authorize_url` to the user.
+- For agent-driven UX, start with `POST /mcp/oauth/flow/start`.
+- Prefer passing `authorize_proxy_url` to the user (short URL, prevents accidental truncation/copy issues). `authorize_url` is also available.
 - Poll `flow/status` until one of: `token_ready`, `failed`, `expired`, `cancelled`, `replay_detected`.
+- When `token_ready`, prefer reading `flow.result.authorization_code` from `flow/status` for token exchange in agent environments.
 - Use `flow/cancel` when the user abandons the attempt.
+- `flow/start` defaults:
+  - `redirect_uri` defaults to `https://example.com/callback` if omitted.
+  - `scope` defaults to `wiki.contribute wiki.review chronicle.refresh collection.reindex` if omitted.
+- `redirect_uri` must never be `/mcp/oauth/callback` (reserved internal callback for Discord-to-worker handoff).
+
+Token exchange required note:
+- `token_ready` alone does not authenticate MCP calls.
+- Complete `POST /mcp/oauth/token` with `application/x-www-form-urlencoded` using:
+  - `grant_type=authorization_code`
+  - `client_id` (from `/mcp/oauth/register`)
+  - `code` (from client callback URL or `flow.result.authorization_code`)
+  - `redirect_uri` (exactly the same used in register/flow_start)
+  - `code_verifier` (from `flow_start.oauth_client.code_verifier`, or your original verifier if you supplied `code_challenge`)
 
 ## Capability Behavior
 

@@ -117,6 +117,11 @@ npm run typecheck
 | `/mcp/oauth/callback` | `GET` | Public | OAuth callback endpoint for the MCP flow. |
 | `/mcp/oauth/token` | `POST` | Public | MCP OAuth token endpoint (provider-managed). |
 | `/mcp/oauth/register` | `POST` | Public | MCP OAuth dynamic client registration endpoint (provider-managed). |
+| `/mcp/oauth/flow/start` | `POST` | Public | Starts agent-friendly MCP OAuth flow session (returns flow metadata + authorization URLs). |
+| `/mcp/oauth/flow/authorize` | `GET` | Public | Short authorization redirect endpoint (`flow_id` -> Discord authorize URL). |
+| `/mcp/oauth/flow/status` | `GET` | Public | Returns flow state (`pending` -> `token_ready`) and short-lived token exchange payload when ready. |
+| `/mcp/oauth/flow/complete` | `POST` | Public | Optional flow finalization endpoint. |
+| `/mcp/oauth/flow/cancel` | `POST` | Public | Cancels abandoned flow sessions. |
 | `/.well-known/oauth-protected-resource` | `GET` | Public | Protected resource metadata for MCP clients. |
 
 ### MCP Resources
@@ -135,6 +140,7 @@ npm run typecheck
 - `wiki_list_pages`: public read-only paginated inventory of wiki pages (`anon` and authenticated), with `publication_status` shape hints.
 - `wiki_get_page`: public read-only exact wiki page fetch by slug (`anon` and authenticated), with explicit `publication_status`.
 - `wiki_stats`: public read-only global wiki counters (`anon` and authenticated), including governance metrics (`published_pages`) and inventory/editorial metrics (`seed_pages`, `published_shape_pages`).
+- `wiki_list_fields`: public read-only canonical field discovery by entity type (`collection|inscription`) for write preflight.
 - `wiki_get_field_status`: public read-only wiki coverage/status tool (`anon` and authenticated).
 - `wiki_get_collection_context`: public read-only wiki context snapshot tool (`anon` and authenticated).
 - `wiki_propose_update`: moderated proposal tool (`community`, `og`, `genesis`) following app tier rules (`community -> quarantine`, `og/genesis -> published`).

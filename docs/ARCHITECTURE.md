@@ -123,8 +123,14 @@ graph TD
   - `/mcp/oauth/callback`
   - `/mcp/oauth/token`
   - `/mcp/oauth/register`
+  - `/mcp/oauth/flow/start`
+  - `/mcp/oauth/flow/authorize?flow_id=<flow_id>`
+  - `/mcp/oauth/flow/status?flow_id=<flow_id>`
+  - `/mcp/oauth/flow/complete`
+  - `/mcp/oauth/flow/cancel`
   - `/.well-known/oauth-protected-resource` (provider-managed metadata flow)
 - OAuth state/token records use `OAUTH_KV` (dedicated namespace recommended and configured).
+- OAuth flow session state/nonce is coordinated through `MCP_OAUTH_STATE_DO` (strong consistency + one-time consume semantics).
 
 ### Capability gating
 
@@ -138,6 +144,7 @@ graph TD
   - `wiki_list_pages`: `anon|community|og|genesis`
   - `wiki_get_page`: `anon|community|og|genesis`
   - `wiki_stats`: `anon|community|og|genesis`
+  - `wiki_list_fields`: `anon|community|og|genesis`
   - `wiki_get_field_status`: `anon|community|og|genesis`
   - `wiki_get_collection_context`: `anon|community|og|genesis`
   - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> quarantine`, `og/genesis -> published`)
