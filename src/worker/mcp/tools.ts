@@ -538,7 +538,7 @@ export function registerTools(options: {
               defaults: {
                 scope: "wiki.contribute wiki.review chronicle.refresh collection.reindex",
               },
-              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier. Persist oauth_client.code_verifier from flow/start for /mcp/oauth/token exchange.",
+              note: "If scope is omitted, MCP applies the full supported scope set; effective access is still reduced by tier. Persist oauth_client.code_verifier from flow/start for /mcp/oauth/token exchange. redirect_uri must be your client callback (never /mcp/oauth/callback).",
             },
             token: {
               content_type: "application/x-www-form-urlencoded",
@@ -565,6 +565,10 @@ export function registerTools(options: {
               "code=<code from callback URL>",
               "redirect_uri=<same redirect_uri used in register/flow_start>",
               "code_verifier=<oauth_client.code_verifier from /mcp/oauth/flow/start>",
+            ],
+            common_mistakes: [
+              "Do not use the /mcp/oauth/callback URL as redirect_uri when registering the client.",
+              "Do not exchange Discord callback code directly; exchange the authorization code returned to your client redirect_uri.",
             ],
             request_format: "POST /mcp/oauth/token with application/x-www-form-urlencoded",
             success_path: "Use returned access_token as Authorization: Bearer <token> in MCP calls; otherwise tier stays anon.",

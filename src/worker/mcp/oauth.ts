@@ -674,6 +674,20 @@ export async function handleMcpFlowStartRoute(
   if (!input?.client_id || !input.redirect_uri) {
     return oauthError(400, "invalid_flow_start_request", "client_id and redirect_uri are required.", false)
   }
+  let redirectUrl: URL
+  try {
+    redirectUrl = new URL(input.redirect_uri)
+  } catch {
+    return oauthError(400, "invalid_redirect_uri", "redirect_uri must be a valid absolute URL.", false)
+  }
+  if (redirectUrl.pathname === MCP_OAUTH_PATHS.callback) {
+    return oauthError(
+      400,
+      "invalid_redirect_uri",
+      "redirect_uri cannot be /mcp/oauth/callback. Use your client callback URL.",
+      false
+    )
+  }
 
   const clientState = input.state?.trim() || crypto.randomUUID().replaceAll("-", "")
   const generatedClientCodeVerifier = !input.code_challenge
@@ -691,7 +705,7 @@ export async function handleMcpFlowStartRoute(
   synth.search = ""
   synth.searchParams.set("response_type", "code")
   synth.searchParams.set("client_id", input.client_id)
-  synth.searchParams.set("redirect_uri", input.redirect_uri)
+  synth.searchParams.set("redirect_uri", redirectUrl.toString())
   synth.searchParams.set("state", clientState)
   synth.searchParams.set("code_challenge", clientCodeChallenge)
   synth.searchParams.set("code_challenge_method", input.code_challenge_method ?? "S256")
@@ -770,7 +784,7 @@ export async function handleMcpFlowStartRoute(
     status_endpoint: statusEndpoint,
     oauth_client: {
       client_id: input.client_id,
-      redirect_uri: input.redirect_uri,
+      redirect_uri: redirectUrl.toString(),
       state: clientState,
       code_challenge_method: "S256",
       code_verifier: generatedClientCodeVerifier ? clientCodeVerifier : null,
