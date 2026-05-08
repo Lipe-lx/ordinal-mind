@@ -35,6 +35,9 @@ export interface McpOAuthFlowRecord {
     error?: string
     hint?: string
     retryable?: boolean
+    authorization_code?: string
+    client_state?: string
+    redirect_to?: string
   }
 }
 
@@ -76,6 +79,9 @@ type FlowUpdateBody = {
   error?: string
   hint?: string
   retryable?: boolean
+  authorization_code?: string
+  client_state?: string
+  redirect_to?: string
 }
 
 type StoredState = {
@@ -91,9 +97,16 @@ type ConsumedMarker = {
 
 const CONSUMED_MARKER_TTL_MS = 60 * 1000
 
-const DurableObjectBase = (globalThis as { DurableObject?: new (...args: any[]) => any }).DurableObject
+type DurableObjectLikeCtor = new (
+  ctx: DurableObjectState,
+  env?: unknown
+) => { ctx: DurableObjectState }
+
+const DurableObjectBase: DurableObjectLikeCtor = (
+  globalThis as { DurableObject?: DurableObjectLikeCtor }
+).DurableObject
   ?? class {
-    protected ctx: DurableObjectState
+    ctx: DurableObjectState
     constructor(ctx: DurableObjectState) {
       this.ctx = ctx
     }
@@ -151,10 +164,10 @@ export class McpOAuthStateDO extends DurableObjectBase {
         return json({ ok: false, error: "invalid_consume_payload" }, 400)
       }
       const now = Date.now()
-      const outcome = await this.kv.transaction(async (txn) => {
-        const row = await txn.get<StoredState>(body.state)
+      const outcome = await this.kv.transaction(async (txn: DurableObjectTransaction) => {
+        const row = await txn.get(body.state) as StoredState | undefined
         if (!row) {
-          const consumed = await txn.get<ConsumedMarker>(this.consumedKey(body.state))
+          const consumed = await txn.get(this.consumedKey(body.state)) as ConsumedMarker | undefined
           if (consumed && consumed.expires_at > now) {
             const sameFingerprint = Boolean(
               consumed.code_fingerprint
@@ -178,10 +191,10 @@ export class McpOAuthStateDO extends DurableObjectBase {
           expires_at: now + CONSUMED_MARKER_TTL_MS,
           code_fingerprint: body.code_fingerprint ?? null,
         } satisfies ConsumedMarker)
-        const linkedFlowId = await txn.get<string>(this.stateFlowKey(body.state))
+        const linkedFlowId = await txn.get(this.stateFlowKey(body.state)) as string | undefined
         if (linkedFlowId) {
           const flowKey = this.flowKey(linkedFlowId)
-          const flow = await txn.get<McpOAuthFlowRecord>(flowKey)
+          const flow = await txn.get(flowKey) as McpOAuthFlowRecord | undefined
           if (flow) {
             const updatedAt = this.nowIso()
             flow.status = "callback_received"
@@ -200,7 +213,7 @@ export class McpOAuthStateDO extends DurableObjectBase {
       if (!body?.state) {
         return json({ ok: false, error: "invalid_peek_payload" }, 400)
       }
-      const row = await this.kv.get<StoredState>(body.state)
+      const row = await this.kv.get(body.state) as StoredState | undefined
       if (!row) return json({ ok: false, cause: "missing" }, 404)
       return json({ ok: true, payload: row.payload, expires_at: row.expires_at })
     }
@@ -232,7 +245,7 @@ export class McpOAuthStateDO extends DurableObjectBase {
       if (!body?.flow_id) {
         return json({ ok: false, error: "invalid_flow_status_payload" }, 400)
       }
-      const flow = await this.kv.get<McpOAuthFlowRecord>(this.flowKey(body.flow_id))
+      const flow = await this.kv.get(this.flowKey(body.flow_id)) as McpOAuthFlowRecord | undefined
       if (!flow) return json({ ok: false, error: "flow_not_found" }, 404)
       if (flow.expires_at <= Date.now() && flow.status !== "token_ready" && flow.status !== "cancelled") {
         flow.status = "expired"
@@ -247,9 +260,9 @@ export class McpOAuthStateDO extends DurableObjectBase {
       if (!body?.state) {
         return json({ ok: false, error: "invalid_flow_by_state_payload" }, 400)
       }
-      const flowId = await this.kv.get<string>(this.stateFlowKey(body.state))
+      const flowId = await this.kv.get(this.stateFlowKey(body.state)) as string | undefined
       if (!flowId) return json({ ok: false, error: "flow_not_found" }, 404)
-      const flow = await this.kv.get<McpOAuthFlowRecord>(this.flowKey(flowId))
+      const flow = await this.kv.get(this.flowKey(flowId)) as McpOAuthFlowRecord | undefined
       if (!flow) return json({ ok: false, error: "flow_not_found" }, 404)
       return json({ ok: true, flow })
     }
@@ -260,7 +273,7 @@ export class McpOAuthStateDO extends DurableObjectBase {
         return json({ ok: false, error: "invalid_flow_update_payload" }, 400)
       }
       const key = this.flowKey(body.flow_id)
-      const flow = await this.kv.get<McpOAuthFlowRecord>(key)
+      const flow = await this.kv.get(key) as McpOAuthFlowRecord | undefined
       if (!flow) return json({ ok: false, error: "flow_not_found" }, 404)
       flow.status = body.status
       flow.updated_at = this.nowIso()
@@ -269,6 +282,15 @@ export class McpOAuthStateDO extends DurableObjectBase {
           error: body.error,
           hint: body.hint,
           retryable: body.retryable,
+          authorization_code: body.authorization_code,
+          client_state: body.client_state,
+          redirect_to: body.redirect_to,
+        }
+      } else if (body.authorization_code || body.client_state || body.redirect_to) {
+        flow.result = {
+          authorization_code: body.authorization_code,
+          client_state: body.client_state,
+          redirect_to: body.redirect_to,
         }
       }
       if (body.status === "token_ready") {
@@ -280,7 +302,7 @@ export class McpOAuthStateDO extends DurableObjectBase {
 
     if (request.method === "POST" && url.pathname === "/sweep") {
       const now = Date.now()
-      const listed = await this.kv.list<StoredState>()
+      const listed = await this.kv.list() as { entries: () => IterableIterator<[string, StoredState]> }
       let deleted = 0
       for (const [key, value] of listed.entries()) {
         if (value.expires_at <= now) {

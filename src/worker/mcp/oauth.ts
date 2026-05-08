@@ -408,7 +408,14 @@ async function doFlowUpdate(
   ns: DurableObjectNamespace,
   flowId: string,
   status: McpOAuthFlowStatus,
-  result?: { error?: string; hint?: string; retryable?: boolean }
+  result?: {
+    error?: string
+    hint?: string
+    retryable?: boolean
+    authorization_code?: string
+    client_state?: string
+    redirect_to?: string
+  }
 ): Promise<void> {
   await doFetch(ns, "/flow/update", {
     flow_id: flowId,
@@ -416,6 +423,9 @@ async function doFlowUpdate(
     error: result?.error,
     hint: result?.hint,
     retryable: result?.retryable,
+    authorization_code: result?.authorization_code,
+    client_state: result?.client_state,
+    redirect_to: result?.redirect_to,
   })
 }
 
@@ -1026,7 +1036,20 @@ export async function handleMcpCallbackRoute(
     })
 
     if (flowId) {
-      await doFlowUpdate(stateDo, flowId, "token_ready")
+      let authorizationCode: string | undefined
+      let clientState: string | undefined
+      try {
+        const redirectUrl = new URL(redirectTo)
+        authorizationCode = redirectUrl.searchParams.get("code") ?? undefined
+        clientState = redirectUrl.searchParams.get("state") ?? undefined
+      } catch {
+        // Keep flow token_ready even if redirect URL parsing fails.
+      }
+      await doFlowUpdate(stateDo, flowId, "token_ready", {
+        authorization_code: authorizationCode,
+        client_state: clientState,
+        redirect_to: redirectTo,
+      })
     }
     return redirect(redirectTo, 302, { "Set-Cookie": clearStateCookie })
   } catch (error) {

@@ -113,8 +113,18 @@ class FakeStateDoNamespace {
           if (!flow) return new Response(JSON.stringify({ ok: false, error: "flow_not_found" }), { status: 404 })
           flow.status = body.status
           flow.updated_at = new Date().toISOString()
-          if (body.error || body.hint || body.retryable !== undefined) {
-            flow.result = { error: body.error, hint: body.hint, retryable: body.retryable }
+          if (
+            body.error || body.hint || body.retryable !== undefined
+            || body.authorization_code || body.client_state || body.redirect_to
+          ) {
+            flow.result = {
+              error: body.error,
+              hint: body.hint,
+              retryable: body.retryable,
+              authorization_code: body.authorization_code,
+              client_state: body.client_state,
+              redirect_to: body.redirect_to,
+            }
           }
           self.flows.set(body.flow_id, flow)
           return new Response(JSON.stringify({ ok: true, flow }), { status: 200 })
@@ -213,6 +223,7 @@ describe("MCP OAuth flow sessions", () => {
     const statusBody = await statusRes.json() as any
     expect(statusRes.status).toBe(200)
     expect(statusBody.flow.status).toBe("token_ready")
+    expect(statusBody.flow.result.authorization_code).toBe("ok")
   })
 
   it("cancel marks flow as cancelled", async () => {

@@ -577,6 +577,7 @@ export function registerTools(options: {
             ],
             request_format: "POST /mcp/oauth/token with application/x-www-form-urlencoded",
             success_path: "Use returned access_token as Authorization: Bearer <token> in MCP calls; otherwise tier stays anon.",
+            flow_status_hint: "If your client cannot easily capture browser callback URLs, read flow.status=token_ready and consume flow.result.authorization_code from /mcp/oauth/flow/status.",
           },
           agent_best_practices: [
             "Always start a fresh flow session using /mcp/oauth/flow/start.",
