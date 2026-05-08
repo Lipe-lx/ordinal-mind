@@ -50,6 +50,22 @@ class NeverConsistentKv {
   async delete(): Promise<void> {}
 }
 
+class RecordingKv {
+  store = new Map<string, string>()
+
+  async get(key: string): Promise<string | null> {
+    return this.store.get(key) ?? null
+  }
+
+  async put(key: string, value: string): Promise<void> {
+    this.store.set(key, value)
+  }
+
+  async delete(key: string): Promise<void> {
+    this.store.delete(key)
+  }
+}
+
 function createEnvWithKv(kv: KVNamespace): Env {
   return {
     CHRONICLES_KV: { get: async () => null, put: async () => {} } as any,
@@ -127,5 +143,31 @@ describe("MCP OAuth callback state handling", () => {
     expect(callbackRes.status).toBe(302)
     expect(callbackRes.headers.get("Location")).toContain("https://client.example/callback")
     expect(callbackRes.headers.get("Set-Cookie")).toContain("ordinal_mind_mcp_oauth_state=;")
+  })
+
+  it("recovers state from embedded signed state token without KV/cookie", async () => {
+    const kv = new RecordingKv() as any
+    const env = createEnvWithKv(kv)
+    const oauthApi = {
+      parseAuthRequest: vi.fn(async () => ({ scope: ["wiki.contribute"] })),
+      completeAuthorization: vi.fn(async () => ({ redirectTo: "https://client.example/callback?code=abc" })),
+    }
+
+    const authorizeReq = new Request("https://ordinalmind.com/mcp/oauth/authorize?response_type=code&client_id=test")
+    const authorizeRes = await handleMcpAuthorizeRoute(authorizeReq, env, oauthApi as any)
+    const location = authorizeRes.headers.get("Location") ?? ""
+    const discordUrl = new URL(location)
+    const state = discordUrl.searchParams.get("state")
+
+    expect(authorizeRes.status).toBe(302)
+    expect(state?.startsWith("mcp2.")).toBe(true)
+
+    const callbackReq = new Request(
+      `https://ordinalmind.com/mcp/oauth/callback?code=discord-code-1&state=${encodeURIComponent(state ?? "")}`
+    )
+    const callbackRes = await handleMcpCallbackRoute(callbackReq, env, oauthApi as any)
+
+    expect(callbackRes.status).toBe(302)
+    expect(callbackRes.headers.get("Location")).toContain("https://client.example/callback")
   })
 })
