@@ -8,7 +8,7 @@ import type {
 } from "../../app/lib/types"
 import type { Env } from "../index"
 import { buildConsolidation } from "./consolidate"
-import { CANONICAL_FIELDS, isFieldAllowedForSlug } from "./contribute"
+import { CANONICAL_FIELDS, isFieldAllowedForSlug, isInscriptionId } from "./contribute"
 import { buildCollectionSlugAliases, normalizeCollectionSlugInput, toCollectionWikiPageSlug } from "./slugAliases"
 
 const MAX_SOURCE_EVENT_NODES = 24
@@ -41,6 +41,7 @@ interface WikiPageRow {
 
 interface ContributionRow {
   id: string
+  collection_slug: string
   field: string
   value: string
   confidence: string
@@ -132,8 +133,9 @@ export async function buildCollectionGraph(
   }
   const contribPlaceholders = contributionSlugs.map(() => "?").join(", ")
 
-  const [consolidated, pageRows, contributionRows] = await Promise.all([
+  const [consolidated, focusConsolidated, pageRows, contributionRows] = await Promise.all([
     buildConsolidation(normalizedSlug, env),
+    normalizedFocus ? buildConsolidation(normalizedFocus, env) : Promise.resolve(null),
     env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,
              cross_refs_json, source_event_ids_json, generated_at,
@@ -141,7 +143,7 @@ export async function buildCollectionGraph(
       FROM wiki_pages
     `).all<WikiPageRow>(),
     env.DB.prepare(`
-      SELECT id, field, value, confidence, verifiable,
+      SELECT id, collection_slug, field, value, confidence, verifiable,
              contributor_id, og_tier, status, created_at
       FROM wiki_contributions
       WHERE collection_slug IN (${contribPlaceholders})
@@ -251,52 +253,105 @@ export async function buildCollectionGraph(
     })
   }
 
-  const contributionsByField = new Map<string, ContributionRow[]>()
-  for (const row of contributionRows.results ?? []) {
-    const list = contributionsByField.get(row.field) ?? []
-    list.push(row)
-    contributionsByField.set(row.field, list)
+  // 1.2 Inscription-specific fields for the focus node
+  if (focusConsolidated && focusPageSlug && normalizedFocus) {
+    const focusSlug: string = normalizedFocus
+    const focusFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, focusSlug))
+    for (const field of focusFields) {
+      const fieldState = focusConsolidated.narrative[field]
+      // Only show field nodes for inscriptions if they actually have data (to avoid clutter)
+      if (fieldState && fieldState.contributions.length > 0) {
+        const fieldNodeId = buildFieldNodeId(focusSlug, field)
+        addNode({
+          id: fieldNodeId,
+          kind: "field",
+          label: formatFieldLabel(field),
+          status: resolveFieldStatus(fieldState),
+          parent_id: focusPageSlug,
+          description: fieldState.canonical_value ?? "No published value yet.",
+          metadata: {
+            field,
+            resolved_by_tier: fieldState.resolved_by_tier ?? "none",
+            contribution_count: fieldState.contributions.length ?? 0,
+            canonical_value: fieldState.canonical_value,
+            scope: "inscription"
+          },
+        })
+        addEdge({
+          id: `${focusPageSlug}->${fieldNodeId}:has_field`,
+          kind: "has_field",
+          source: focusPageSlug,
+          target: fieldNodeId,
+          status: resolveFieldStatus(fieldState),
+          label: "field",
+          metadata: { field },
+        })
+      }
+    }
   }
 
-  for (const field of allowedFields) {
-    const fieldContributions = (contributionsByField.get(field) ?? []).slice().sort(sortContributions)
-    const fieldState = consolidated.narrative[field]
-    const fieldNodeId = buildFieldNodeId(normalizedSlug, field)
+  const contributionsBySlugField = new Map<string, ContributionRow[]>()
+  for (const row of contributionRows.results ?? []) {
+    // Note: row.collection_slug comes from the DB query result which was recently updated to fetch both
+    const key = `${row.collection_slug}:${row.field}`
+    const list = contributionsBySlugField.get(key) ?? []
+    list.push(row)
+    contributionsBySlugField.set(key, list)
+  }
 
-    for (const row of fieldContributions) {
-      const claimNodeId = buildClaimNodeId(normalizedSlug, row)
-      const claimStatus = resolveClaimStatus(fieldState, row)
-      addNode({
-        id: claimNodeId,
-        kind: "claim",
-        label: truncateLabel(row.value, 96),
-        status: claimStatus,
-        parent_id: fieldNodeId,
-        description: row.value,
-        metadata: {
-          field,
-          contribution_id: row.id,
-          og_tier: row.og_tier,
-          confidence: row.confidence,
-          verifiable: Boolean(row.verifiable),
-          contributor_id: row.contributor_id,
-          created_at: row.created_at,
-          moderation_status: row.status,
-        },
-      })
-      addEdge({
-        id: `${fieldNodeId}->${claimNodeId}:has_claim`,
-        kind: "has_claim",
-        source: fieldNodeId,
-        target: claimNodeId,
-        status: claimStatus,
-        label: row.og_tier,
-        metadata: {
-          field,
-          contribution_id: row.id,
-        },
-      })
+  const buildFieldClaims = (targetSlug: string, targetConsolidated: ConsolidatedCollection) => {
+    const fields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, targetSlug))
+    for (const field of fields) {
+      const key = `${targetSlug}:${field}`
+      const fieldContributions = (contributionsBySlugField.get(key) ?? []).slice().sort(sortContributions)
+      const fieldState = targetConsolidated.narrative[field]
+      const fieldNodeId = buildFieldNodeId(targetSlug, field)
+
+      // Skip empty inscription fields in the graph to avoid clutter
+      if (isInscriptionId(targetSlug) && fieldContributions.length === 0) continue
+
+      for (const row of fieldContributions) {
+        const claimNodeId = buildClaimNodeId(targetSlug, row)
+        const claimStatus = resolveClaimStatus(fieldState, row)
+        addNode({
+          id: claimNodeId,
+          kind: "claim",
+          label: truncateLabel(row.value, 96),
+          status: claimStatus,
+          parent_id: fieldNodeId,
+          description: row.value,
+          metadata: {
+            field,
+            contribution_id: row.id,
+            og_tier: row.og_tier,
+            confidence: row.confidence,
+            verifiable: Boolean(row.verifiable),
+            contributor_id: row.contributor_id,
+            created_at: row.created_at,
+            moderation_status: row.status,
+          },
+        })
+        addEdge({
+          id: `${fieldNodeId}->${claimNodeId}:has_claim`,
+          kind: "has_claim",
+          source: fieldNodeId,
+          target: claimNodeId,
+          status: claimStatus,
+          label: row.og_tier,
+          metadata: {
+            field,
+            contribution_id: row.id,
+          },
+        })
+      }
     }
+  }
+
+  // Build claims for both collection and focus inscription
+  buildFieldClaims(normalizedSlug, consolidated)
+  if (focusConsolidated && focusPageSlug && normalizedFocus) {
+    const focusSlug: string = normalizedFocus
+    buildFieldClaims(focusSlug, focusConsolidated)
   }
 
   const pageEventIds = new Map<string, string[]>()
