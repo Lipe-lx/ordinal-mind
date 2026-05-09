@@ -83,6 +83,20 @@ Rules:
 
 type SeedExtractionPhase = "collection" | "inscription"
 
+function normalizeCollectionSlugForSeed(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.startsWith("collection:") ? trimmed.slice("collection:".length) : trimmed
+}
+
+function resolveCollectionSlug(chronicle: Chronicle): string | null {
+  // Prefer curated registry slug when available to avoid market-overlay alias drift
+  // (e.g., hyphen/underscore variants creating separate wiki records).
+  return normalizeCollectionSlugForSeed(chronicle.collection_context.registry.match?.slug)
+    ?? normalizeCollectionSlugForSeed(chronicle.collection_context.market.match?.collection_slug)
+}
+
 // ---------------------------------------------------------------------------
 // Prompt Builder
 // ---------------------------------------------------------------------------
@@ -94,9 +108,7 @@ function buildSeedPrompt(
   excludedScopeFieldKeys: Set<string>
 ): string {
   const collectionSlug =
-    chronicle.collection_context.market.match?.collection_slug ??
-    chronicle.collection_context.registry.match?.slug ??
-    null
+    resolveCollectionSlug(chronicle)
 
   const collectionName =
     chronicle.collection_context.profile?.name ??
@@ -225,10 +237,7 @@ function validateExtractedField(
   if (isCollectionOnly && scope !== "collection") return null
 
   // Resolve the correct slug for this field
-  const collectionSlug =
-    chronicle.collection_context.market.match?.collection_slug ??
-    chronicle.collection_context.registry.match?.slug ??
-    null
+  const collectionSlug = resolveCollectionSlug(chronicle)
 
   const inscriptionId = chronicle.meta.inscription_id
 
@@ -448,10 +457,7 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
     return
   }
 
-  const collectionSlug =
-    chronicle.collection_context.market.match?.collection_slug ??
-    chronicle.collection_context.registry.match?.slug ??
-    null
+  const collectionSlug = resolveCollectionSlug(chronicle)
 
   // Need at least one slug context to seed anything useful
   if (!collectionSlug && !chronicle.meta.inscription_id) {
@@ -595,7 +601,11 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
 
     const label =
       submitted === 0
-        ? "Wiki seed complete (no deterministic updates needed)."
+        ? (protectedByGenesis > 0
+            ? "Wiki seed complete (fields protected by Genesis human consensus)."
+            : duplicates > 0
+              ? "Wiki seed complete (fields already synchronized)."
+              : "Wiki seed complete (no deterministic updates needed).")
         : `Wiki seed synced ${submitted} field${submitted !== 1 ? "s" : ""} with system Genesis authority.`
 
     onProgress?.({

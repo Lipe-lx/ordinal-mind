@@ -4,6 +4,7 @@ import { getWikiSchemaFailure, isMissingWikiSchemaError, toWikiToolUnavailable }
 import { isInscriptionId } from "./contribute"
 import { performWebSearch } from "../agents/webResearch"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput, toCollectionWikiPageSlug } from "./slugAliases"
 
 export async function handleWikiTool(toolName: string, request: Request, env: Env): Promise<Response> {
   try {
@@ -221,8 +222,13 @@ async function getCollectionContext(input: Record<string, unknown>, env: Env): P
     if (schemaFailure) return toWikiToolUnavailable(schemaFailure)
     if (!env.DB) return { ok: false, error: "wiki_db_unavailable", partial: true }
 
-    const wikiSlug = `collection:${collectionSlug}`
-    const page = await env.DB.prepare(`
+    const normalizedSlug = normalizeCollectionSlugInput(collectionSlug)
+    const aliases = buildCollectionSlugAliases(normalizedSlug)
+    const pageAliases = aliases.map(toCollectionWikiPageSlug)
+
+    let page: Record<string, unknown> | null = null
+    for (const wikiSlug of pageAliases) {
+      page = await env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,
              cross_refs_json, source_event_ids_json, generated_at,
              byok_provider, unverified_count, view_count, updated_at
@@ -230,21 +236,24 @@ async function getCollectionContext(input: Record<string, unknown>, env: Env): P
       WHERE slug = ?
       LIMIT 1
     `)
-      .bind(wikiSlug)
-      .first<Record<string, unknown>>()
+        .bind(wikiSlug)
+        .first<Record<string, unknown>>()
+      if (page) break
+    }
 
     let stats: { count: number; first_seen: string | null; last_seen: string | null } | null
 
-    if (isInscriptionId(collectionSlug)) {
+    if (isInscriptionId(normalizedSlug)) {
       stats = await env.DB.prepare(`
         SELECT 1 as count, timestamp as first_seen, timestamp as last_seen
         FROM raw_chronicle_events
         WHERE inscription_id = ? AND event_type = 'genesis'
         LIMIT 1
       `)
-        .bind(collectionSlug)
+        .bind(normalizedSlug)
         .first()
     } else {
+      const statPlaceholders = aliases.map(() => "?").join(", ")
       stats = await env.DB.prepare(`
         SELECT COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
         FROM raw_chronicle_events
@@ -254,19 +263,19 @@ async function getCollectionContext(input: Record<string, unknown>, env: Env): P
             FROM raw_chronicle_events 
             WHERE event_type = 'collection_link' 
               AND (
-                json_extract(metadata_json, '$.name') = ?
-                OR json_extract(metadata_json, '$.parent_inscription_id') = ?
+                json_extract(metadata_json, '$.name') IN (${statPlaceholders})
+                OR json_extract(metadata_json, '$.parent_inscription_id') IN (${statPlaceholders})
               )
           )
       `)
-        .bind(collectionSlug, collectionSlug)
+        .bind(...aliases, ...aliases)
         .first()
     }
 
     return {
       ok: true,
       source: "wiki_db",
-      collection_slug: collectionSlug,
+      collection_slug: normalizedSlug,
       collection_size: stats?.count ?? 0,
       collection_size_source: "raw_chronicle_events.genesis",
       collection_first_seen: stats?.first_seen ?? null,

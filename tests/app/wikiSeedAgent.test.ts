@@ -34,6 +34,34 @@ function buildChronicle() {
   } as any
 }
 
+function buildChronicleWithSlugs(slugs: { market?: string | null; registry?: string | null }) {
+  return {
+    meta: {
+      inscription_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0",
+      inscription_number: 123,
+    },
+    collection_context: {
+      market: {
+        match: slugs.market
+          ? {
+              collection_slug: slugs.market,
+              collection_name: "Test Seed",
+            }
+          : null,
+      },
+      registry: {
+        match: slugs.registry
+          ? { slug: slugs.registry }
+          : null,
+      },
+      profile: null,
+      presentation: {
+        primary_label: "Test Seed",
+      },
+    },
+  } as any
+}
+
 function mockConsolidatedResponse(canonicalValue: string | null) {
   vi.stubGlobal("fetch", vi.fn(async () => {
     const payload = canonicalValue
@@ -142,7 +170,7 @@ describe("wikiSeedAgent", () => {
 
     expect(submitWikiContribution).toHaveBeenCalledTimes(2)
     const slugs = vi.mocked(submitWikiContribution).mock.calls.map((call) => call?.[0]?.data?.collection_slug)
-    expect(slugs).toContain("collection:test-seed")
+    expect(slugs).toContain("test-seed")
     expect(slugs).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0")
   })
 
@@ -297,7 +325,65 @@ describe("wikiSeedAgent", () => {
 
     expect(submitWikiContribution).toHaveBeenCalledTimes(2)
     const payloads = vi.mocked(submitWikiContribution).mock.calls.map((call) => call?.[0]?.data)
-    expect(payloads.some((data) => data?.field === "founder" && data?.collection_slug === "collection:test-seed")).toBe(true)
+    expect(payloads.some((data) => data?.field === "founder" && data?.collection_slug === "test-seed")).toBe(true)
     expect(payloads.some((data) => data?.field === "inscriber" && data?.collection_slug === "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0")).toBe(true)
+  })
+
+  it("prefers curated registry slug over market alias for collection writes", async () => {
+    mockConsolidatedResponse(null)
+    vi.mocked(runByokPrompt).mockResolvedValue("{}")
+    vi.mocked(parseFirstJsonObject).mockReturnValue({
+      fields: [
+        {
+          field: "founder",
+          value: "Slug Priority Founder",
+          verifiable: true,
+          scope: "collection",
+        },
+      ],
+    })
+    vi.mocked(submitWikiContribution).mockResolvedValue({ ok: true, status: "published" })
+
+    await runWikiSeedAgent({
+      narrative: "Slug Priority Founder is the founder.",
+      chronicle: buildChronicleWithSlugs({
+        market: "the-dishonorables",
+        registry: "the_dishonorables",
+      }),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+    })
+
+    expect(submitWikiContribution).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.collection_slug).toBe("the_dishonorables")
+  })
+
+  it("strips collection: prefix from curated registry slug", async () => {
+    mockConsolidatedResponse(null)
+    vi.mocked(runByokPrompt).mockResolvedValue("{}")
+    vi.mocked(parseFirstJsonObject).mockReturnValue({
+      fields: [
+        {
+          field: "founder",
+          value: "Prefix Founder",
+          verifiable: true,
+          scope: "collection",
+        },
+      ],
+    })
+    vi.mocked(submitWikiContribution).mockResolvedValue({ ok: true, status: "published" })
+
+    await runWikiSeedAgent({
+      narrative: "Prefix Founder is the founder.",
+      chronicle: buildChronicleWithSlugs({
+        market: null,
+        registry: "collection:the_dishonorables",
+      }),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+    })
+
+    expect(submitWikiContribution).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.collection_slug).toBe("the_dishonorables")
   })
 })

@@ -14,6 +14,7 @@
 import type { Env } from "../index"
 import { CANONICAL_FIELDS, isFieldAllowedForSlug, isInscriptionId, type CanonicalField } from "./contribute"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
 import type {
   ConsolidatedCollection,
   ConsolidatedField,
@@ -71,16 +72,22 @@ function deduplicateByNormalizedValue(rows: DBContributionRow[]): DBContribution
 export async function buildConsolidation(slug: string, env: Env): Promise<ConsolidatedCollection> {
   if (!env.DB) throw new Error("wiki_db_unavailable")
 
+  const normalizedInputSlug = normalizeCollectionSlugInput(slug)
+  const aliasSlugs = isInscriptionId(normalizedInputSlug)
+    ? [normalizedInputSlug]
+    : buildCollectionSlugAliases(normalizedInputSlug)
+  const slugPlaceholders = aliasSlugs.map(() => "?").join(", ")
+
   const rows = await env.DB.prepare(`
     SELECT id, field, value, value_norm, contributor_id, og_tier, created_at
     FROM wiki_contributions
-    WHERE collection_slug = ? AND status = 'published'
+    WHERE collection_slug IN (${slugPlaceholders}) AND status = 'published'
   `)
-    .bind(slug)
+    .bind(...aliasSlugs)
     .all<DBContributionRow>()
 
   const contributionsByField = new Map<CanonicalField, DBContributionRow[]>()
-  const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, slug))
+  const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, normalizedInputSlug))
   allowedFields.forEach(f => contributionsByField.set(f, []))
 
   const sources: ConsolidatedCollection["sources"] = []
@@ -177,7 +184,7 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
 
   let stats: { count: number; first_seen: string | null; last_seen: string | null; inscription_id: string | null } | null
 
-  if (isInscriptionId(slug)) {
+  if (isInscriptionId(normalizedInputSlug)) {
     // 4.1 Factual stats for a single inscription
     stats = await env.DB.prepare(`
       SELECT 1 as count, timestamp as first_seen, timestamp as last_seen, inscription_id
@@ -185,9 +192,10 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
       WHERE inscription_id = ? AND event_type = 'genesis'
       LIMIT 1
     `)
-      .bind(slug)
+      .bind(normalizedInputSlug)
       .first()
   } else {
+    const statPlaceholders = aliasSlugs.map(() => "?").join(", ")
     // 4.2 Factual stats for a collection (members matched via collection_link)
     stats = await env.DB.prepare(`
       SELECT COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen, inscription_id
@@ -198,17 +206,17 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
           FROM raw_chronicle_events
           WHERE event_type = 'collection_link'
             AND (
-              json_extract(metadata_json, '$.name') = ?
-              OR json_extract(metadata_json, '$.parent_inscription_id') = ?
+              json_extract(metadata_json, '$.name') IN (${statPlaceholders})
+              OR json_extract(metadata_json, '$.parent_inscription_id') IN (${statPlaceholders})
             )
         )
     `)
-      .bind(slug, slug)
+      .bind(...aliasSlugs, ...aliasSlugs)
       .first()
   }
 
   return {
-    collection_slug: slug,
+    collection_slug: normalizedInputSlug,
     sample_inscription_id: stats?.inscription_id ?? null,
     completeness: {
       filled: filledCount,

@@ -14,6 +14,8 @@ import { handleConsolidated } from "../wiki/consolidateEndpoint"
 import { handleCollectionGraph } from "../wiki/graph"
 import { handlePendingReviews, handleReviewDecision } from "../wiki/reviews"
 import { handleWikiExport } from "../wiki/export"
+import { isInscriptionId } from "../wiki/contribute"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput, toCollectionWikiPageSlug } from "../wiki/slugAliases"
 
 export async function handleWikiRoute(request: Request, env: Env): Promise<Response> {
   try {
@@ -80,7 +82,10 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
       if (!env.DB) return json({ ok: false, error: "wiki_db_unavailable", phase: "fail_soft" }, 503)
 
       const slug = decodeURIComponent(path.replace("/api/wiki/", ""))
-      const row = await env.DB.prepare(`
+      const candidates = normalizeWikiPageLookupCandidates(slug)
+      let row: Record<string, unknown> | null = null
+      for (const candidate of candidates) {
+        row = await env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,
              cross_refs_json, source_event_ids_json, generated_at,
              byok_provider, unverified_count, view_count, updated_at
@@ -88,8 +93,10 @@ export async function handleWikiRoute(request: Request, env: Env): Promise<Respo
       WHERE slug = ?
       LIMIT 1
       `)
-        .bind(slug)
-        .first<Record<string, unknown>>()
+          .bind(candidate)
+          .first<Record<string, unknown>>()
+        if (row) break
+      }
 
       if (!row) {
         return json({ ok: false, error: "wiki_page_not_found", slug }, 404)
@@ -154,6 +161,27 @@ function safeJsonParse<T>(value: string, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function normalizeWikiPageLookupCandidates(rawSlug: string): string[] {
+  const trimmed = rawSlug.trim()
+  if (!trimmed) return []
+
+  const candidates = new Set<string>([trimmed])
+  const normalizedCollection = normalizeCollectionSlugInput(trimmed)
+
+  if (normalizedCollection) {
+    for (const alias of buildCollectionSlugAliases(normalizedCollection)) {
+      candidates.add(alias)
+      candidates.add(toCollectionWikiPageSlug(alias))
+    }
+  }
+
+  if (isInscriptionId(trimmed) && !trimmed.startsWith("inscription:")) {
+    candidates.add(`inscription:${trimmed}`)
+  }
+
+  return [...candidates]
 }
 
 function json(data: unknown, status = 200): Response {

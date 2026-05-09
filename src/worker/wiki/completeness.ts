@@ -7,6 +7,7 @@
 
 import type { Env } from "../index"
 import { CANONICAL_FIELDS, type CanonicalField } from "./contribute"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
 
 export interface CollectionCanonicalFields {
   founder: string | null
@@ -52,43 +53,41 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
     return json({ ok: false, error: "wiki_db_unavailable" }, 503)
   }
 
+  const normalizedSlug = normalizeCollectionSlugInput(slug)
+  const aliases = buildCollectionSlugAliases(normalizedSlug)
+  const slugPlaceholders = aliases.map(() => "?").join(", ")
+
   const fields = emptyFields()
 
   try {
-    // Fetch the most recent published contribution per canonical field.
-    // If multiple published contributions exist for the same field,
-    // we take the highest-tier one (genesis > og > community > anon),
-    // then most recent as tiebreaker.
+    // Fetch all published candidates across historical aliases and choose
+    // the highest-tier/most recent row per field in-memory.
     const rows = await env.DB.prepare(`
-      SELECT field, value
+      SELECT field, value, og_tier, created_at, id
       FROM wiki_contributions
-      WHERE collection_slug = ?
+      WHERE collection_slug IN (${slugPlaceholders})
         AND status = 'published'
         AND field IN (${CANONICAL_FIELDS.map(() => "?").join(", ")})
-      GROUP BY field
-      HAVING id = (
-        SELECT id FROM wiki_contributions wc2
-        WHERE wc2.collection_slug = wiki_contributions.collection_slug
-          AND wc2.field = wiki_contributions.field
-          AND wc2.status = 'published'
-        ORDER BY
-          CASE og_tier
-            WHEN 'genesis'   THEN 4
-            WHEN 'og'        THEN 3
-            WHEN 'community' THEN 2
-            ELSE 1
-          END DESC,
-          created_at DESC
-        LIMIT 1
-      )
+      ORDER BY
+        CASE og_tier
+          WHEN 'genesis'   THEN 4
+          WHEN 'og'        THEN 3
+          WHEN 'community' THEN 2
+          ELSE 1
+        END DESC,
+        datetime(created_at) DESC,
+        id DESC
     `)
-      .bind(slug, ...CANONICAL_FIELDS)
+      .bind(...aliases, ...CANONICAL_FIELDS)
       .all<{ field: string; value: string }>()
 
+    const selected = new Set<string>()
     for (const row of rows.results ?? []) {
       const field = row.field as CanonicalField
+      if (selected.has(field)) continue
       if (field in fields) {
         ;(fields as unknown as Record<string, string | null>)[field] = row.value
+        selected.add(field)
       }
     }
   } catch (err) {
@@ -102,7 +101,7 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
   const total = CANONICAL_FIELDS.length
 
   const completeness: CompletenessMap = {
-    collection_slug: slug,
+    collection_slug: normalizedSlug,
     filled,
     total,
     score: total > 0 ? Math.round((filled / total) * 1000) / 1000 : 0,

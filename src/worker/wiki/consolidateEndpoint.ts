@@ -3,6 +3,7 @@
 import type { Env } from "../index"
 import { buildConsolidation } from "./consolidate"
 import type { ConsolidatedCollection } from "../../app/lib/types"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
 
 export interface ConsolidatedSnapshotResult {
   data: ConsolidatedCollection
@@ -39,14 +40,17 @@ async function cleanupLegacyActiveDuplicates(slug: string, env: Env): Promise<bo
   const hasColumns = await hasLazyCleanupColumns(env)
   if (!hasColumns) return false
 
+  const aliases = buildCollectionSlugAliases(slug)
+  const placeholders = aliases.map(() => "?").join(", ")
+
   const rows = await env.DB.prepare(`
     SELECT id, field, status, contributor_key, created_at
     FROM wiki_contributions
-    WHERE collection_slug = ?
+    WHERE collection_slug IN (${placeholders})
       AND status IN ('published', 'quarantine')
     ORDER BY datetime(created_at) DESC, id DESC
   `)
-    .bind(slug)
+    .bind(...aliases)
     .all<LegacyActiveContributionRow>()
 
   const seen = new Set<string>()
@@ -63,14 +67,14 @@ async function cleanupLegacyActiveDuplicates(slug: string, env: Env): Promise<bo
 
   if (duplicateIds.length === 0) return false
 
-  const placeholders = duplicateIds.map(() => "?").join(", ")
+  const duplicatePlaceholders = duplicateIds.map(() => "?").join(", ")
   await env.DB.prepare(`
     UPDATE wiki_contributions
     SET
       status = 'duplicate',
       reviewed_at = COALESCE(reviewed_at, datetime('now')),
       updated_at = datetime('now')
-    WHERE id IN (${placeholders})
+    WHERE id IN (${duplicatePlaceholders})
   `)
     .bind(...duplicateIds)
     .run()
@@ -86,23 +90,29 @@ export async function getConsolidatedSnapshot(
     throw new Error("wiki_db_unavailable")
   }
 
-  const cleanedLegacy = await cleanupLegacyActiveDuplicates(slug, env)
+  const normalizedSlug = normalizeCollectionSlugInput(slug)
+  const aliases = buildCollectionSlugAliases(normalizedSlug)
+
+  const cleanedLegacy = await cleanupLegacyActiveDuplicates(normalizedSlug, env)
   if (cleanedLegacy) {
     await env.DB.prepare(`
       DELETE FROM consolidated_cache
       WHERE collection_slug = ?
     `)
-      .bind(slug)
+      .bind(normalizedSlug)
       .run()
   }
 
-  const cacheRow = await env.DB.prepare(`
+  let cacheRow: { snapshot_json: string; updated_at: string } | null = null
+  if (aliases.length <= 1) {
+    cacheRow = await env.DB.prepare(`
     SELECT snapshot_json, updated_at
     FROM consolidated_cache
     WHERE collection_slug = ?
   `)
-    .bind(slug)
-    .first<{ snapshot_json: string; updated_at: string }>()
+      .bind(normalizedSlug)
+      .first<{ snapshot_json: string; updated_at: string }>()
+  }
 
   if (cacheRow) {
     const updatedTime = new Date(cacheRow.updated_at).getTime()
@@ -121,7 +131,7 @@ export async function getConsolidatedSnapshot(
     }
   }
 
-  const consolidated = await buildConsolidation(slug, env)
+  const consolidated = await buildConsolidation(normalizedSlug, env)
 
   // Seed proativo: se a coleção tem dados, garante que ela exista no índice de busca (wiki_pages)
   // Isso permite que ela seja encontrada no MCP mesmo sem uma narrativa completa.
@@ -132,7 +142,7 @@ export async function getConsolidatedSnapshot(
          source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
       VALUES (?, 'collection', ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
     `)
-      .bind(slug, consolidated.narrative["name"]?.canonical_value || slug)
+      .bind(`collection:${normalizedSlug}`, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
       .run()
       .catch(() => {
         // Erros de seed são ignorados para não interromper a consolidação principal
@@ -152,7 +162,7 @@ export async function getConsolidatedSnapshot(
       updated_at = excluded.updated_at
   `)
     .bind(
-      slug,
+      normalizedSlug,
       JSON.stringify(consolidated),
       consolidated.confidence,
       consolidated.completeness.score,

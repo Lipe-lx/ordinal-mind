@@ -9,6 +9,7 @@ import type {
 import type { Env } from "../index"
 import { buildConsolidation } from "./consolidate"
 import { CANONICAL_FIELDS, isFieldAllowedForSlug } from "./contribute"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput, toCollectionWikiPageSlug } from "./slugAliases"
 
 const MAX_SOURCE_EVENT_NODES = 24
 
@@ -116,9 +117,13 @@ export async function buildCollectionGraph(
     throw new Error("wiki_db_unavailable")
   }
 
-  const collectionWikiSlug = `collection:${slug}`
+  const normalizedSlug = normalizeCollectionSlugInput(slug)
+  const aliasSlugs = buildCollectionSlugAliases(normalizedSlug)
+  const aliasWikiSlugs = new Set(aliasSlugs.map(toCollectionWikiPageSlug))
+  const collectionWikiSlug = toCollectionWikiPageSlug(normalizedSlug)
+  const slugPlaceholders = aliasSlugs.map(() => "?").join(", ")
   const [consolidated, pageRows, contributionRows] = await Promise.all([
-    buildConsolidation(slug, env),
+    buildConsolidation(normalizedSlug, env),
     env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,
              cross_refs_json, source_event_ids_json, generated_at,
@@ -129,19 +134,21 @@ export async function buildCollectionGraph(
       SELECT id, field, value, confidence, verifiable,
              contributor_id, og_tier, status, created_at
       FROM wiki_contributions
-      WHERE collection_slug = ?
+      WHERE collection_slug IN (${slugPlaceholders})
         AND status IN ('published', 'quarantine')
     `)
-      .bind(slug)
+      .bind(...aliasSlugs)
       .all<ContributionRow>(),
   ])
 
   const allPages = (pageRows.results ?? []).map(parseWikiPage)
   const existingPages = new Map(allPages.map((page) => [page.slug, page] as const))
-  const collectionPage = existingPages.get(collectionWikiSlug) ?? null
+  const collectionPage = [collectionWikiSlug, ...aliasWikiSlugs]
+    .map((candidate) => existingPages.get(candidate))
+    .find((page): page is ParsedWikiPage => Boolean(page)) ?? null
   const collectionPages = allPages
     .filter((page) => page.entity_type === "inscription")
-    .filter((page) => page.cross_refs.includes(collectionWikiSlug))
+    .filter((page) => page.cross_refs.some((ref) => aliasWikiSlugs.has(ref)))
     .sort(sortWikiPages)
 
   const warnings: string[] = []
@@ -172,10 +179,10 @@ export async function buildCollectionGraph(
   const rootNodeId = collectionWikiSlug
   addNode(buildCollectionRootNode(consolidated, collectionPage, rootNodeId))
 
-  const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, slug))
+  const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, normalizedSlug))
   for (const field of allowedFields) {
     const consolidatedField = consolidated.narrative[field]
-    const fieldNodeId = buildFieldNodeId(slug, field)
+    const fieldNodeId = buildFieldNodeId(normalizedSlug, field)
     addNode({
       id: fieldNodeId,
       kind: "field",
@@ -211,10 +218,10 @@ export async function buildCollectionGraph(
   for (const field of allowedFields) {
     const fieldContributions = (contributionsByField.get(field) ?? []).slice().sort(sortContributions)
     const fieldState = consolidated.narrative[field]
-    const fieldNodeId = buildFieldNodeId(slug, field)
+    const fieldNodeId = buildFieldNodeId(normalizedSlug, field)
 
     for (const row of fieldContributions) {
-      const claimNodeId = buildClaimNodeId(slug, row)
+      const claimNodeId = buildClaimNodeId(normalizedSlug, row)
       const claimStatus = resolveClaimStatus(fieldState, row)
       addNode({
         id: claimNodeId,
@@ -286,7 +293,7 @@ export async function buildCollectionGraph(
   let unresolvedRefCount = 0
   for (const page of collectionPages) {
     for (const ref of page.cross_refs) {
-      if (ref === collectionWikiSlug) continue
+      if (aliasWikiSlugs.has(ref)) continue
 
       const existing = existingPages.get(ref)
       if (existing) {
