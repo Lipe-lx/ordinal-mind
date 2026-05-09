@@ -135,18 +135,29 @@ export async function getConsolidatedSnapshot(
 
   // Seed proativo: se a coleção tem dados, garante que ela exista no índice de busca (wiki_pages)
   // Isso permite que ela seja encontrada no MCP mesmo sem uma narrativa completa.
-  if (consolidated.completeness.score > 0 && env.DB) {
-    await env.DB.prepare(`
-      INSERT OR IGNORE INTO wiki_pages
-        (slug, entity_type, title, summary, sections_json, cross_refs_json,
-         source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
-      VALUES (?, 'collection', ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
-    `)
-      .bind(`collection:${normalizedSlug}`, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
-      .run()
-      .catch(() => {
-        // Erros de seed são ignorados para não interromper a consolidação principal
-      })
+  if (env.DB) {
+    if (consolidated.completeness.score > 0) {
+      await env.DB.prepare(`
+        INSERT INTO wiki_pages
+          (slug, entity_type, title, summary, sections_json, cross_refs_json,
+           source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
+        VALUES (?, 'collection', ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
+        ON CONFLICT(slug) DO UPDATE SET
+          title = excluded.title,
+          updated_at = excluded.updated_at
+      `)
+        .bind(`collection:${normalizedSlug}`, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
+        .run()
+        .catch(() => {
+          // Erros de seed são ignorados para não interromper a consolidação principal
+        })
+    } else {
+      // Se a completude caiu para zero (ex: após deleção Genesis), removemos o índice de busca
+      await env.DB.prepare(`DELETE FROM wiki_pages WHERE slug = ?`)
+        .bind(`collection:${normalizedSlug}`)
+        .run()
+        .catch(() => {})
+    }
   }
 
   await env.DB.prepare(`

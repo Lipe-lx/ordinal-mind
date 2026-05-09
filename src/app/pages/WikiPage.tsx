@@ -3,16 +3,21 @@ import { useParams, useNavigate, useOutletContext } from "react-router"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ConsolidatedCollection, ConsolidatedField } from "../lib/types"
 import { motion } from "motion/react"
+import { useDiscordIdentity } from "../lib/useDiscordIdentity"
+import { submitWikiContribution } from "../lib/byok/wikiSubmit"
+import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import "../styles/features/wiki/wiki.css"
 
 export function WikiPage() {
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const { setHeaderCenter } = useOutletContext<LayoutOutletContext>()
+  const { identity } = useDiscordIdentity()
   
   const [data, setData] = useState<ConsolidatedCollection | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [prevSlug, setPrevSlug] = useState(slug)
+  const [deletingField, setDeletingField] = useState<string | null>(null)
 
   if (slug !== prevSlug) {
     setPrevSlug(slug)
@@ -50,6 +55,45 @@ export function WikiPage() {
       setHeaderCenter(null)
     }
   }, [slug, setHeaderCenter])
+
+  const handleDeleteField = async (fieldKey: string) => {
+    if (!slug || !data) return
+    if (!confirm(`Are you sure you want to remove all information for "${fieldKey}"? This will mark all published contributions for this field as deleted.`)) {
+      return
+    }
+
+    setDeletingField(fieldKey)
+    try {
+      const result = await submitWikiContribution({
+        data: {
+          collection_slug: slug,
+          field: fieldKey as CanonicalField,
+          value: "",
+          operation: "delete",
+          confidence: "correcting_existing",
+          verifiable: true,
+        },
+        activeThreadId: "system-genesis-removal",
+        prompt: "Manual removal by Genesis role",
+      })
+
+      if (result.ok) {
+        // Refresh data
+        const res = await fetch(`/api/wiki/collection/${slug}/consolidated`)
+        const json = await res.json()
+        if (json.ok) {
+          setData(json.data)
+        }
+      } else {
+        alert(`Failed to delete field: ${result.error}`)
+      }
+    } catch (err) {
+      console.error(err)
+      alert("An unexpected error occurred while deleting.")
+    } finally {
+      setDeletingField(null)
+    }
+  }
 
   const isLoading = !data && !error
 
@@ -137,7 +181,13 @@ export function WikiPage() {
                 <p className="wiki-empty-text">No canonical data verified yet.</p>
               )}
               {Object.values(data.narrative).filter(f => f.status === "canonical").map(field => (
-                <WikiFieldItem key={field.field} field={field} />
+                <WikiFieldItem 
+                  key={field.field} 
+                  field={field} 
+                  showDelete={identity?.tier === "genesis"}
+                  isDeleting={deletingField === field.field}
+                  onDelete={() => handleDeleteField(field.field)}
+                />
               ))}
             </div>
           </div>
@@ -149,7 +199,13 @@ export function WikiPage() {
                 <h2 className="wiki-section-title" style={{ color: "var(--warning)" }}>Disputed Knowledge</h2>
                 <div className="wiki-fields-list">
                   {Object.values(data.narrative).filter(f => f.status === "disputed").map(field => (
-                    <WikiFieldItem key={field.field} field={field} />
+                    <WikiFieldItem 
+                      key={field.field} 
+                      field={field} 
+                      showDelete={identity?.tier === "genesis"}
+                      isDeleting={deletingField === field.field}
+                      onDelete={() => handleDeleteField(field.field)}
+                    />
                   ))}
                 </div>
               </div>
@@ -161,7 +217,13 @@ export function WikiPage() {
                 <h2 className="wiki-section-title">Drafts (Awaiting OG)</h2>
                 <div className="wiki-fields-list">
                   {Object.values(data.narrative).filter(f => f.status === "draft").map(field => (
-                    <WikiFieldItem key={field.field} field={field} />
+                    <WikiFieldItem 
+                      key={field.field} 
+                      field={field} 
+                      showDelete={identity?.tier === "genesis"}
+                      isDeleting={deletingField === field.field}
+                      onDelete={() => handleDeleteField(field.field)}
+                    />
                   ))}
                 </div>
               </div>
@@ -200,7 +262,17 @@ export function WikiPage() {
   )
 }
 
-function WikiFieldItem({ field }: { field: ConsolidatedField }) {
+function WikiFieldItem({ 
+  field, 
+  showDelete, 
+  isDeleting, 
+  onDelete 
+}: { 
+  field: ConsolidatedField, 
+  showDelete?: boolean,
+  isDeleting?: boolean,
+  onDelete?: () => void
+}) {
   return (
     <div className="wiki-field-item">
       <div className="wiki-field-header">
@@ -209,6 +281,25 @@ function WikiFieldItem({ field }: { field: ConsolidatedField }) {
           {field.status === "disputed" && <span className="wiki-badge warning">Disputed</span>}
           {field.status === "canonical" && <span className="wiki-badge success">Canonical</span>}
           <span className={`wiki-tier-badge tier-${field.resolved_by_tier}`}>{field.resolved_by_tier}</span>
+          
+          {showDelete && (
+            <button 
+              className="wiki-field-delete-btn"
+              onClick={onDelete}
+              disabled={isDeleting}
+              title="Remove this field's information"
+            >
+              {isDeleting ? (
+                <span className="loading-spinner-tiny" style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--danger)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18"></path>
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+              )}
+            </button>
+          )}
         </div>
       </div>
       {field.status === "disputed" ? (

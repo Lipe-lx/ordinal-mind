@@ -264,3 +264,37 @@
   font-size: 0.875rem;
   color: var(--text-secondary);
 }
+
+.wiki-field-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  transition: all 0.2s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.3;
+}
+
+.wiki-field-item:hover .wiki-field-delete-btn {
+  opacity: 0.7;
+}
+
+.wiki-field-delete-btn:hover {
+  opacity: 1 !important;
+  color: var(--danger);
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.wiki-field-delete-btn:disabled {
+  opacity: 0.1 !important;
+  cursor: not-allowed;
+}
+
+.wiki-field-delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
