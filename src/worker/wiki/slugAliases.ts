@@ -34,6 +34,9 @@ export function slugifyCollectionName(name: string): string {
 }
 
 export function toCollectionWikiPageSlug(collectionSlug: string): string {
-  return `collection:${normalizeCollectionSlugInput(collectionSlug)}`
+  const normalized = normalizeCollectionSlugInput(collectionSlug)
+  // Inscription ID pattern: 64 hex + i + N
+  const isInscription = /^[a-f0-9]{64}i[0-9]+$/i.test(normalized)
+  return isInscription ? `inscription:${normalized}` : `collection:${normalized}`
 }
 

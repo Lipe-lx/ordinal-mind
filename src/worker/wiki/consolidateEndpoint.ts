@@ -136,17 +136,22 @@ export async function getConsolidatedSnapshot(
   // Proactive seed: if the collection has data, ensure it exists in the search index (wiki_pages)
   // This allows it to be found in MCP even without a full narrative.
   if (env.DB) {
+    const isInscription = /^[a-f0-9]{64}i[0-9]+$/i.test(normalizedSlug)
+    const entityType = isInscription ? "inscription" : "collection"
+    const wikiSlug = `${entityType}:${normalizedSlug}`
+
     if (consolidated.completeness.score > 0) {
       await env.DB.prepare(`
         INSERT INTO wiki_pages
           (slug, entity_type, title, summary, sections_json, cross_refs_json,
            source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
-        VALUES (?, 'collection', ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
+        VALUES (?, ?, ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
         ON CONFLICT(slug) DO UPDATE SET
+          entity_type = excluded.entity_type,
           title = excluded.title,
           updated_at = excluded.updated_at
       `)
-        .bind(`collection:${normalizedSlug}`, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
+        .bind(wikiSlug, entityType, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
         .run()
         .catch(() => {
           // Seed errors are ignored to not interrupt the main consolidation process
@@ -154,7 +159,7 @@ export async function getConsolidatedSnapshot(
     } else {
       // If completeness dropped to zero (e.g., after Genesis deletion), remove from search index
       await env.DB.prepare(`DELETE FROM wiki_pages WHERE slug = ?`)
-        .bind(`collection:${normalizedSlug}`)
+        .bind(wikiSlug)
         .run()
         .catch(() => {})
     }

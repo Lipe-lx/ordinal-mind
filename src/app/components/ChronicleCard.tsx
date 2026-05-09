@@ -75,6 +75,7 @@ export function ChronicleCard({
     ?? chronicle.collection_context.market.satflow_match?.collection_slug
     ?? chronicle.collection_context.market.match?.collection_slug
     ?? chronicle.collection_context.registry.match?.slug
+    ?? chronicle.meta.inscription_id
   const isMobile = useMediaQuery("(max-width: 899px)")
 
   // Built data sources from chronicle response metadata

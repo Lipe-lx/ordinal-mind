@@ -121,7 +121,17 @@ export async function buildCollectionGraph(
   const aliasSlugs = buildCollectionSlugAliases(normalizedSlug)
   const aliasWikiSlugs = new Set(aliasSlugs.map(toCollectionWikiPageSlug))
   const collectionWikiSlug = toCollectionWikiPageSlug(normalizedSlug)
-  const slugPlaceholders = aliasSlugs.map(() => "?").join(", ")
+
+  const normalizedFocus = options.focus?.startsWith("inscription:") 
+    ? options.focus.slice("inscription:".length) 
+    : options.focus
+
+  const contributionSlugs = [...aliasSlugs]
+  if (normalizedFocus && /^[a-f0-9]{64}i[0-9]+$/i.test(normalizedFocus) && !contributionSlugs.includes(normalizedFocus)) {
+    contributionSlugs.push(normalizedFocus)
+  }
+  const contribPlaceholders = contributionSlugs.map(() => "?").join(", ")
+
   const [consolidated, pageRows, contributionRows] = await Promise.all([
     buildConsolidation(normalizedSlug, env),
     env.DB.prepare(`
@@ -134,10 +144,10 @@ export async function buildCollectionGraph(
       SELECT id, field, value, confidence, verifiable,
              contributor_id, og_tier, status, created_at
       FROM wiki_contributions
-      WHERE collection_slug IN (${slugPlaceholders})
+      WHERE collection_slug IN (${contribPlaceholders})
         AND status IN ('published', 'quarantine')
     `)
-      .bind(...aliasSlugs)
+      .bind(...contributionSlugs)
       .all<ContributionRow>(),
   ])
 
