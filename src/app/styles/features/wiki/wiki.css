@@ -173,13 +173,21 @@
   border-radius: var(--radius-lg);
   background: var(--bg-glass);
   border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
   transition: all var(--duration-normal) var(--ease-smooth);
   width: 100%;
+}
+
+.wiki-sidebar-section {
+  background: linear-gradient(135deg, rgba(247, 147, 26, 0.03), rgba(255, 255, 255, 0.01));
+  border-left: 3px solid rgba(247, 147, 26, 0.2);
 }
 
 .wiki-section:hover {
   border-color: var(--border-glass-hover);
   background: var(--bg-glass-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glass-hover);
 }
 
 .wiki-section-header {

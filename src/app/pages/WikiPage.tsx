@@ -272,7 +272,7 @@ export function WikiPage() {
 
           {/* Right Sidebar: Actionable Intel & Gaps */}
           <aside className="wiki-sidebar">
-            <div className="wiki-section" style={{ borderLeft: "2px solid rgba(247, 147, 26, 0.3)", background: "rgba(247, 147, 26, 0.02)" }}>
+            <div className="wiki-section wiki-sidebar-section">
               <header className="wiki-section-header">
                 <h2 className="wiki-section-title" style={{ fontSize: "0.85rem" }}>
                   {activeTab === "drafts" ? "Draft Proposals" : "Missing Data"}
@@ -293,7 +293,7 @@ export function WikiPage() {
                 </div>
               </header>
 
-              <div className="wiki-fields-list" style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+              <div className="wiki-fields-list" style={{ gap: "var(--space-md)" }}>
                 {activeTab === "drafts" ? (
                   <>
                     {Object.values(data.narrative).filter(f => f.status === "draft").length === 0 ? (
