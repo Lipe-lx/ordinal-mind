@@ -169,6 +169,26 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.layout-main::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.layout-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.layout-main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+}
+
+.layout-main::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .layout-footer {
