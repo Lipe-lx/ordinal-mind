@@ -17,6 +17,7 @@ export interface WikiContributionPayload {
   verifiable: boolean
   session_id?: string | null
   source_excerpt?: string
+  id?: string
   /** Forward-compat: WikiExtractData uses source_chat_excerpt; accepted and forwarded as-is. */
   source_chat_excerpt?: string
 }

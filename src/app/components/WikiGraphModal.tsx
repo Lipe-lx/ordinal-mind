@@ -8,6 +8,9 @@ import cytoscapeFcose from "cytoscape-fcose"
 import cytoscapeCola from "cytoscape-cola"
 import { useDeterministicRendering } from "../lib/useDeterministicRendering"
 import { useMediaQuery } from "../lib/useMediaQuery"
+import { useDiscordIdentity } from "../lib/useDiscordIdentity"
+import { submitWikiContribution } from "../lib/byok/wikiSubmit"
+import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import type { WikiGraphNode } from "../lib/types"
 import {
   buildNodeInspector,
@@ -72,28 +75,36 @@ export function WikiGraphModal({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false)
   const [mobileInspectorExpanded, setMobileInspectorExpanded] = useState(false)
-  const [prevOpen, setPrevOpen] = useState(open)
   const deferredSearch = useDeferredValue(filters.search)
-
-  useEffect(() => {
-    if (open && !prevOpen) {
-      setPrevOpen(true)
-      setFilters(createModalFilters(isMobile, deterministicRendering))
-      setPayload(null)
-      setSelectedNodeId(null)
+  const [prevIsMobile, setPrevIsMobile] = useState(isMobile)
+  if (isMobile !== prevIsMobile) {
+    setPrevIsMobile(isMobile)
+    if (!isMobile) {
       setMobileControlsOpen(false)
       setMobileInspectorExpanded(false)
-      if (!collectionSlug) {
-        setError("No collection wiki context is available for this inscription yet.")
-        setLoading(false)
-      } else {
-        setError(null)
-        setLoading(true)
-      }
-    } else if (!open && prevOpen) {
-      setPrevOpen(false)
     }
-  }, [open, prevOpen, collectionSlug, isMobile, deterministicRendering])
+  }
+  const [deletingContributionId, setDeletingContributionId] = useState<string | null>(null)
+  const [prevOpen, setPrevOpen] = useState(open)
+
+  // Sync state when modal opens
+  if (open && !prevOpen) {
+    setPrevOpen(true)
+    setFilters(createModalFilters(isMobile, deterministicRendering))
+    setPayload(null)
+    setSelectedNodeId(null)
+    setMobileControlsOpen(false)
+    setMobileInspectorExpanded(false)
+    if (!collectionSlug) {
+      setError("No collection wiki context is available for this inscription yet.")
+      setLoading(false)
+    } else {
+      setError(null)
+      setLoading(true)
+    }
+  } else if (!open && prevOpen) {
+    setPrevOpen(false)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -167,15 +178,7 @@ export function WikiGraphModal({
     return buildNodeInspector(selectedNode)
   }, [selectedNode])
 
-  useEffect(() => {
-    if (!isMobile) {
-      setMobileControlsOpen(false)
-      setMobileInspectorExpanded(false)
-      return
-    }
-
-    setMobileInspectorExpanded(false)
-  }, [isMobile, selectedNodeId])
+  // Mobile inspector state is managed by Cytoscape events (select/unselect/tap)
 
   const handleFitGraph = () => {
     cyRef.current?.fit(undefined, isMobile ? 64 : 80)
@@ -193,6 +196,52 @@ export function WikiGraphModal({
         fit: { eles: network, padding: 90 },
         duration: 260,
       })
+    }
+  }
+  
+  const { identity } = useDiscordIdentity()
+
+  const handleDeleteContribution = async (node: WikiGraphNode) => {
+    if (!collectionSlug || !node.metadata.contribution_id) return
+    
+    const contribId = node.metadata.contribution_id as string
+    const field = node.metadata.field as CanonicalField
+
+    if (!confirm(`Are you sure you want to delete this specific contribution?`)) {
+      return
+    }
+
+    setDeletingContributionId(contribId)
+    try {
+      const result = await submitWikiContribution({
+        data: {
+          collection_slug: collectionSlug,
+          field: field,
+          value: "",
+          id: contribId,
+          operation: "delete",
+          confidence: "correcting_existing",
+          verifiable: true,
+        },
+        activeThreadId: "system-genesis-graph-removal",
+        prompt: "Manual contribution removal from Graph Atlas by Genesis role",
+      })
+
+      if (result.ok) {
+        // Refresh graph data
+        const freshPayload = await fetchWikiGraph(collectionSlug, { focus: focusSlug })
+        if (freshPayload) {
+          setPayload(freshPayload)
+          setSelectedNodeId(null) // Close inspector as node is gone
+        }
+      } else {
+        alert(`Failed to delete contribution: ${result.error}`)
+      }
+    } catch (err) {
+      console.error(err)
+      alert("An unexpected error occurred while deleting.")
+    } finally {
+      setDeletingContributionId(null)
     }
   }
 
@@ -740,6 +789,23 @@ export function WikiGraphModal({
                         </div>
 
                         <footer className="wiki-graph-inspector-footer">
+                          {selectedNode.kind === "claim" && identity?.tier === "genesis" && (
+                            <button
+                              type="button"
+                              className="btn-danger btn-block mb-sm"
+                              onClick={() => handleDeleteContribution(selectedNode)}
+                              disabled={deletingContributionId === selectedNode.metadata.contribution_id}
+                            >
+                              {deletingContributionId === selectedNode.metadata.contribution_id ? (
+                                <span className="loading-spinner-tiny" style={{ marginRight: "8px" }} />
+                              ) : (
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" style={{ marginRight: "8px", verticalAlign: "middle" }}>
+                                  <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                </svg>
+                              )}
+                              Delete Contribution
+                            </button>
+                          )}
                           {resolveNavigationTarget(selectedNode) && (
                             <button
                               type="button"

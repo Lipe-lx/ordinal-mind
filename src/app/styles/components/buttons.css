@@ -171,3 +171,25 @@
   font-size: 1rem;
   filter: drop-shadow(0 0 5px rgba(247, 147, 26, 0.4));
 }
+
+.btn-danger {
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff4444;
+  border-color: rgba(255, 68, 68, 0.3);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255, 68, 68, 0.2);
+  border-color: #ff4444;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(255, 68, 68, 0.2);
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+.mb-sm {
+  margin-bottom: var(--space-sm);
+}

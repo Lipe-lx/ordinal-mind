@@ -89,6 +89,7 @@ export interface WikiContributionInput {
   verifiable: boolean
   session_id: string
   source_excerpt?: string
+  id?: string
 }
 
 export interface ContributeRequest {
@@ -220,6 +221,7 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
       verifiable: Boolean(c.verifiable),
       session_id: c.session_id as string,
       source_excerpt: typeof c.source_excerpt === "string" ? c.source_excerpt.slice(0, 500) : undefined,
+      id: typeof c.id === "string" ? c.id.trim() : undefined,
     },
     jwt: typeof b.jwt === "string" ? b.jwt : undefined,
   }
@@ -441,13 +443,24 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       const deletionSet = caps.hasUpdatedAt
         ? "status = 'deleted', updated_at = datetime('now')"
         : "status = 'deleted'"
-      await env.DB.prepare(`
-        UPDATE wiki_contributions
-        SET ${deletionSet}
-        WHERE collection_slug = ? AND field = ? AND status = 'published'
-      `)
-        .bind(contribution.collection_slug, contribution.field)
-        .run()
+      
+      if (contribution.id) {
+        await env.DB.prepare(`
+          UPDATE wiki_contributions
+          SET ${deletionSet}
+          WHERE id = ? AND status = 'published'
+        `)
+          .bind(contribution.id)
+          .run()
+      } else {
+        await env.DB.prepare(`
+          UPDATE wiki_contributions
+          SET ${deletionSet}
+          WHERE collection_slug = ? AND field = ? AND status = 'published'
+        `)
+          .bind(contribution.collection_slug, contribution.field)
+          .run()
+      }
 
       await invalidateConsolidatedCache(env, contribution.collection_slug)
 
