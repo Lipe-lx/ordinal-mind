@@ -24,6 +24,13 @@ Rules:
 - Keep concise encyclopedia style.
 - If uncertain, omit instead of guessing.`
 
+export interface RunByokPromptOptions {
+  mode?: "wiki_draft" | "wiki_seed"
+  systemPrompt?: string
+  responseFormat?: "json_object" | "none"
+  requestLabel?: string
+}
+
 export function buildHybridUserMessage(
   input: string,
   _options?: { wikiPage?: WikiPage | null; wikiStatus?: string }
@@ -68,7 +75,7 @@ export async function generateWikiDraftWithByok(params: {
   const prompt = buildWikiDraftPrompt(chronicle, slug, entityType)
   let raw: string
   try {
-    raw = await runByokPrompt(config, prompt)
+    raw = await runByokPrompt(config, prompt, { mode: "wiki_draft" })
   } catch (error) {
     logWikiDraftDiagnostic("warn", "byok_request_failed", {
       provider: config.provider,
@@ -145,7 +152,15 @@ function buildWikiDraftPrompt(
   return `${WIKI_DRAFT_SYSTEM_PROMPT}\n\nWikiPageDraft schema:\n{\n  "slug": "inscription:<id>",\n  "entity_type": "inscription",\n  "title": "string",\n  "summary": "string",\n  "sections": [{"heading":"string","body":"string","source_event_ids":["ev..."]}],\n  "cross_refs": ["collection:<slug>"],\n  "source_event_ids": ["ev..."],\n  "generated_at": "ISO8601",\n  "byok_provider": "string"\n}\n\nInput JSON:\n${JSON.stringify(payload)}`
 }
 
-export async function runByokPrompt(config: ByokConfig, prompt: string): Promise<string> {
+export async function runByokPrompt(
+  config: ByokConfig,
+  prompt: string,
+  options: RunByokPromptOptions = {}
+): Promise<string> {
+  const systemPrompt = options.systemPrompt ?? WIKI_DRAFT_SYSTEM_PROMPT
+  const responseFormat = options.responseFormat ?? "json_object"
+  const requestLabel = options.requestLabel ?? (options.mode === "wiki_seed" ? "gemini_wiki_seed" : "gemini_wiki_draft")
+
   switch (config.provider) {
     case "openai":
       return runOpenAIStylePrompt({
@@ -153,6 +168,8 @@ export async function runByokPrompt(config: ByokConfig, prompt: string): Promise
         model: config.model,
         key: config.key,
         prompt,
+        systemPrompt,
+        responseFormat,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.key}`,
@@ -164,6 +181,8 @@ export async function runByokPrompt(config: ByokConfig, prompt: string): Promise
         model: config.model,
         key: config.key,
         prompt,
+        systemPrompt,
+        responseFormat,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.key}`,
@@ -172,9 +191,9 @@ export async function runByokPrompt(config: ByokConfig, prompt: string): Promise
         },
       })
     case "anthropic":
-      return runAnthropicPrompt(config, prompt)
+      return runAnthropicPrompt(config, prompt, { systemPrompt })
     case "gemini":
-      return runGeminiPrompt(config, prompt)
+      return runGeminiPrompt(config, prompt, { systemPrompt, requestLabel })
     default:
       return ""
   }
@@ -185,20 +204,26 @@ async function runOpenAIStylePrompt(params: {
   model: string
   key: string
   prompt: string
+  systemPrompt: string
+  responseFormat: "json_object" | "none"
   headers: Record<string, string>
 }): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: params.model,
+    max_tokens: 900,
+    messages: [
+      { role: "system", content: params.systemPrompt },
+      { role: "user", content: params.prompt },
+    ],
+  }
+  if (params.responseFormat === "json_object") {
+    body.response_format = { type: "json_object" }
+  }
+
   const response = await fetch(params.url, {
     method: "POST",
     headers: params.headers,
-    body: JSON.stringify({
-      model: params.model,
-      max_tokens: 900,
-      messages: [
-        { role: "system", content: WIKI_DRAFT_SYSTEM_PROMPT },
-        { role: "user", content: params.prompt },
-      ],
-      response_format: { type: "json_object" },
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
@@ -212,7 +237,11 @@ async function runOpenAIStylePrompt(params: {
   return json.choices?.[0]?.message?.content ?? ""
 }
 
-async function runAnthropicPrompt(config: ByokConfig, prompt: string): Promise<string> {
+async function runAnthropicPrompt(
+  config: ByokConfig,
+  prompt: string,
+  options: { systemPrompt: string }
+): Promise<string> {
   const response = await fetch(ANTHROPIC_URL, {
     method: "POST",
     headers: {
@@ -224,7 +253,7 @@ async function runAnthropicPrompt(config: ByokConfig, prompt: string): Promise<s
     body: JSON.stringify({
       model: config.model,
       max_tokens: 900,
-      system: WIKI_DRAFT_SYSTEM_PROMPT,
+      system: options.systemPrompt,
       messages: [{ role: "user", content: prompt }],
     }),
   })
@@ -243,20 +272,24 @@ async function runAnthropicPrompt(config: ByokConfig, prompt: string): Promise<s
     .join("")
 }
 
-async function runGeminiPrompt(config: ByokConfig, prompt: string): Promise<string> {
+async function runGeminiPrompt(
+  config: ByokConfig,
+  prompt: string,
+  options: { systemPrompt: string; requestLabel: string }
+): Promise<string> {
   const url = `${GEMINI_BASE_URL}/${config.model}:generateContent?key=${config.key}`
   const response = await fetchGeminiWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       system_instruction: {
-        parts: [{ text: WIKI_DRAFT_SYSTEM_PROMPT }],
+        parts: [{ text: options.systemPrompt }],
       },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 900 },
     }),
   }, {
-    requestLabel: "gemini_wiki_draft",
+    requestLabel: options.requestLabel,
   })
 
   if (!response.ok) {

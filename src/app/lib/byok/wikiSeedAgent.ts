@@ -56,36 +56,43 @@ export interface WikiSeedAgentParams {
 // ---------------------------------------------------------------------------
 
 const SEED_SYSTEM_PROMPT = `You are a factual data extractor for Bitcoin Ordinals wiki entries.
-Given a Chronicle narrative and compact inscription metadata, extract all factual claims as structured wiki fields.
+Given a Chronicle narrative and compact inscription metadata, extract factual claims as structured wiki fields.
 
-Return ONLY a valid JSON array of objects. No surrounding text, no markdown code blocks.
+Return ONLY a valid JSON object with this exact shape:
+{
+  "fields": [
+    {
+      "field": "<canonical_field>",
+      "value": "<concise factual claim, max 300 chars>",
+      "verifiable": true,
+      "scope": "collection" | "inscription"
+    }
+  ]
+}
 
-Each object must have exactly these fields:
-- "field": one of the canonical field names listed below
-- "value": the factual claim as a concise string (max 300 chars)
-- "verifiable": boolean — true if the claim is traceable to public on-chain data or a named source
-- "scope": "collection" or "inscription"
-
-Canonical fields and their allowed scopes:
-- Collection-only: founder, launch_date, launch_context, origin_narrative, community_culture, connections, current_status
-- Inscription-only: inscriber
-- Either scope: artist, technical_details, notable_moments
+If no extractable facts exist, return {"fields": []}. Do not return markdown or extra text.
 
 Rules:
-- Only extract facts explicitly stated in the narrative. Do not invent or infer unstated facts.
-- Evaluate collection scope and inscription scope independently. If both have extractable facts, include both.
-- Try to fill as many canonical fields as evidence allows. Omit only when the narrative has no explicit support.
+- Use only facts explicitly stated in the narrative.
+- Never invent facts and never infer unstated details.
 - For each (scope, field), return at most one best value.
-- If the narrative mentions a collection founder, artist, or launch date, extract them with scope "collection".
-- If the narrative mentions the specific inscriber of this inscription, extract it with scope "inscription".
-- Do not extract generic descriptions or timeline events — only structured wiki-relevant facts.
-- If no extractable facts exist, return an empty array [].`
+- Collection-only fields: founder, launch_date, launch_context, origin_narrative, community_culture, connections, current_status.
+- Inscription-only field: inscriber.
+- Shared fields: artist, technical_details, notable_moments.
+- Scope must match the factual target of the claim.`
+
+type SeedExtractionPhase = "collection" | "inscription"
 
 // ---------------------------------------------------------------------------
 // Prompt Builder
 // ---------------------------------------------------------------------------
 
-function buildSeedPrompt(narrative: string, chronicle: Chronicle): string {
+function buildSeedPrompt(
+  narrative: string,
+  chronicle: Chronicle,
+  phase: SeedExtractionPhase,
+  excludedScopeFieldKeys: Set<string>
+): string {
   const collectionSlug =
     chronicle.collection_context.market.match?.collection_slug ??
     chronicle.collection_context.registry.match?.slug ??
@@ -106,6 +113,21 @@ function buildSeedPrompt(narrative: string, chronicle: Chronicle): string {
     .filter(Boolean)
     .join("\n")
 
+  const phaseInstruction =
+    phase === "collection"
+      ? "Phase focus: collection scope first. Prioritize collection-only fields plus shared fields when they clearly refer to the collection."
+      : "Phase focus: inscription scope. Prioritize inscription-only fields plus shared fields when they clearly refer to this inscription."
+
+  const allowedFields =
+    phase === "collection"
+      ? [...COLLECTION_ONLY_FIELDS, "artist", "technical_details", "notable_moments"]
+      : [...INSCRIPTION_ONLY_FIELDS, "artist", "technical_details", "notable_moments"]
+
+  const excluded =
+    excludedScopeFieldKeys.size > 0
+      ? [...excludedScopeFieldKeys].sort().join(", ")
+      : "none"
+
   return `${SEED_SYSTEM_PROMPT}
 
 ---
@@ -117,7 +139,10 @@ Chronicle narrative:
 ${narrative.slice(0, 2000)}
 
 ---
-Extract wiki fields as a JSON array:`
+${phaseInstruction}
+Allowed fields in this phase: ${allowedFields.join(", ")}.
+Do not return any item whose (scope, field) is already in this set: ${excluded}.
+Return only {"fields":[...]} now.`
 }
 
 // ---------------------------------------------------------------------------
@@ -144,21 +169,57 @@ function isCanonicalField(value: unknown): value is CanonicalField {
   return typeof value === "string" && (CANONICAL_FIELDS as string[]).includes(value)
 }
 
+function isScope(value: unknown): value is "collection" | "inscription" {
+  return value === "collection" || value === "inscription"
+}
+
+function isCollectionOnlyField(field: CanonicalField): boolean {
+  return (COLLECTION_ONLY_FIELDS as string[]).includes(field)
+}
+
+function isInscriptionOnlyField(field: CanonicalField): boolean {
+  return (INSCRIPTION_ONLY_FIELDS as string[]).includes(field)
+}
+
+function isFieldAllowedInPhase(field: CanonicalField, phase: SeedExtractionPhase): boolean {
+  if (phase === "collection") {
+    return isCollectionOnlyField(field) || !isInscriptionOnlyField(field)
+  }
+  return isInscriptionOnlyField(field) || !isCollectionOnlyField(field)
+}
+
+function resolveScopeWithSafeFallback(
+  rawScope: unknown,
+  field: CanonicalField,
+  phase: SeedExtractionPhase
+): "collection" | "inscription" {
+  if (isInscriptionOnlyField(field)) return "inscription"
+  if (isCollectionOnlyField(field)) return "collection"
+  if (isScope(rawScope)) return rawScope
+  return phase
+}
+
+function toScopeFieldKey(scope: "collection" | "inscription", field: CanonicalField): string {
+  return `${scope}:${field}`
+}
+
 function validateExtractedField(
   raw: unknown,
-  chronicle: Chronicle
+  chronicle: Chronicle,
+  phase: SeedExtractionPhase
 ): ValidatedSeedField | null {
   if (!raw || typeof raw !== "object") return null
   const r = raw as RawExtractedField
 
   if (!isCanonicalField(r.field)) return null
+  if (!isFieldAllowedInPhase(r.field, phase)) return null
   if (typeof r.value !== "string" || !r.value.trim()) return null
 
-  const scope = r.scope === "inscription" ? "inscription" : "collection"
+  const scope = resolveScopeWithSafeFallback(r.scope, r.field, phase)
 
   // Enforce scope constraints
-  const isInscriptionOnly = (INSCRIPTION_ONLY_FIELDS as string[]).includes(r.field)
-  const isCollectionOnly = (COLLECTION_ONLY_FIELDS as string[]).includes(r.field)
+  const isInscriptionOnly = isInscriptionOnlyField(r.field)
+  const isCollectionOnly = isCollectionOnlyField(r.field)
 
   if (isInscriptionOnly && scope !== "inscription") return null
   if (isCollectionOnly && scope !== "collection") return null
@@ -261,6 +322,21 @@ function tryParseJsonArray(value: string): unknown[] | null {
   return null
 }
 
+function parseExtractedFieldsPayload(raw: string): unknown[] | null {
+  const firstParse = parseFirstJsonObject(raw)
+  if (Array.isArray(firstParse)) return firstParse
+  if (firstParse && typeof firstParse === "object") {
+    const record = firstParse as Record<string, unknown>
+    if (Array.isArray(record.fields)) return record.fields
+    if (Array.isArray(record.items)) return record.items
+  }
+  return tryParseJsonArray(raw)
+}
+
+function buildScopeFieldKeySet(fields: ValidatedSeedField[]): Set<string> {
+  return new Set(fields.map((field) => toScopeFieldKey(field.scope, field.field)))
+}
+
 async function fetchConsolidatedBySlug(slug: string): Promise<ConsolidatedCollection | null> {
   try {
     return await fetchConsolidated(slug)
@@ -307,17 +383,25 @@ async function prefilterSeedFieldsByCurrentCanonicalState(
 async function extractFieldsFromNarrative(
   narrative: string,
   chronicle: Chronicle,
-  config: ByokConfig
+  config: ByokConfig,
+  phase: SeedExtractionPhase,
+  excludedScopeFieldKeys: Set<string>
 ): Promise<ValidatedSeedField[]> {
-  const prompt = buildSeedPrompt(narrative, chronicle)
+  const prompt = buildSeedPrompt(narrative, chronicle, phase, excludedScopeFieldKeys)
 
   let raw: string
   try {
-    raw = await runByokPrompt(config, prompt)
+    raw = await runByokPrompt(config, prompt, {
+      mode: "wiki_seed",
+      systemPrompt: SEED_SYSTEM_PROMPT,
+      responseFormat: "json_object",
+      requestLabel: "gemini_wiki_seed",
+    })
   } catch (err) {
     console.warn("[OrdinalMind][WikiSeedAgent] LLM call failed", {
       at: new Date().toISOString(),
       provider: config.provider,
+      phase,
       error: err instanceof Error ? err.message : String(err),
     })
     return []
@@ -325,20 +409,23 @@ async function extractFieldsFromNarrative(
 
   if (!raw) return []
 
-  const firstParse = parseFirstJsonObject(raw)
-  const parsedArray = Array.isArray(firstParse) ? firstParse : tryParseJsonArray(raw)
+  const parsedArray = parseExtractedFieldsPayload(raw)
   if (!parsedArray) {
     console.warn("[OrdinalMind][WikiSeedAgent] Failed to parse extraction result", {
       at: new Date().toISOString(),
       provider: config.provider,
+      phase,
       raw_chars: raw.length,
     })
     return []
   }
 
-  return parsedArray
-    .map((item) => validateExtractedField(item, chronicle))
+  const filteredByMissingKeys = parsedArray
+    .map((item) => validateExtractedField(item, chronicle, phase))
     .filter((item): item is ValidatedSeedField => item !== null)
+    .filter((item) => !excludedScopeFieldKeys.has(toScopeFieldKey(item.scope, item.field)))
+
+  return filteredByMissingKeys
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +475,24 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       label: "Seeding wiki from narrative…",
     })
 
-    const extractedFields = await extractFieldsFromNarrative(narrative, chronicle, config)
+    const phaseOneFields = await extractFieldsFromNarrative(
+      narrative,
+      chronicle,
+      config,
+      "collection",
+      new Set<string>()
+    )
+    const phaseOneDeduped = dedupeSeedFields(phaseOneFields)
+    const phaseTwoExcludedKeys = buildScopeFieldKeySet(phaseOneDeduped)
+    const phaseTwoFields = await extractFieldsFromNarrative(
+      narrative,
+      chronicle,
+      config,
+      "inscription",
+      phaseTwoExcludedKeys
+    )
+
+    const extractedFields = [...phaseOneDeduped, ...phaseTwoFields]
     const dedupedFields = dedupeSeedFields(extractedFields)
     const prefiltered = await prefilterSeedFieldsByCurrentCanonicalState(dedupedFields)
     const fields = prefiltered.filtered
@@ -397,6 +501,8 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       console.info("[OrdinalMind][WikiSeedAgent] No extractable wiki fields found", {
         at: new Date().toISOString(),
         inscription_id: chronicle.meta.inscription_id,
+        phase_one_count: phaseOneFields.length,
+        phase_two_count: phaseTwoFields.length,
         extracted_count: extractedFields.length,
         deduped_count: dedupedFields.length,
         skipped_by_canonical_match: prefiltered.skipped,
@@ -413,6 +519,8 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
     console.info("[OrdinalMind][WikiSeedAgent] Fields extracted", {
       at: new Date().toISOString(),
       inscription_id: chronicle.meta.inscription_id,
+      phase_one_count: phaseOneFields.length,
+      phase_two_count: phaseTwoFields.length,
       extracted_count: extractedFields.length,
       deduped_count: dedupedFields.length,
       ready_to_submit_count: fields.length,
@@ -473,6 +581,8 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
     console.info("[OrdinalMind][WikiSeedAgent] Seed complete", {
       at: new Date().toISOString(),
       inscription_id: chronicle.meta.inscription_id,
+      phase_one_count: phaseOneFields.length,
+      phase_two_count: phaseTwoFields.length,
       extracted: extractedFields.length,
       deduped: dedupedFields.length,
       skipped_by_canonical_match: prefiltered.skipped,
