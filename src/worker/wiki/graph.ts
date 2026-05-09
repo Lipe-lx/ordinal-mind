@@ -120,28 +120,34 @@ export async function buildCollectionGraph(
 
   const normalizedSlug = normalizeCollectionSlugInput(slug)
   const aliasSlugs = buildCollectionSlugAliases(normalizedSlug)
-  const aliasWikiSlugs = new Set(aliasSlugs.map(toCollectionWikiPageSlug))
-  const collectionWikiSlug = toCollectionWikiPageSlug(normalizedSlug)
-
   const normalizedFocus = options.focus?.startsWith("inscription:") 
     ? options.focus.slice("inscription:".length) 
     : options.focus
-
-  const contributionSlugs = [...aliasSlugs]
-  if (normalizedFocus && /^[a-f0-9]{64}i[0-9]+$/i.test(normalizedFocus) && !contributionSlugs.includes(normalizedFocus)) {
-    contributionSlugs.push(normalizedFocus)
-  }
-  const contribPlaceholders = contributionSlugs.map(() => "?").join(", ")
-
-  const [consolidated, focusConsolidated, pageRows, contributionRows] = await Promise.all([
+  const [consolidated, pageRows] = await Promise.all([
     buildConsolidation(normalizedSlug, env),
-    normalizedFocus ? buildConsolidation(normalizedFocus, env) : Promise.resolve(null),
     env.DB.prepare(`
       SELECT slug, entity_type, title, summary, sections_json,
              cross_refs_json, source_event_ids_json, generated_at,
              byok_provider, unverified_count, view_count, updated_at
       FROM wiki_pages
     `).all<WikiPageRow>(),
+  ])
+
+  const allPages = (pageRows.results ?? []).map(parseWikiPage)
+  const aliasWikiSlugs = new Set(aliasSlugs.map(toCollectionWikiPageSlug))
+  
+  const linkedInscriptionSlugs = allPages
+    .filter(p => p.entity_type === "inscription" && p.cross_refs.some(ref => aliasWikiSlugs.has(ref)))
+    .map(p => p.slug.startsWith("inscription:") ? p.slug.slice("inscription:".length) : p.slug)
+
+  const contributionSlugs = [...new Set([...aliasSlugs, ...linkedInscriptionSlugs])]
+  if (normalizedFocus && /^[a-f0-9]{64}i[0-9]+$/i.test(normalizedFocus) && !contributionSlugs.includes(normalizedFocus)) {
+    contributionSlugs.push(normalizedFocus)
+  }
+  const contribPlaceholders = contributionSlugs.map(() => "?").join(", ")
+
+  const [focusConsolidated, contributionRows] = await Promise.all([
+    normalizedFocus ? buildConsolidation(normalizedFocus, env) : Promise.resolve(null),
     env.DB.prepare(`
       SELECT id, collection_slug, field, value, confidence, verifiable,
              contributor_id, og_tier, status, created_at
@@ -153,7 +159,9 @@ export async function buildCollectionGraph(
       .all<ContributionRow>(),
   ])
 
-  const allPages = (pageRows.results ?? []).map(parseWikiPage)
+  const collectionWikiSlug = toCollectionWikiPageSlug(normalizedSlug)
+
+
   const existingPages = new Map(allPages.map((page) => [page.slug, page] as const))
   const collectionPage = [collectionWikiSlug, ...aliasWikiSlugs]
     .map((candidate) => existingPages.get(candidate))
@@ -253,46 +261,8 @@ export async function buildCollectionGraph(
     })
   }
 
-  // 1.2 Inscription-specific fields for the focus node
-  if (focusConsolidated && focusPageSlug && normalizedFocus) {
-    const focusSlug: string = normalizedFocus
-    const focusFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, focusSlug))
-    for (const field of focusFields) {
-      const fieldState = focusConsolidated.narrative[field]
-      // Only show field nodes for inscriptions if they actually have data (to avoid clutter)
-      if (fieldState && fieldState.contributions.length > 0) {
-        const fieldNodeId = buildFieldNodeId(focusSlug, field)
-        addNode({
-          id: fieldNodeId,
-          kind: "field",
-          label: formatFieldLabel(field),
-          status: resolveFieldStatus(fieldState),
-          parent_id: focusPageSlug,
-          description: fieldState.canonical_value ?? "No published value yet.",
-          metadata: {
-            field,
-            resolved_by_tier: fieldState.resolved_by_tier ?? "none",
-            contribution_count: fieldState.contributions.length ?? 0,
-            canonical_value: fieldState.canonical_value,
-            scope: "inscription"
-          },
-        })
-        addEdge({
-          id: `${focusPageSlug}->${fieldNodeId}:has_field`,
-          kind: "has_field",
-          source: focusPageSlug,
-          target: fieldNodeId,
-          status: resolveFieldStatus(fieldState),
-          label: "field",
-          metadata: { field },
-        })
-      }
-    }
-  }
-
   const contributionsBySlugField = new Map<string, ContributionRow[]>()
   for (const row of contributionRows.results ?? []) {
-    // Note: row.collection_slug comes from the DB query result which was recently updated to fetch both
     const key = `${row.collection_slug}:${row.field}`
     const list = contributionsBySlugField.get(key) ?? []
     list.push(row)
@@ -307,7 +277,6 @@ export async function buildCollectionGraph(
       const fieldState = targetConsolidated.narrative[field]
       const fieldNodeId = buildFieldNodeId(targetSlug, field)
 
-      // Skip empty inscription fields in the graph to avoid clutter
       if (isInscriptionId(targetSlug) && fieldContributions.length === 0) continue
 
       for (const row of fieldContributions) {
@@ -347,11 +316,82 @@ export async function buildCollectionGraph(
     }
   }
 
-  // Build claims for both collection and focus inscription
   buildFieldClaims(normalizedSlug, consolidated)
-  if (focusConsolidated && focusPageSlug && normalizedFocus) {
-    const focusSlug: string = normalizedFocus
-    buildFieldClaims(focusSlug, focusConsolidated)
+
+  for (const page of collectionPages) {
+    const pageSlug = page.slug.startsWith("inscription:") ? page.slug.slice("inscription:".length) : page.slug
+    
+    const hasData = Array.from(contributionsBySlugField.keys()).some(k => k.startsWith(`${pageSlug}:`))
+    if (!hasData) continue
+
+    let targetConsolidated: ConsolidatedCollection
+    if (normalizedFocus === pageSlug && focusConsolidated) {
+      targetConsolidated = focusConsolidated
+    } else {
+      targetConsolidated = {
+        collection_slug: pageSlug,
+        sample_inscription_id: pageSlug,
+        completeness: { filled: 0, total: 0, score: 0 },
+        confidence: 1,
+        factual: null,
+        narrative: {},
+        sources: [],
+        gaps: [],
+      }
+      
+      const pageFields = new Set(Array.from(contributionsBySlugField.keys())
+        .filter(k => k.startsWith(`${pageSlug}:`))
+        .map(k => k.split(":")[1]))
+        
+      for (const field of pageFields) {
+        const fieldContributions = contributionsBySlugField.get(`${pageSlug}:${field}`) || []
+        if (fieldContributions.length === 0) continue
+        
+        const sorted = [...fieldContributions].sort(sortContributions)
+        const best = sorted[0]
+        targetConsolidated.narrative[field] = {
+          field,
+          canonical_value: best.value,
+          status: best.og_tier === "genesis" || best.og_tier === "og" ? "canonical" : "draft",
+          contributions: [],
+          resolved_by_tier: best.og_tier,
+        }
+      }
+    }
+
+    const fields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, pageSlug))
+    for (const field of fields) {
+      const fieldState = targetConsolidated.narrative[field]
+      if (fieldState) {
+        const fieldNodeId = buildFieldNodeId(pageSlug, field)
+        addNode({
+          id: fieldNodeId,
+          kind: "field",
+          label: formatFieldLabel(field),
+          status: resolveFieldStatus(fieldState),
+          parent_id: page.slug,
+          description: fieldState.canonical_value ?? "No published value yet.",
+          metadata: {
+            field,
+            resolved_by_tier: fieldState.resolved_by_tier ?? "none",
+            contribution_count: (contributionsBySlugField.get(`${pageSlug}:${field}`) || []).length,
+            canonical_value: fieldState.canonical_value,
+            scope: "inscription"
+          },
+        })
+        addEdge({
+          id: `${page.slug}->${fieldNodeId}:has_field`,
+          kind: "has_field",
+          source: page.slug,
+          target: fieldNodeId,
+          status: resolveFieldStatus(fieldState),
+          label: "field",
+          metadata: { field },
+        })
+      }
+    }
+
+    buildFieldClaims(pageSlug, targetConsolidated)
   }
 
   const pageEventIds = new Map<string, string[]>()
