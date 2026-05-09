@@ -211,6 +211,10 @@ export function Layout() {
         <div className="layout-footer-content">
           <span className="layout-footer-name">Ordinal Mind</span>
           <div className="layout-footer-links">
+            <Link to={`/docs${location.search}`} className="layout-footer-text-link">
+              Docs
+            </Link>
+            <span className="layout-footer-divider" aria-hidden="true">•</span>
             <Link to={`/terms${location.search}`} className="layout-footer-text-link">
               Terms
             </Link>

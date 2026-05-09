@@ -11,6 +11,7 @@ import { Home } from "./pages/Home"
 import { Chronicle } from "./pages/Chronicle"
 import { TermsOfUse } from "./pages/TermsOfUse"
 import { Policies } from "./pages/Policies"
+import { Docs } from "./pages/Docs"
 
 // The loader now only validates the ID and passes it to the component.
 // Actual data fetching happens client-side via SSE for progress feedback.
@@ -63,6 +64,11 @@ export const router = createBrowserRouter([
       {
         path: "policies",
         element: <Policies />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: "docs",
+        element: <Docs />,
         errorElement: <ErrorBoundary />,
       },
     ],
