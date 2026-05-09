@@ -929,7 +929,7 @@ function buildGraphLayout(
       name: "cola",
       animate: !deterministic,
       refresh: 2,
-      maxSimulationTime: deterministic ? 5000 : 20000, // 20 seconds for an exhaustive, relaxed settlement
+      maxSimulationTime: deterministic ? 5000 : 25000, 
       ungrabifyWhileSimulating: false,
       fit: false,
       padding: 150, 
@@ -938,9 +938,9 @@ function buildGraphLayout(
       nodeSpacing: (node: cytoscape.NodeSingular) => {
         const degree = node.degree()
         const kind = node.data("kind")
-        // Drastic increase in spacing to force a sparse, readable layout
-        const base = kind === "collection" ? 120 : 65
-        return base + Math.min(degree * 15, 150)
+        // Hubs get more room; orbiters stay tight
+        const base = kind === "collection" ? 100 : 40
+        return base + Math.min(degree * 12, 120)
       },
       edgeLength: (edge: cytoscape.EdgeSingular) => {
         const source = edge.source()
@@ -948,22 +948,22 @@ function buildGraphLayout(
         const edgeKind = edge.data("kind")
         const avgDegree = (source.degree() + target.degree()) / 2
         
-        // Much longer base lengths to push hierarchies outwards
-        let baseLength = 150
-        if (edgeKind === "belongs_to_collection") baseLength = 280
-        if (edgeKind === "has_field") baseLength = 180
-        if (edgeKind === "has_claim") baseLength = 120
+        // Harmonic orbit distances: tight for leaves, wide for hubs
+        let baseLength = 60 // Default tight orbit
+        if (edgeKind === "belongs_to_collection") baseLength = 220
+        if (edgeKind === "has_field") baseLength = 100
+        if (edgeKind === "has_claim") baseLength = 45
         
-        // Aggressive dynamic scaling for hubs
-        const dynamicFactor = Math.min(avgDegree * 18, 250)
+        // Scaling distance primarily for high-connectivity nodes
+        const dynamicFactor = Math.min(avgDegree * 20, 300)
         return baseLength + dynamicFactor
       },
-      infinite: false,
+      infinite: !deterministic, // Enable continuous living graph in neural mode
       alphaTest: 0.001,
-      convergenceThreshold: 0.0005, // Ultra-fine convergence
-      initialUnconstrainedIterations: deterministic ? 800 : 2500, // Deep initial stretch
-      initialUserConstraintIterations: deterministic ? 400 : 1200,
-      initialAllConstraintsIterations: deterministic ? 400 : 1200,
+      convergenceThreshold: 0.0005,
+      initialUnconstrainedIterations: deterministic ? 800 : 2000, 
+      initialUserConstraintIterations: deterministic ? 400 : 1000,
+      initialAllConstraintsIterations: deterministic ? 400 : 1000,
     } as ColaLayoutOptions
   }
 
