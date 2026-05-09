@@ -3,11 +3,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 75vh;
+  flex: 1;
   text-align: center;
   gap: var(--space-3xl);
   position: relative;
-  overflow: visible;
+  overflow: hidden;
   width: 100%;
 }
 

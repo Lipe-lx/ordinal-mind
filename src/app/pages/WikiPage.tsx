@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react"
-import { useParams, useNavigate, useOutletContext } from "react-router"
+import { useParams, useNavigate, useLocation, useOutletContext } from "react-router"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ConsolidatedCollection, ConsolidatedField } from "../lib/types"
 import { motion } from "motion/react"
@@ -12,6 +12,7 @@ export function WikiPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>()
   const slug = rawSlug?.startsWith("collection:") ? rawSlug.slice("collection:".length) : rawSlug
   const navigate = useNavigate()
+  const location = useLocation()
   const { setHeaderCenter } = useOutletContext<LayoutOutletContext>()
   const { identity } = useDiscordIdentity()
   
@@ -123,7 +124,7 @@ export function WikiPage() {
     )
 
     return () => setHeaderCenter(null)
-  }, [slug, identity, data, setHeaderCenter, handleEditCollectionName])
+  }, [slug, identity, data, setHeaderCenter, handleEditCollectionName, navigate, location])
 
   const handleDeleteField = async (fieldKey: string) => {
     if (!slug || !data) return

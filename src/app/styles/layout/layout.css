@@ -168,7 +168,7 @@
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
