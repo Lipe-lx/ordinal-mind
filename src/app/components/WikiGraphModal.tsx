@@ -410,9 +410,14 @@ export function WikiGraphModal({
       if (!nodeId) return
       const center = cy.getElementById(nodeId)
       if (!center.length) return
+
+      // Expand to 2 levels of connectivity for better context
       const neighborhood = center.closedNeighborhood()
-      cy.elements().difference(neighborhood).addClass("is-faded")
-      neighborhood.addClass("is-highlighted")
+      const secondary = neighborhood.neighborhood()
+      const fullContext = neighborhood.union(secondary)
+
+      cy.elements().difference(fullContext).addClass("is-faded")
+      fullContext.addClass("is-highlighted")
     }
 
     cy.on("mouseover", "node", (event) => {
