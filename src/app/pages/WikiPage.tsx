@@ -90,10 +90,17 @@ export function WikiPage() {
       <div className="wiki-header-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-md)" }}>
         <button 
           onClick={() => {
-            if (data?.sample_inscription_id) {
+            const searchParams = new URLSearchParams(location.search)
+            const fromId = searchParams.get("from")
+            
+            if (fromId) {
+              searchParams.delete("from")
+              const suffix = searchParams.toString() ? `?${searchParams.toString()}` : ""
+              navigate(`/chronicle/${fromId}${suffix}`)
+            } else if (data?.sample_inscription_id) {
               navigate(`/chronicle/${data.sample_inscription_id}${location.search}`)
             } else {
-              navigate(`/${location.search}`)
+              navigate(-1)
             }
           }} 
           className="btn btn-ghost btn-xs"

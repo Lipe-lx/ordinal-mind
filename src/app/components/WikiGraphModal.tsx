@@ -106,6 +106,10 @@ export function WikiGraphModal({
     setPrevOpen(false)
   }
 
+  const currentInscriptionId = focusSlug?.startsWith("inscription:") 
+    ? focusSlug.slice("inscription:".length) 
+    : null
+
   useEffect(() => {
     if (!open) return
 
@@ -435,7 +439,7 @@ export function WikiGraphModal({
     cy.on("dbltap", "node", (event) => {
       const node = filteredPayload?.nodes.find((item) => item.id === event.target.id())
       if (!node) return
-      const target = resolveNavigationTarget(node)
+      const target = resolveNavigationTarget(node, currentInscriptionId)
       if (target) navigate(target)
     })
 
@@ -516,7 +520,7 @@ export function WikiGraphModal({
       cy.destroy()
       cyRef.current = null
     }
-  }, [deterministicRendering, filteredPayload, filters.viewMode, isMobile, navigate])
+  }, [deterministicRendering, filteredPayload, filters.viewMode, isMobile, navigate, currentInscriptionId])
 
 
   const content = (
@@ -806,16 +810,16 @@ export function WikiGraphModal({
                               Delete Contribution
                             </button>
                           )}
-                          {resolveNavigationTarget(selectedNode) && (
+                          {resolveNavigationTarget(selectedNode, currentInscriptionId) && (
                             <button
                               type="button"
                               className="btn-premium btn-block"
                               onClick={() => {
-                                const target = resolveNavigationTarget(selectedNode)
+                                const target = resolveNavigationTarget(selectedNode, currentInscriptionId)
                                 if (target) navigate(target)
                               }}
                             >
-                              View Chronicle
+                              Open Wiki Page
                             </button>
                           )}
                         </footer>
@@ -853,8 +857,8 @@ function toggleValue<T>(current: T[], value: T, fallback: T[]): T[] {
   return [...uniqueCurrent, value]
 }
 
-function resolveNavigationTarget(node: WikiGraphNode): string | null {
-  if (node.href) return node.href
+function resolveNavigationTarget(node: WikiGraphNode, currentContextId?: string | null): string | null {
+  let target = node.href || null
 
   const inscriptionId = typeof node.metadata.inscription_id === "string"
     ? node.metadata.inscription_id
@@ -862,11 +866,16 @@ function resolveNavigationTarget(node: WikiGraphNode): string | null {
       ? node.metadata.sample_inscription_id
       : null
 
-  if (inscriptionId) {
-    return `/chronicle/${encodeURIComponent(inscriptionId)}`
+  if (!target && inscriptionId) {
+    target = `/chronicle/${encodeURIComponent(inscriptionId)}`
   }
 
-  return null
+  if (target && target.startsWith("/wiki/") && currentContextId) {
+    const separator = target.includes("?") ? "&" : "?"
+    return `${target}${separator}from=${encodeURIComponent(currentContextId)}`
+  }
+
+  return target
 }
 
 
