@@ -63,7 +63,7 @@ export interface EnrichedTransfer {
 export interface TraceForwardOptions {
   limit?: number              // max transfers to trace (default 30)
   delayMs?: number            // delay between request pairs (default 150)
-  onProgress?: (step: number, description: string) => void
+  onProgress?: (step: number, description: string) => Promise<void>
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -117,6 +117,10 @@ export const fetchMempool = {
     let depth = 0
 
     while (depth < limit) {
+      if (onProgress) {
+        await onProgress(depth, depth === 0 ? "Analyzing genesis expenditure…" : `Scanning next transfer node…`)
+      }
+
       // Rate limit: delay between iterations
       if (depth > 0) {
         await sleep(delayMs)
@@ -138,7 +142,7 @@ export const fetchMempool = {
 
       // Report progress
       if (onProgress) {
-        onProgress(
+        await onProgress(
           depth + 1,
           transfer.is_sale
             ? `Found sale: ${transfer.value ? (transfer.value / 1e8).toFixed(4) : "—"} BTC`
@@ -187,6 +191,10 @@ export const fetchMempool = {
     let depth = 0
 
     while (depth < limit) {
+      if (onProgress) {
+        await onProgress(depth, `Tracing backward from current output…`)
+      }
+
       if (depth > 0) {
         await sleep(delayMs)
       }
@@ -209,7 +217,7 @@ export const fetchMempool = {
       transfers.push(transfer)
 
       if (onProgress) {
-        onProgress(
+        await onProgress(
           depth + 1,
           transfer.is_sale
             ? `Recent sale: ${transfer.value ? (transfer.value / 1e8).toFixed(4) : "—"} BTC`

@@ -133,8 +133,8 @@ export async function getConsolidatedSnapshot(
 
   const consolidated = await buildConsolidation(normalizedSlug, env)
 
-  // Seed proativo: se a coleção tem dados, garante que ela exista no índice de busca (wiki_pages)
-  // Isso permite que ela seja encontrada no MCP mesmo sem uma narrativa completa.
+  // Proactive seed: if the collection has data, ensure it exists in the search index (wiki_pages)
+  // This allows it to be found in MCP even without a full narrative.
   if (env.DB) {
     if (consolidated.completeness.score > 0) {
       await env.DB.prepare(`
@@ -149,10 +149,10 @@ export async function getConsolidatedSnapshot(
         .bind(`collection:${normalizedSlug}`, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
         .run()
         .catch(() => {
-          // Erros de seed são ignorados para não interromper a consolidação principal
+          // Seed errors are ignored to not interrupt the main consolidation process
         })
     } else {
-      // Se a completude caiu para zero (ex: após deleção Genesis), removemos o índice de busca
+      // If completeness dropped to zero (e.g., after Genesis deletion), remove from search index
       await env.DB.prepare(`DELETE FROM wiki_pages WHERE slug = ?`)
         .bind(`collection:${normalizedSlug}`)
         .run()

@@ -199,7 +199,7 @@ Wiki Builder Mode:
   - Inscription Scope: Use inscription_id from [Metadata] as the "collection_slug" for these fields: inscriber, technical_details (asset-specific), notable_moments (asset-specific), artist (if asset-specific).
   - CRITICAL: The 'inscriber' field MUST ALWAYS use the inscription_id. Linking 'inscriber' to a collection_slug is a factual error and will be rejected by the API.
 - If the user provides multiple facts, you may emit multiple <wiki_contribution> blocks, one for each field.
-- DELETION RULE: If the user requests the deletion or removal of a specific wiki field (e.g., "clear the founder field", "apague o artista"), you can perform this by adding "operation": "delete" to the tag. This is a privileged operation usually reserved for Genesis/Admin users. The "value" field can be empty for deletions.
+- DELETION RULE: If the user requests the deletion or removal of a specific wiki field (e.g., "clear the founder field", "delete the artist"), you can perform this by adding "operation": "delete" to the tag. This is a privileged operation usually reserved for Genesis/Admin users. The "value" field can be empty for deletions.
 - Format for deletion: <wiki_contribution>{"field":"...","operation":"delete","collection_slug":"...","confidence":"correcting_existing","verifiable":true}</wiki_contribution>
 - IMPORTANT: Deletion is a powerful action. Confirm the user's intent clearly before emitting the delete tag.
 ${hasWikiContext ? '- If the info is already in the archive, you do NOT need to generate a <wiki_contribution> for it unless the user is correcting it.' : '- Always validate: "You\'re saying X, correct? That\'s valuable context for this collection\'s chronicle."'}
@@ -244,7 +244,7 @@ ${isInitial ? "- CRITICAL LANGUAGE RULE: You MUST write the answer strictly in E
 - Preserve factual precision and acknowledge uncertainty when relevant.
 - Prefer get_raw_events for specific factual claims and cite source references when available.
 - If any tool returns partial data or empty results, explicitly flag incompleteness to the user.
-- If the user asks for a recap/resumo/narrativa, then expand into a full narrative.
+- If the user asks for a recap, summary, or narrative, then expand into a full narrative.
 - If get_collection_context returns collection_size of 0 or null, do NOT retry the same call with different parameters. Instead, use web_search or deep_research to find contextual information.
 - If multiple factual tools are relevant, emit all needed tool calls in the same response turn so they can run in parallel.
 - Never repeat a tool call with the same arguments unless the earlier result explicitly says partial, missing, or errored.

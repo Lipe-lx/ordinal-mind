@@ -145,6 +145,7 @@ export interface CollectionContextFetchResult {
 interface CollectionDiagnosticsOptions {
   debug?: boolean
   requestId?: string
+  onProgress?: (description: string) => Promise<void>
 }
 
 type ResolvedCollectionNameSource = "registry" | "ord_net" | "satflow" | "fallback_title"
@@ -162,6 +163,10 @@ export async function fetchCollectionContext(
   const fetchedAt = new Date().toISOString()
   const sourceCatalog: SourceCatalogItem[] = []
   const mediaContext = buildMediaContext(meta)
+
+  if (diagnostics?.onProgress) {
+    await diagnostics.onProgress("Resolving collection pedigree and provenance…")
+  }
 
   const selfDetails = await fetchOptionalJson<OrdInscriptionDetails>(
     `${ORDINALS_BASE_URL}/inscription/${inscriptionId}`,
@@ -353,6 +358,10 @@ export async function fetchCollectionContext(
         partial: partialGrandchildren,
       }
     }
+  }
+
+  if (diagnostics?.onProgress) {
+    await diagnostics.onProgress("Mapping market overlays and curated registries…")
   }
 
   const [protocolGallery, ordNetOverlay, satflowOverlay] = await Promise.all([
@@ -1790,7 +1799,7 @@ function scoreSatflowAttributeArray(candidate: unknown[]): number {
 
 function extractSatflowRenderedTraitPercentages(html: string): Map<string, number> {
   const percentages = new Map<string, number>()
-  const pattern = /href="\/ordinals\/[^"]+\?attributes=([^"]+)"[^>]*>[\s\S]*?<span class="text-\[10px\] inline-block ml-2">\(&lt;!-- --&gt;([0-9.]+)&lt;!-- --&gt;%\)<\/span>|href="\/ordinals\/[^"]+\?attributes=([^"]+)"[^>]*>[\s\S]*?<span class="text-\[10px\] inline-block ml-2">\(\<!-- --\>([0-9.]+)\<!-- --\>%\)<\/span>/g
+  const pattern = /href="\/ordinals\/[^"]+\?attributes=([^"]+)"[^>]*>[\s\S]*?<span class="text-\[10px\] inline-block ml-2">\(&lt;!-- --&gt;([0-9.]+)&lt;!-- --&gt;%\)<\/span>|href="\/ordinals\/[^"]+\?attributes=([^"]+)"[^>]*>[\s\S]*?<span class="text-\[10px\] inline-block ml-2">\((?:<!-- -->)([0-9.]+)(?:<!-- -->%\))<\/span>/g
 
   for (const match of html.matchAll(pattern)) {
     const encodedAttributes = match[1] ?? match[3]

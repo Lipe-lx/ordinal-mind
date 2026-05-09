@@ -231,6 +231,9 @@ export async function parallelFetch(
       fetchCollectionContext(state.inscriptionId, state.meta, {
         debug: state.diagnostics.debug,
         requestId: state.diagnostics.requestId,
+        onProgress: async (desc) => {
+          await state.onProgress?.("transfers", 1, desc)
+        },
       }),
       fetchMempool.tx(state.meta.genesis_txid),
       fetchUnisatInfo(state.inscriptionId, state.env, state.diagnostics),
