@@ -129,56 +129,56 @@ export function WikiPage() {
     <div className="wiki-page-container fade-in">
       <div className="wiki-dashboard">
         {/* Header Stats */}
-        <div className="wiki-stats-card glass-card">
+        <div className="wiki-stats-card">
           <div className="wiki-stat-item">
             <span className="wiki-stat-label">Completeness</span>
             <span className="wiki-stat-value">{Math.round(data.completeness.score * 100)}%</span>
-            <span className="wiki-stat-subtext">{data.completeness.filled} of {data.completeness.total} fields</span>
+            <span className="wiki-stat-subtext">{data.completeness.filled} / {data.completeness.total} fields</span>
           </div>
           <div className="wiki-stat-item">
-            <span className="wiki-stat-label">Consensus Confidence</span>
+            <span className="wiki-stat-label">Consensus</span>
             <span className="wiki-stat-value">{Math.round(data.confidence * 100)}%</span>
-            <span className="wiki-stat-subtext">Weighted by OG Tiers</span>
+            <span className="wiki-stat-subtext">Community weighted</span>
           </div>
           <div className="wiki-stat-item">
-            <span className="wiki-stat-label">Sources</span>
+            <span className="wiki-stat-label">Contributions</span>
             <span className="wiki-stat-value">{data.sources.length}</span>
-            <span className="wiki-stat-subtext">Community Contributions</span>
+            <span className="wiki-stat-subtext">Active sources</span>
           </div>
         </div>
 
         {/* Factual (L0) Stats */}
         {data.factual && (
-          <div className="wiki-stats-card glass-card" style={{ marginTop: "1rem", borderColor: "var(--accent-secondary)", opacity: 0.9 }}>
+          <div className="wiki-stats-card" style={{ padding: "var(--space-lg) var(--space-xl)", background: "linear-gradient(135deg, rgba(247, 147, 26, 0.05), rgba(255, 255, 255, 0.01))" }}>
             <div className="wiki-stat-item">
-              <span className="wiki-stat-label">Total Supply</span>
-              <span className="wiki-stat-value">{data.factual.supply ? data.factual.supply.toLocaleString() : "Unknown"}</span>
-              <span className="wiki-stat-subtext">L0 Inscriptions</span>
+              <span className="wiki-stat-label">Supply</span>
+              <span className="wiki-stat-value" style={{ fontSize: "1.75rem" }}>{data.factual.supply ? data.factual.supply.toLocaleString() : "—"}</span>
+              <span className="wiki-stat-subtext">Inscriptions</span>
             </div>
             <div className="wiki-stat-item">
-              <span className="wiki-stat-label">First Discovered</span>
-              <span className="wiki-stat-value" style={{ fontSize: "1.2rem", marginTop: "0.5rem" }}>
-                {data.factual.first_seen ? new Date(data.factual.first_seen).toLocaleDateString() : "Unknown"}
+              <span className="wiki-stat-label">Genesis</span>
+              <span className="wiki-stat-value" style={{ fontSize: "1.25rem", marginTop: "0.25rem" }}>
+                {data.factual.first_seen ? new Date(data.factual.first_seen).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
               </span>
-              <span className="wiki-stat-subtext">Genesis event</span>
+              <span className="wiki-stat-subtext">Discovery</span>
             </div>
             <div className="wiki-stat-item">
-              <span className="wiki-stat-label">Last Mint</span>
-              <span className="wiki-stat-value" style={{ fontSize: "1.2rem", marginTop: "0.5rem" }}>
-                {data.factual.last_seen ? new Date(data.factual.last_seen).toLocaleDateString() : "Unknown"}
+              <span className="wiki-stat-label">Last Activity</span>
+              <span className="wiki-stat-value" style={{ fontSize: "1.25rem", marginTop: "0.25rem" }}>
+                {data.factual.last_seen ? new Date(data.factual.last_seen).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
               </span>
-              <span className="wiki-stat-subtext">Latest genesis</span>
+              <span className="wiki-stat-subtext">Latest sync</span>
             </div>
           </div>
         )}
 
-        <div className="wiki-grid" style={{ marginTop: "2rem" }}>
+        <div className="wiki-grid">
           {/* Canonical Fields */}
-          <div className="wiki-section glass-card">
+          <div className="wiki-section">
             <h2 className="wiki-section-title">Verified Narrative</h2>
             <div className="wiki-fields-list">
               {Object.values(data.narrative).filter(f => f.status === "canonical").length === 0 && (
-                <p className="wiki-empty-text">No canonical data verified yet.</p>
+                <p className="wiki-empty-text">Searching for established consensus…</p>
               )}
               {Object.values(data.narrative).filter(f => f.status === "canonical").map(field => (
                 <WikiFieldItem 
@@ -195,8 +195,8 @@ export function WikiPage() {
           <div className="wiki-side-column">
             {/* Disputed Fields */}
             {Object.values(data.narrative).filter(f => f.status === "disputed").length > 0 && (
-              <div className="wiki-section glass-card" style={{ borderColor: "var(--warning)" }}>
-                <h2 className="wiki-section-title" style={{ color: "var(--warning)" }}>Disputed Knowledge</h2>
+              <div className="wiki-section" style={{ borderColor: "rgba(251, 191, 36, 0.3)" }}>
+                <h2 className="wiki-section-title" style={{ color: "var(--rarity-legendary)" }}>Disputed Knowledge</h2>
                 <div className="wiki-fields-list">
                   {Object.values(data.narrative).filter(f => f.status === "disputed").map(field => (
                     <WikiFieldItem 
@@ -213,8 +213,8 @@ export function WikiPage() {
 
             {/* Draft Fields */}
             {Object.values(data.narrative).filter(f => f.status === "draft").length > 0 && (
-              <div className="wiki-section glass-card" style={{ opacity: 0.8 }}>
-                <h2 className="wiki-section-title">Drafts (Awaiting OG)</h2>
+              <div className="wiki-section" style={{ opacity: 0.9 }}>
+                <h2 className="wiki-section-title">Draft Proposals</h2>
                 <div className="wiki-fields-list">
                   {Object.values(data.narrative).filter(f => f.status === "draft").map(field => (
                     <WikiFieldItem 
@@ -231,15 +231,15 @@ export function WikiPage() {
 
             {/* Gaps */}
             {data.gaps.length > 0 && (
-              <div className="wiki-section glass-card">
-                <h2 className="wiki-section-title">Missing Context</h2>
+              <div className="wiki-section">
+                <h2 className="wiki-section-title">Missing Data</h2>
                 <div className="wiki-gaps-list">
                   {data.gaps.map(gap => (
-                    <div key={gap} className="wiki-gap-item" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div key={gap} className="wiki-gap-item">
                       <span className="wiki-gap-name">{formatFieldName(gap)}</span>
                       <button 
-                        className="btn btn-ghost" 
-                        style={{ fontSize: "0.8rem", padding: "4px 8px" }}
+                        className="btn btn-ghost btn-xs" 
+                        style={{ padding: "4px 10px", fontSize: "0.7rem", color: "var(--accent-primary)" }}
                         onClick={() => {
                           if (data.sample_inscription_id) {
                             navigate(`/?id=${data.sample_inscription_id}&builderMode=true&gap=${gap}`)
@@ -248,7 +248,7 @@ export function WikiPage() {
                           }
                         }}
                       >
-                        Contribute +
+                        CONTRIBUTE
                       </button>
                     </div>
                   ))}
