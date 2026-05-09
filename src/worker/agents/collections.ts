@@ -20,6 +20,7 @@ import {
   normalizeContentType,
 } from "../../app/lib/media"
 import { buildCuratedCollectionProfile } from "../collectionProfiles"
+import { slugifyCollectionName } from "../wiki/slugAliases"
 
 const ORDINALS_BASE_URL = "https://ordinals.com"
 const VERIFIED_REGISTRY_URL =
@@ -88,10 +89,16 @@ interface GalleryResponse {
 }
 
 interface LegacyCollectionItem {
-  id: string
+  id?: string
+  inscription_id?: string
   meta?: {
     name?: string
   }
+}
+
+interface LegacyCollectionPayload {
+  name?: string
+  inscriptions?: LegacyCollectionItem[]
 }
 
 interface CoinGeckoNftResponse {
@@ -152,6 +159,7 @@ type ResolvedCollectionNameSource = "registry" | "ord_net" | "satflow" | "fallba
 
 interface ResolvedCollectionName {
   name?: string
+  slug?: string
   source?: ResolvedCollectionNameSource
 }
 
@@ -475,7 +483,8 @@ export async function fetchCollectionContext(
     satflowStats,
     ordNetDirectoryMatch,
     fetchedAt,
-    resolvedCollectionName.name
+    resolvedCollectionName.name,
+    resolvedCollectionName.slug
   )
   appendUniqueSourceCatalogItems(sourceCatalog, profile?.sources ?? [])
   const partialSources = sourceCatalog.filter((source) => source.partial)
@@ -898,6 +907,7 @@ export function buildPresentation(
   }
 
   const itemLabel =
+    registryMatch?.item_name ??
     ordNetMatch?.item_name ??
     satflowMatch?.item_name ??
     selfDetails?.properties?.attributes?.title
@@ -928,6 +938,7 @@ export function resolveCommercialCollectionName(args: {
   if (args.registryMatch?.matched_collection) {
     return {
       name: args.registryMatch.matched_collection,
+      slug: args.registryMatch.slug,
       source: "registry",
     }
   }
@@ -936,6 +947,7 @@ export function resolveCommercialCollectionName(args: {
   if (ordNetName && !isPlaceholderCollectionName(ordNetName)) {
     return {
       name: ordNetName,
+      slug: slugifyCollectionName(ordNetName),
       source: "ord_net",
     }
   }
@@ -944,6 +956,7 @@ export function resolveCommercialCollectionName(args: {
   if (satflowName && !isPlaceholderCollectionName(satflowName)) {
     return {
       name: satflowName,
+      slug: slugifyCollectionName(satflowName),
       source: "satflow",
     }
   }
@@ -951,6 +964,7 @@ export function resolveCommercialCollectionName(args: {
   if (ordNetName) {
     return {
       name: ordNetName,
+      slug: args.ordNetMatch?.collection_slug,
       source: "ord_net",
     }
   }
@@ -958,6 +972,7 @@ export function resolveCommercialCollectionName(args: {
   if (satflowName) {
     return {
       name: satflowName,
+      slug: args.satflowMatch?.collection_slug,
       source: "satflow",
     }
   }
@@ -966,6 +981,7 @@ export function resolveCommercialCollectionName(args: {
   if (fallbackTitle) {
     return {
       name: fallbackTitle,
+      slug: isPlaceholderCollectionName(fallbackTitle) ? undefined : slugifyCollectionName(fallbackTitle),
       source: "fallback_title",
     }
   }
@@ -1051,9 +1067,10 @@ export function buildCollectionProfile(
   marketStats: CollectionMarketStats | null,
   ordNetDirectoryMatch: OrdNetCollectionDirectoryEntry | null,
   fetchedAt: string,
-  resolvedName?: string
+  resolvedName?: string,
+  resolvedSlug?: string
 ): CollectionProfile | null {
-  const slug = marketMatch?.collection_slug ?? registryMatch?.slug
+  const slug = resolvedSlug ?? marketMatch?.collection_slug ?? registryMatch?.slug
   const name = resolvedName ?? registryMatch?.matched_collection ?? marketMatch?.collection_name
 
   if (!slug || !name) return null
@@ -1528,7 +1545,9 @@ export async function selectRegistryMatchFromMarketOverlay(
       const match = toRegistryMatch(
         entry,
         qualityState,
-        legacyMembership.source_ref ?? sourceRef
+        legacyMembership.source_ref ?? sourceRef,
+        legacyMembership.item_name,
+        legacyMembership.collection_name
       )
 
       return {
@@ -1558,12 +1577,12 @@ async function fetchLegacyCollectionMembership(
   fetchedAt: string,
   sourceCatalog: SourceCatalogItem[]
 ): Promise<
-  | { status: "confirmed"; source_ref: string; item_name?: string }
+  | { status: "confirmed"; source_ref: string; item_name?: string; collection_name?: string }
   | { status: "missing"; source_ref: string }
   | { status: "unavailable"; source_ref?: string }
 > {
   const sourceRef = `${LEGACY_COLLECTIONS_BASE_URL}/${slug}.json`
-  const items = await fetchOptionalJson<unknown>(sourceRef, {
+  const raw = await fetchOptionalJson<LegacyCollectionPayload>(sourceRef, {
     sourceCatalog,
     sourceType: "curated_registry_legacy_collection",
     urlOrRef: sourceRef,
@@ -1572,11 +1591,12 @@ async function fetchLegacyCollectionMembership(
     detail: `Legacy collection items for ${slug}`,
   })
 
-  if (!items) {
+  if (!raw) {
     return { status: "unavailable", source_ref: sourceRef }
   }
 
-  const membership = findLegacyCollectionMembership(items, inscriptionId)
+  const collection_name = typeof raw.name === "string" ? raw.name : undefined
+  const membership = findLegacyCollectionMembership(raw, inscriptionId)
   if (!membership) {
     return { status: "missing", source_ref: sourceRef }
   }
@@ -1585,6 +1605,7 @@ async function fetchLegacyCollectionMembership(
     status: "confirmed",
     source_ref: sourceRef,
     item_name: membership.item_name,
+    collection_name,
   }
 }
 
@@ -1592,16 +1613,19 @@ export function findLegacyCollectionMembership(
   raw: unknown,
   inscriptionId: string
 ): { inscription_id: string; item_name?: string } | null {
-  if (!Array.isArray(raw)) return null
+  const payload = raw as LegacyCollectionPayload | LegacyCollectionItem[]
+  const items = Array.isArray(payload) ? payload : payload?.inscriptions
+  if (!Array.isArray(items)) return null
 
-  for (const entry of raw) {
+  for (const entry of items) {
     if (!entry || typeof entry !== "object") continue
 
     const candidate = entry as LegacyCollectionItem
-    if (candidate.id !== inscriptionId) continue
+    const id = candidate.id ?? candidate.inscription_id
+    if (!id || id !== inscriptionId) continue
 
     return {
-      inscription_id: candidate.id,
+      inscription_id: id,
       item_name: candidate.meta?.name,
     }
   }
@@ -2351,14 +2375,6 @@ function looksLikeCollectionName(value: string): boolean {
   return /[A-Za-z0-9]/.test(value)
 }
 
-function slugifyCollectionName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
 function normalizeCollectionSlug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
 }
@@ -2474,16 +2490,19 @@ export function selectRegistryMatch({
 function toRegistryMatch(
   entry: RegistryEntry,
   qualityState: "verified" | "needs_info",
-  sourceRef: string
+  sourceRef: string,
+  itemName?: string,
+  collectionName?: string
 ): CuratedRegistryMatch {
   return {
-    matched_collection: entry.name,
+    matched_collection: collectionName ?? entry.name,
     match_type: entry.type,
     slug: entry.slug,
     registry_ids: entry.type === "gallery" ? [entry.id] : entry.ids,
     quality_state: qualityState,
     issues: entry.issues ?? [],
     source_ref: sourceRef,
+    item_name: itemName,
   }
 }
 

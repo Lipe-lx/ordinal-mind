@@ -14,7 +14,7 @@
 import type { Env } from "../index"
 import { CANONICAL_FIELDS, isFieldAllowedForSlug, isInscriptionId, type CanonicalField } from "./contribute"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
-import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
+import { buildCollectionSlugAliases, normalizeCollectionSlugInput, slugifyCollectionName } from "./slugAliases"
 import type {
   ConsolidatedCollection,
   ConsolidatedField,
@@ -215,8 +215,11 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
       .first()
   }
 
+  const canonicalName = narrative["name"]?.canonical_value
+  const canonicalSlug = canonicalName ? slugifyCollectionName(canonicalName) : normalizedInputSlug
+
   return {
-    collection_slug: normalizedInputSlug,
+    collection_slug: canonicalSlug,
     sample_inscription_id: stats?.inscription_id ?? null,
     completeness: {
       filled: filledCount,

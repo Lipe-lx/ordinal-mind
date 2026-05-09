@@ -173,6 +173,7 @@ export interface CuratedRegistryMatch {
   quality_state: "verified" | "needs_info"
   issues: string[]
   source_ref: string
+  item_name?: string
 }
 
 export interface CollectionPresentationFacet {

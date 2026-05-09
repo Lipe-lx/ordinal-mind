@@ -12,6 +12,7 @@ export function buildCollectionSlugAliases(slug: string): string[] {
   const underscore = lower.replace(/-/g, "_").replace(/\s+/g, "_")
   const slugified = lower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
   const slugifiedUnderscore = slugified.replace(/-/g, "_")
+  const aggressive = lower.replace(/[^a-z0-9]/g, "")
 
   return Array.from(new Set([
     base,
@@ -20,7 +21,16 @@ export function buildCollectionSlugAliases(slug: string): string[] {
     underscore,
     slugified,
     slugifiedUnderscore,
+    aggressive,
   ].filter(Boolean)))
+}
+
+export function slugifyCollectionName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
 }
 
 export function toCollectionWikiPageSlug(collectionSlug: string): string {
