@@ -451,10 +451,14 @@ function buildCollectionRootNode(
   const summary = collectionPage?.summary
     ?? `Consensus coverage: ${consolidated.completeness.filled}/${consolidated.completeness.total} fields.`
 
+  const displayName = collectionPage?.title 
+    ?? consolidated.narrative["name"]?.canonical_value 
+    ?? consolidated.collection_slug
+
   return {
     id,
     kind: "collection",
-    label: collectionPage?.title ?? consolidated.collection_slug,
+    label: displayName,
     status: collectionPage ? "canonical" : "partial",
     href: collectionPage ? `/wiki/${encodeURIComponent(collectionPage.slug)}` : null,
     description: summary,
