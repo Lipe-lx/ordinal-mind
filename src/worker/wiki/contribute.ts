@@ -19,35 +19,24 @@ import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
 import { checkContributionSafety } from "./safety"
 
-/** Fields strictly for collections (origin, founders, etc.) */
-export const COLLECTION_ONLY_FIELDS = [
+/** 
+ * Fields that can exist at both collection and inscription level.
+ * Inscriptions can have their own specific founders, artists, launch contexts, etc.,
+ * separate from the collection they belong to.
+ */
+export const CANONICAL_FIELDS = [
+  "name",
   "founder",
+  "artist",
+  "inscriber",
   "launch_date",
   "launch_context",
   "origin_narrative",
   "community_culture",
   "connections",
   "current_status",
-  "name",
-] as const
-
-/** Fields strictly for individual inscriptions (inscriber) */
-export const INSCRIPTION_ONLY_FIELDS = [
-  "inscriber",
-] as const
-
-/** Fields that can exist at both collection and inscription level */
-export const SHARED_FIELDS = [
-  "artist",
   "technical_details",
   "notable_moments",
-] as const
-
-/** The union of all possible canonical fields. */
-export const CANONICAL_FIELDS = [
-  ...COLLECTION_ONLY_FIELDS,
-  ...INSCRIPTION_ONLY_FIELDS,
-  ...SHARED_FIELDS,
 ] as const
 
 export type CanonicalField = (typeof CANONICAL_FIELDS)[number]
@@ -65,19 +54,11 @@ export function isInscriptionId(slug: string): boolean {
 
 /**
  * Enforce field scope:
- * - 'inscriber' is only for inscriptions.
- * - 'founder', 'launch_date', etc. are only for collections.
+ * All canonical fields are now allowed for both collections and inscriptions.
+ * This allows high-resolution wiki population for individual assets.
  */
-export function isFieldAllowedForSlug(field: CanonicalField, slug: string): boolean {
-  const isInscription = isInscriptionId(slug)
-
-  if (isInscription) {
-    return (INSCRIPTION_ONLY_FIELDS as readonly string[]).includes(field)
-      || (SHARED_FIELDS as readonly string[]).includes(field)
-  }
-
-  return (COLLECTION_ONLY_FIELDS as readonly string[]).includes(field)
-    || (SHARED_FIELDS as readonly string[]).includes(field)
+export function isFieldAllowedForSlug(field: CanonicalField, _slug: string): boolean {
+  return isCanonicalField(field)
 }
 
 export interface WikiContributionInput {

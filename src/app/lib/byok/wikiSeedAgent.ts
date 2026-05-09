@@ -76,10 +76,8 @@ Rules:
 - Use only facts explicitly stated in the narrative.
 - Never invent facts and never infer unstated details.
 - For each (scope, field), return at most one best value.
-- Collection-only fields: founder, launch_date, launch_context, origin_narrative, community_culture, connections, current_status.
-- Inscription-only field: inscriber.
-- Shared fields: artist, technical_details, notable_moments.
-- Scope must match the factual target of the claim.`
+- Canonical fields: name, founder, artist, inscriber, launch_date, launch_context, origin_narrative, community_culture, connections, current_status, technical_details, notable_moments.
+- Scope must match the factual target of the claim: "collection" if the fact describes the entire collection, or "inscription" if it describes this specific item.`
 
 type SeedExtractionPhase = "collection" | "inscription"
 
@@ -130,10 +128,7 @@ function buildSeedPrompt(
       ? "Phase focus: collection scope first. Prioritize collection-only fields plus shared fields when they clearly refer to the collection."
       : "Phase focus: inscription scope. Prioritize inscription-only fields plus shared fields when they clearly refer to this inscription."
 
-  const allowedFields =
-    phase === "collection"
-      ? [...COLLECTION_ONLY_FIELDS, "artist", "technical_details", "notable_moments"]
-      : [...INSCRIPTION_ONLY_FIELDS, "artist", "technical_details", "notable_moments"]
+  const allowedFields = CANONICAL_FIELDS
 
   const excluded =
     excludedScopeFieldKeys.size > 0

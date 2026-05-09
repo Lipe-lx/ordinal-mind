@@ -21,32 +21,25 @@ export type CanonicalField =
   | "current_status"
   | "name"
 
-export const COLLECTION_ONLY_FIELDS: CanonicalField[] = [
+export const CANONICAL_FIELDS: CanonicalField[] = [
+  "name",
   "founder",
+  "artist",
+  "inscriber",
   "launch_date",
   "launch_context",
   "origin_narrative",
   "community_culture",
   "connections",
   "current_status",
-  "name",
-]
-
-export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = [
-  "inscriber",
-]
-
-export const SHARED_FIELDS: CanonicalField[] = [
-  "artist",
   "technical_details",
   "notable_moments",
 ]
 
-export const CANONICAL_FIELDS: CanonicalField[] = [
-  ...COLLECTION_ONLY_FIELDS,
-  ...INSCRIPTION_ONLY_FIELDS,
-  ...SHARED_FIELDS,
-]
+/** Alias for compatibility with existing agents that expect these lists */
+export const COLLECTION_ONLY_FIELDS: CanonicalField[] = CANONICAL_FIELDS
+export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = CANONICAL_FIELDS
+export const SHARED_FIELDS: CanonicalField[] = CANONICAL_FIELDS
 
 export interface CollectionCanonicalFields {
   founder: string | null
