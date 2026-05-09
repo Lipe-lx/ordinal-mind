@@ -19,6 +19,7 @@ export type CanonicalField =
   | "community_culture"
   | "connections"
   | "current_status"
+  | "name"
 
 export const COLLECTION_ONLY_FIELDS: CanonicalField[] = [
   "founder",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useNavigate, useOutletContext } from "react-router"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ConsolidatedCollection, ConsolidatedField } from "../lib/types"
@@ -25,16 +25,41 @@ export function WikiPage() {
     setError(null)
   }
 
+  const handleEditCollectionName = useCallback(async (newName: string) => {
+    if (!slug) return
+    try {
+      const result = await submitWikiContribution({
+        data: {
+          collection_slug: slug,
+          field: "name",
+          value: newName,
+          operation: "add",
+          confidence: "correcting_existing",
+          verifiable: true,
+        },
+        activeThreadId: "system-genesis-edit",
+        prompt: "Manual rename by Genesis role",
+      })
+
+      if (result.ok) {
+        // Refresh data
+        const res = await fetch(`/api/wiki/collection/${slug}/consolidated`)
+        const json = await res.json()
+        if (json.ok) {
+          setData(json.data)
+        }
+      } else {
+        alert(`Failed to update name: ${result.error}`)
+      }
+    } catch (err) {
+      console.error(err)
+      alert("An unexpected error occurred while updating.")
+    }
+  }, [slug])
+
   useEffect(() => {
     if (!slug) return
     
-    // Setup header
-    setHeaderCenter(
-      <div className="wiki-header-title">
-        <h1>Wiki: <span style={{ color: "var(--accent-primary)" }}>{slug}</span></h1>
-      </div>
-    )
-
     let ignore = false
 
     fetch(`/api/wiki/collection/${slug}/consolidated`)
@@ -52,9 +77,37 @@ export function WikiPage() {
 
     return () => {
       ignore = true
-      setHeaderCenter(null)
     }
-  }, [slug, setHeaderCenter])
+  }, [slug])
+
+  useEffect(() => {
+    const isGenesis = identity?.tier === "genesis"
+    
+    setHeaderCenter(
+      <div className="wiki-header-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-sm)" }}>
+        <h1>Wiki: <span style={{ color: "var(--accent-primary)" }}>{slug}</span></h1>
+        {isGenesis && (
+          <button 
+            className="wiki-slug-edit-btn"
+            title="Edit collection display name"
+            onClick={() => {
+              const currentName = data?.narrative["name"]?.canonical_value || slug
+              const newName = prompt("Enter new display name for this collection:", currentName)
+              if (newName !== null && newName !== currentName) {
+                handleEditCollectionName(newName)
+              }
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+            </svg>
+          </button>
+        )}
+      </div>
+    )
+
+    return () => setHeaderCenter(null)
+  }, [slug, identity, data, setHeaderCenter, handleEditCollectionName])
 
   const handleDeleteField = async (fieldKey: string) => {
     if (!slug || !data) return
@@ -94,6 +147,7 @@ export function WikiPage() {
       setDeletingField(null)
     }
   }
+
 
   const isLoading = !data && !error
 

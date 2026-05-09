@@ -298,6 +298,30 @@
   font-style: italic;
   opacity: 0.9;
 }
+.wiki-slug-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.wiki-slug-edit-btn:hover {
+  background: rgba(247, 147, 26, 0.1);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.wiki-slug-edit-btn svg {
+  opacity: 0.8;
+}
 
 /* Gaps */
 .wiki-gaps-list {
