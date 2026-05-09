@@ -86,7 +86,21 @@ export function WikiPage() {
     const isGenesis = identity?.tier === "genesis"
     
     setHeaderCenter(
-      <div className="wiki-header-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-sm)" }}>
+      <div className="wiki-header-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-md)" }}>
+        <button 
+          onClick={() => {
+            if (data?.sample_inscription_id) {
+              navigate(`/chronicle/${data.sample_inscription_id}${location.search}`)
+            } else {
+              navigate(`/${location.search}`)
+            }
+          }} 
+          className="btn btn-ghost btn-xs"
+          style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+        >
+          ← Back
+        </button>
+        <div style={{ width: "1px", height: "16px", background: "var(--border-glass)", margin: "0 4px" }} />
         <h1>Wiki: <span style={{ color: "var(--accent-primary)" }}>{slug}</span></h1>
         {isGenesis && (
           <button 
