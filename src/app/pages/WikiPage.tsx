@@ -230,99 +230,16 @@ export function WikiPage() {
         </div>
 
         <div className="wiki-grid">
-          {/* Actionable Intel: Drafts & Gaps Toggle */}
-          <div className="wiki-section" style={{ borderBottomColor: "rgba(247, 147, 26, 0.2)" }}>
-            <header className="wiki-section-header">
-              <h2 className="wiki-section-title">
-                {activeTab === "drafts" ? "Draft Proposals" : "Missing Data"}
-              </h2>
-              <div className="wiki-toggle-group">
-                <button 
-                  className={`wiki-toggle-btn ${activeTab === "drafts" ? "active" : ""}`}
-                  onClick={() => setActiveTab("drafts")}
-                >
-                  Drafts
-                </button>
-                <button 
-                  className={`wiki-toggle-btn ${activeTab === "gaps" ? "active" : ""}`}
-                  onClick={() => setActiveTab("gaps")}
-                >
-                  Gaps
-                </button>
-              </div>
-            </header>
-
-            <div className="wiki-two-column-grid">
-              {activeTab === "drafts" ? (
-                <>
-                  {Object.values(data.narrative).filter(f => f.status === "draft").length === 0 ? (
-                    <p className="wiki-empty-text" style={{ gridColumn: "1 / -1" }}>No pending drafts for this collection.</p>
-                  ) : (
-                    Object.values(data.narrative).filter(f => f.status === "draft").map(field => (
-                      <WikiFieldItem 
-                        key={field.field} 
-                        field={field} 
-                        showDelete={identity?.tier === "genesis"}
-                        isDeleting={deletingField === field.field}
-                        onDelete={() => handleDeleteField(field.field)}
-                      />
-                    ))
-                  )}
-                </>
-              ) : (
-                <>
-                  {data.gaps.length === 0 ? (
-                    <p className="wiki-empty-text" style={{ gridColumn: "1 / -1" }}>All canonical fields have been identified.</p>
-                  ) : (
-                    data.gaps.map(gap => (
-                      <div key={gap} className="wiki-gap-item">
-                        <span className="wiki-gap-name">{formatFieldName(gap)}</span>
-                        <button 
-                          className="btn btn-ghost btn-xs" 
-                          style={{ padding: "4px 10px", fontSize: "0.7rem", color: "var(--accent-primary)" }}
-                          onClick={() => {
-                            if (data.sample_inscription_id) {
-                              navigate(`/?id=${data.sample_inscription_id}&builderMode=true&gap=${gap}`)
-                            } else {
-                              alert("Cannot open builder: No reference inscription found for this collection.")
-                            }
-                          }}
-                        >
-                          CONTRIBUTE
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Canonical Fields */}
-          <div className="wiki-section">
-            <h2 className="wiki-section-title" style={{ marginBottom: "var(--space-md)" }}>Verified Narrative</h2>
-            <div className="wiki-two-column-grid">
-              {Object.values(data.narrative).filter(f => f.status === "canonical").length === 0 && (
-                <p className="wiki-empty-text" style={{ gridColumn: "1 / -1" }}>Searching for established consensus…</p>
-              )}
-              {Object.values(data.narrative).filter(f => f.status === "canonical").map(field => (
-                <WikiFieldItem 
-                  key={field.field} 
-                  field={field} 
-                  showDelete={identity?.tier === "genesis"}
-                  isDeleting={deletingField === field.field}
-                  onDelete={() => handleDeleteField(field.field)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Disputed Fields (Special Case) */}
-          {Object.values(data.narrative).filter(f => f.status === "disputed").length > 0 && (
-            <div className="wiki-section" style={{ borderColor: "rgba(251, 191, 36, 0.3)" }}>
-              <h2 className="wiki-section-title" style={{ color: "var(--rarity-legendary)", marginBottom: "var(--space-md)" }}>Disputed Knowledge</h2>
+          {/* Main Content Area: Narratives & Knowledge */}
+          <div className="wiki-main-content">
+            {/* Canonical Fields */}
+            <div className="wiki-section">
+              <h2 className="wiki-section-title" style={{ marginBottom: "var(--space-md)" }}>Verified Narrative</h2>
               <div className="wiki-two-column-grid">
-                {Object.values(data.narrative).filter(f => f.status === "disputed").map(field => (
+                {Object.values(data.narrative).filter(f => f.status === "canonical").length === 0 && (
+                  <p className="wiki-empty-text" style={{ gridColumn: "1 / -1" }}>Searching for established consensus…</p>
+                )}
+                {Object.values(data.narrative).filter(f => f.status === "canonical").map(field => (
                   <WikiFieldItem 
                     key={field.field} 
                     field={field} 
@@ -333,7 +250,95 @@ export function WikiPage() {
                 ))}
               </div>
             </div>
-          )}
+
+            {/* Disputed Fields (Special Case) */}
+            {Object.values(data.narrative).filter(f => f.status === "disputed").length > 0 && (
+              <div className="wiki-section" style={{ borderColor: "rgba(251, 191, 36, 0.3)" }}>
+                <h2 className="wiki-section-title" style={{ color: "var(--rarity-legendary)", marginBottom: "var(--space-md)" }}>Disputed Knowledge</h2>
+                <div className="wiki-two-column-grid">
+                  {Object.values(data.narrative).filter(f => f.status === "disputed").map(field => (
+                    <WikiFieldItem 
+                      key={field.field} 
+                      field={field} 
+                      showDelete={identity?.tier === "genesis"}
+                      isDeleting={deletingField === field.field}
+                      onDelete={() => handleDeleteField(field.field)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Sidebar: Actionable Intel & Gaps */}
+          <aside className="wiki-sidebar">
+            <div className="wiki-section" style={{ borderLeft: "2px solid rgba(247, 147, 26, 0.3)", background: "rgba(247, 147, 26, 0.02)" }}>
+              <header className="wiki-section-header">
+                <h2 className="wiki-section-title" style={{ fontSize: "0.85rem" }}>
+                  {activeTab === "drafts" ? "Draft Proposals" : "Missing Data"}
+                </h2>
+                <div className="wiki-toggle-group">
+                  <button 
+                    className={`wiki-toggle-btn ${activeTab === "drafts" ? "active" : ""}`}
+                    onClick={() => setActiveTab("drafts")}
+                  >
+                    Drafts
+                  </button>
+                  <button 
+                    className={`wiki-toggle-btn ${activeTab === "gaps" ? "active" : ""}`}
+                    onClick={() => setActiveTab("gaps")}
+                  >
+                    Gaps
+                  </button>
+                </div>
+              </header>
+
+              <div className="wiki-fields-list" style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+                {activeTab === "drafts" ? (
+                  <>
+                    {Object.values(data.narrative).filter(f => f.status === "draft").length === 0 ? (
+                      <p className="wiki-empty-text">No pending drafts.</p>
+                    ) : (
+                      Object.values(data.narrative).filter(f => f.status === "draft").map(field => (
+                        <WikiFieldItem 
+                          key={field.field} 
+                          field={field} 
+                          showDelete={identity?.tier === "genesis"}
+                          isDeleting={deletingField === field.field}
+                          onDelete={() => handleDeleteField(field.field)}
+                        />
+                      ))
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {data.gaps.length === 0 ? (
+                      <p className="wiki-empty-text">All canonical fields filled.</p>
+                    ) : (
+                      data.gaps.map(gap => (
+                        <div key={gap} className="wiki-gap-item" style={{ padding: "var(--space-md)" }}>
+                          <span className="wiki-gap-name" style={{ fontSize: "0.75rem" }}>{formatFieldName(gap)}</span>
+                          <button 
+                            className="btn btn-ghost btn-xs" 
+                            style={{ padding: "2px 8px", fontSize: "0.65rem", color: "var(--accent-primary)" }}
+                            onClick={() => {
+                              if (data.sample_inscription_id) {
+                                navigate(`/?id=${data.sample_inscription_id}&builderMode=true&gap=${gap}`)
+                              } else {
+                                alert("Cannot open builder: No reference found.")
+                              }
+                            }}
+                          >
+                            CONTRIBUTE
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </div>
