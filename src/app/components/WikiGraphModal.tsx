@@ -924,44 +924,38 @@ function buildGraphLayout(
       name: "cola",
       animate: !deterministic,
       refresh: 2,
-      maxSimulationTime: deterministic ? 2000 : 7000,
+      maxSimulationTime: deterministic ? 4000 : 15000, // 15 seconds for a smooth, deep settlement
       ungrabifyWhileSimulating: false,
       fit: false,
-      padding: 80,
+      padding: 120, // More initial padding to allow the 'stretch'
       randomize,
       avoidOverlap: true,
       nodeSpacing: (node: cytoscape.NodeSingular) => {
         const degree = node.degree()
         const kind = node.data("kind")
-        // Hubs (like collection or wiki pages) get more breathing room proportional to their connectivity
-        const base = kind === "collection" ? 40 : 20
-        return base + Math.min(degree * 4, 60)
+        const base = kind === "collection" ? 50 : 25
+        return base + Math.min(degree * 5, 80)
       },
       edgeLength: (edge: cytoscape.EdgeSingular) => {
         const source = edge.source()
         const target = edge.target()
         const edgeKind = edge.data("kind")
-        
-        // Degree-based dynamic scaling
         const avgDegree = (source.degree() + target.degree()) / 2
         
-        // Base lengths by semantic relationship
-        let baseLength = 70
-        if (edgeKind === "belongs_to_collection") baseLength = 100
-        if (edgeKind === "has_field") baseLength = 80
-        if (edgeKind === "has_claim") baseLength = 50
+        let baseLength = 80
+        if (edgeKind === "belongs_to_collection") baseLength = 120
+        if (edgeKind === "has_field") baseLength = 90
+        if (edgeKind === "has_claim") baseLength = 60
         
-        // Scale length by connectivity but keep a tight cap to prevent over-sprawl
-        // Hubs push away more, leaf nodes stay snug
-        const dynamicFactor = Math.min(avgDegree * 6, 80)
-        
+        const dynamicFactor = Math.min(avgDegree * 8, 100)
         return baseLength + dynamicFactor
       },
       infinite: false,
-      alphaTest: 0.008, 
-      initialUnconstrainedIterations: deterministic ? 350 : 1000,
-      initialUserConstraintIterations: deterministic ? 150 : 400,
-      initialAllConstraintsIterations: deterministic ? 150 : 400,
+      alphaTest: 0.001, // Extremely low to allow microscopic adjustments at the end
+      convergenceThreshold: 0.001, // Force it to reach a high precision state
+      initialUnconstrainedIterations: deterministic ? 500 : 1600, // More 'explosion' phase
+      initialUserConstraintIterations: deterministic ? 300 : 800,
+      initialAllConstraintsIterations: deterministic ? 300 : 800,
     } as ColaLayoutOptions
   }
 

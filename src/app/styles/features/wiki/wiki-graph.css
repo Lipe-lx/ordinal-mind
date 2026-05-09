@@ -11,10 +11,10 @@
     max(var(--space-md), var(--safe-area-bottom))
     max(var(--space-md), var(--safe-area-left));
   background:
-    radial-gradient(circle at top left, var(--accent-glow-strong), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.04), transparent 30%),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.03), transparent 30%),
     var(--bg-overlay-strong);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
 }
 
 .wiki-graph-modal {
@@ -259,8 +259,8 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent-primary);
-  box-shadow: 0 0 8px var(--accent-glow);
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
 }
 
 .btn-close-minimal {
@@ -353,9 +353,9 @@
 
 .view-toggle-slider.mode-neural {
   transform: translateX(0);
-  background: var(--accent-glow-strong);
-  border-color: var(--border-accent);
-  box-shadow: 0 0 15px var(--accent-glow);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
 }
 
 .view-toggle-slider.mode-tree {
@@ -413,10 +413,10 @@
 }
 
 .wiki-graph-chip.is-active {
-  border-color: var(--border-accent);
+  border-color: rgba(255, 255, 255, 0.4);
   color: #fff;
-  background: var(--accent-glow-strong);
-  box-shadow: 0 0 12px var(--accent-glow);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
 }
 
 .wiki-graph-chip.status-draft.is-active {
@@ -469,10 +469,12 @@
 
 .wiki-graph-body.view-neural .wiki-graph-canvas-panel {
   background:
-    radial-gradient(circle at center, var(--accent-glow-strong), transparent 60%),
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.04), transparent 65%),
     var(--bg-primary);
-  border-color: var(--border-accent);
-  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    inset 0 0 100px rgba(0, 0, 0, 0.7),
+    0 0 40px rgba(255, 255, 255, 0.02);
 }
 
 .wiki-graph-canvas-panel {
@@ -504,18 +506,21 @@
   width: 100%;
   height: 100%;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 50px 50px;
   background-position: center center;
   transition: opacity 0.4s var(--ease-smooth);
+  perspective: 1000px;
 }
 
 .wiki-graph-body.view-neural .wiki-graph-canvas {
   background-image:
-    radial-gradient(rgba(255, 255, 255, 0.05) 1.2px, transparent 1.2px);
-  background-size: 32px 32px;
-  opacity: 0.6;
+    radial-gradient(rgba(255, 255, 255, 0.04) 1.5px, transparent 1.5px),
+    radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px, 128px 128px;
+  opacity: 0.8;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
 }
 
 .wiki-graph-inline-warnings {
@@ -943,6 +948,7 @@
     line-height: 1.45;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
