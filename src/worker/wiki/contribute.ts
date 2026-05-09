@@ -122,6 +122,51 @@ interface PublishedFieldRow extends ActiveContributionRow {
   contributor_key: string | null
 }
 
+interface TableInfoRow {
+  name: string
+}
+
+interface ContributionColumnCaps {
+  hasValueNorm: boolean
+  hasContributorKey: boolean
+  hasUpdatedAt: boolean
+  hasSafetyStatus: boolean
+  hasSafetyMetadata: boolean
+}
+
+async function getContributionColumnCaps(env: Env): Promise<ContributionColumnCaps> {
+  if (!env.DB) {
+    return {
+      hasValueNorm: false,
+      hasContributorKey: false,
+      hasUpdatedAt: false,
+      hasSafetyStatus: false,
+      hasSafetyMetadata: false,
+    }
+  }
+
+  try {
+    const columns = await env.DB.prepare("PRAGMA table_info('wiki_contributions')")
+      .all<TableInfoRow>()
+    const names = new Set((columns.results ?? []).map((row) => row.name))
+    return {
+      hasValueNorm: names.has("value_norm"),
+      hasContributorKey: names.has("contributor_key"),
+      hasUpdatedAt: names.has("updated_at"),
+      hasSafetyStatus: names.has("safety_status"),
+      hasSafetyMetadata: names.has("safety_metadata"),
+    }
+  } catch {
+    return {
+      hasValueNorm: false,
+      hasContributorKey: false,
+      hasUpdatedAt: false,
+      hasSafetyStatus: false,
+      hasSafetyMetadata: false,
+    }
+  }
+}
+
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
   return tier === "og" || tier === "genesis" ? "published" : "quarantine"
 }
@@ -206,12 +251,17 @@ async function readActiveContribution(
   slug: string,
   field: CanonicalField,
   contributorKey: string,
-  status: "published" | "quarantine"
+  status: "published" | "quarantine",
+  caps: ContributionColumnCaps,
+  contributorId: string | null,
+  sessionId: string
 ): Promise<ActiveContributionRow | null> {
   if (!env.DB) return null
 
-  const row = await env.DB.prepare(`
-    SELECT id, value, value_norm, status
+  const valueNormExpr = caps.hasValueNorm ? "value_norm" : "NULL AS value_norm"
+  const row = caps.hasContributorKey
+    ? await env.DB.prepare(`
+    SELECT id, value, ${valueNormExpr}, status
     FROM wiki_contributions
     WHERE collection_slug = ?
       AND field = ?
@@ -219,8 +269,22 @@ async function readActiveContribution(
       AND status = ?
     LIMIT 1
   `)
-    .bind(slug, field, contributorKey, status)
-    .first<ActiveContributionRow>()
+      .bind(slug, field, contributorKey, status)
+      .first<ActiveContributionRow>()
+    : await env.DB.prepare(`
+    SELECT id, value, ${valueNormExpr}, status
+    FROM wiki_contributions
+    WHERE collection_slug = ?
+      AND field = ?
+      AND status = ?
+      AND (
+        (contributor_id IS NOT NULL AND contributor_id = ?)
+        OR (? IS NULL AND contributor_id IS NULL AND session_id = ?)
+      )
+    LIMIT 1
+  `)
+      .bind(slug, field, status, contributorId, contributorId, sessionId)
+      .first<ActiveContributionRow>()
 
   return row ?? null
 }
@@ -228,11 +292,14 @@ async function readActiveContribution(
 async function readPublishedFieldContribution(
   env: Env,
   slug: string,
-  field: CanonicalField
+  field: CanonicalField,
+  caps: ContributionColumnCaps
 ): Promise<PublishedFieldRow | null> {
   if (!env.DB) return null
+  const valueNormExpr = caps.hasValueNorm ? "value_norm" : "NULL AS value_norm"
+  const contributorKeyExpr = caps.hasContributorKey ? "contributor_key" : "NULL AS contributor_key"
   const row = await env.DB.prepare(`
-    SELECT id, value, value_norm, status, og_tier, contributor_id, contributor_key
+    SELECT id, value, ${valueNormExpr}, status, og_tier, contributor_id, ${contributorKeyExpr}
     FROM wiki_contributions
     WHERE collection_slug = ?
       AND field = ?
@@ -335,6 +402,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   }
 
   const { contribution, jwt } = parsed
+  const caps = await getContributionColumnCaps(env)
   const isSeedOrigin = contribution.origin === NARRATIVE_SEED_ORIGIN
   if (!isSeedOrigin) {
     const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
@@ -370,10 +438,12 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
     try {
       // Mark all existing published contributions for this field as 'deleted'
+      const deletionSet = caps.hasUpdatedAt
+        ? "status = 'deleted', updated_at = datetime('now')"
+        : "status = 'deleted'"
       await env.DB.prepare(`
         UPDATE wiki_contributions
-        SET status = 'deleted',
-            updated_at = datetime('now')
+        SET ${deletionSet}
         WHERE collection_slug = ? AND field = ? AND status = 'published'
       `)
         .bind(contribution.collection_slug, contribution.field)
@@ -422,7 +492,8 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       publishedFieldRow = await readPublishedFieldContribution(
         env,
         contribution.collection_slug,
-        contribution.field
+        contribution.field,
+        caps
       )
       activeRow = publishedFieldRow
     } else {
@@ -431,7 +502,10 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         contribution.collection_slug,
         contribution.field,
         contributorKey,
-        effectiveStatus
+        effectiveStatus,
+        caps,
+        contributor_id,
+        contribution.session_id
       )
     }
   } catch (err) {
@@ -478,37 +552,50 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     }
 
     try {
+      const updateParts: string[] = [
+        "value = ?",
+        "confidence = ?",
+        "verifiable = ?",
+        "contributor_id = ?",
+        "og_tier = ?",
+        "session_id = ?",
+        "source_excerpt = ?",
+      ]
+      const updateBind: unknown[] = [
+        contribution.value,
+        contribution.confidence,
+        contribution.verifiable ? 1 : 0,
+        resolvedContributorId,
+        resolvedTier,
+        contribution.session_id,
+        contribution.source_excerpt ?? null,
+      ]
+      if (caps.hasValueNorm) {
+        updateParts.push("value_norm = ?")
+        updateBind.push(valueNorm)
+      }
+      if (caps.hasContributorKey) {
+        updateParts.push("contributor_key = ?")
+        updateBind.push(contributorKey)
+      }
+      if (caps.hasSafetyStatus) {
+        updateParts.push("safety_status = ?")
+        updateBind.push(safety.safe ? "safe" : "flagged")
+      }
+      if (caps.hasSafetyMetadata) {
+        updateParts.push("safety_metadata = ?")
+        updateBind.push(safety.metadata ? JSON.stringify(safety.metadata) : (safety.reason || null))
+      }
+      if (caps.hasUpdatedAt) {
+        updateParts.push("updated_at = datetime('now')")
+      }
+
       await env.DB.prepare(`
         UPDATE wiki_contributions
-        SET
-          value = ?,
-          value_norm = ?,
-          confidence = ?,
-          verifiable = ?,
-          contributor_id = ?,
-          contributor_key = ?,
-          og_tier = ?,
-          session_id = ?,
-          source_excerpt = ?,
-          safety_status = ?,
-          safety_metadata = ?,
-          updated_at = datetime('now')
+        SET ${updateParts.join(", ")}
         WHERE id = ?
       `)
-        .bind(
-          contribution.value,
-          valueNorm,
-          contribution.confidence,
-          contribution.verifiable ? 1 : 0,
-          resolvedContributorId,
-          contributorKey,
-          resolvedTier,
-          contribution.session_id,
-          contribution.source_excerpt ?? null,
-          safety.safe ? "safe" : "flagged",
-          safety.metadata ? JSON.stringify(safety.metadata) : (safety.reason || null),
-          activeRow.id
-        )
+        .bind(...updateBind, activeRow.id)
         .run()
 
       await writeConsolidationAudit(env, {
@@ -545,30 +632,65 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   const id = generateId()
 
   try {
+    const insertColumns = [
+      "id",
+      "collection_slug",
+      "field",
+      "value",
+      "confidence",
+      "verifiable",
+      "contributor_id",
+      "og_tier",
+      "session_id",
+      "source_excerpt",
+      "status",
+    ]
+    const insertValues = ["?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"]
+    const insertBind: unknown[] = [
+      id,
+      contribution.collection_slug,
+      contribution.field,
+      contribution.value,
+      contribution.confidence,
+      contribution.verifiable ? 1 : 0,
+      resolvedContributorId,
+      resolvedTier,
+      contribution.session_id,
+      contribution.source_excerpt ?? null,
+      effectiveStatus,
+    ]
+
+    if (caps.hasValueNorm) {
+      insertColumns.push("value_norm")
+      insertValues.push("?")
+      insertBind.push(valueNorm)
+    }
+    if (caps.hasContributorKey) {
+      insertColumns.push("contributor_key")
+      insertValues.push("?")
+      insertBind.push(contributorKey)
+    }
+    if (caps.hasSafetyStatus) {
+      insertColumns.push("safety_status")
+      insertValues.push("?")
+      insertBind.push(safety.safe ? "safe" : "flagged")
+    }
+    if (caps.hasSafetyMetadata) {
+      insertColumns.push("safety_metadata")
+      insertValues.push("?")
+      insertBind.push(safety.metadata ? JSON.stringify(safety.metadata) : (safety.reason || null))
+    }
+    if (caps.hasUpdatedAt) {
+      insertColumns.push("updated_at")
+      insertValues.push("datetime('now')")
+    }
+
     await env.DB.prepare(`
       INSERT INTO wiki_contributions
-        (id, collection_slug, field, value, value_norm, confidence, verifiable,
-         contributor_id, contributor_key, og_tier, session_id, source_excerpt, status, 
-         safety_status, safety_metadata, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        (${insertColumns.join(", ")})
+      VALUES (${insertValues.join(", ")})
     `)
-      .bind(
-        id,
-        contribution.collection_slug,
-        contribution.field,
-        contribution.value,
-        valueNorm,
-        contribution.confidence,
-        contribution.verifiable ? 1 : 0,
-        resolvedContributorId,
-        contributorKey,
-        resolvedTier,
-        contribution.session_id,
-        contribution.source_excerpt ?? null,
-        effectiveStatus,
-        safety.safe ? "safe" : "flagged",
-        safety.metadata ? JSON.stringify(safety.metadata) : (safety.reason || null)
-      )
+      .bind(...insertBind)
       .run()
 
     if (effectiveStatus === "published") {

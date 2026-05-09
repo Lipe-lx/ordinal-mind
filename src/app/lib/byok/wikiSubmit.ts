@@ -26,11 +26,13 @@ export interface WikiSubmitResult {
   status?: string
   tier_applied?: string
   detail?: string
+  http_status?: number
 }
 
 export interface WikiSubmitError {
   ok: false
   error: string
+  http_status?: number
 }
 
 /**
@@ -69,6 +71,7 @@ export async function submitWikiContribution(params: {
       return {
         ok: false,
         error: errorBody || `http_${response.status}`,
+        http_status: response.status,
       }
     }
 
@@ -85,6 +88,7 @@ export async function submitWikiContribution(params: {
       status: typeof payload?.status === "string" ? payload.status : undefined,
       tier_applied: typeof payload?.tier_applied === "string" ? payload.tier_applied : undefined,
       detail: typeof payload?.detail === "string" ? payload.detail : undefined,
+      http_status: response.status,
     }
   } catch (error) {
     console.warn("[OrdinalMind][WikiSubmit] Request failed", {

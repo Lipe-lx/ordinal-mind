@@ -15,7 +15,7 @@ import type { Chronicle } from "../types"
 import { chooseCanonicalWikiValue, normalizeWikiValue } from "../wikiNormalization"
 import type { ByokConfig } from "./index"
 import { runByokPrompt, parseFirstJsonObject } from "./wikiAdapter"
-import { submitWikiContribution } from "./wikiSubmit"
+import { submitWikiContribution, type WikiSubmitError, type WikiSubmitResult } from "./wikiSubmit"
 import {
   CANONICAL_FIELDS,
   COLLECTION_ONLY_FIELDS,
@@ -437,6 +437,60 @@ async function extractFieldsFromNarrative(
   return filteredByMissingKeys
 }
 
+function shouldRetrySeedSubmission(result: WikiSubmitResult | WikiSubmitError): boolean {
+  if (result.ok) return false
+  const status = result.http_status ?? 0
+  if ([429, 500, 502, 503, 504].includes(status)) return true
+  return /db_write_failed|http_5\d\d|rate_limited/i.test(result.error)
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve()
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function submitSeedFieldWithRetry(
+  field: ValidatedSeedField,
+  narrative: string,
+  sessionId: string | null
+): Promise<WikiSubmitResult | WikiSubmitError> {
+  const maxRetries = 2
+  for (let attempt = 0; ; attempt += 1) {
+    const result = await submitWikiContribution({
+      data: {
+        collection_slug: field.collection_slug,
+        field: field.field,
+        value: field.value,
+        operation: "add",
+        confidence: "inferred",
+        verifiable: field.verifiable,
+        session_id: sessionId,
+        origin: "narrative_seed_agent",
+        source_excerpt: `[Narrative seed] ${narrative.slice(0, 200)}`,
+      },
+      activeThreadId: sessionId,
+      prompt: "[wiki_seed_agent]",
+    })
+
+    if (!shouldRetrySeedSubmission(result) || attempt >= maxRetries) {
+      return result
+    }
+
+    const delayMs = 350 * (2 ** attempt) + Math.floor(Math.random() * 200)
+    console.warn("[OrdinalMind][WikiSeedAgent] Retrying seed contribution", {
+      at: new Date().toISOString(),
+      slug: field.collection_slug,
+      field: field.field,
+      attempt: attempt + 1,
+      max_retries: maxRetries,
+      delay_ms: delayMs,
+      reason: result.ok ? "unknown" : result.error,
+      status: result.http_status ?? null,
+    })
+    await sleep(delayMs)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
@@ -542,46 +596,21 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       label: `Submitting ${fields.length} wiki field${fields.length !== 1 ? "s" : ""} from narrative…`,
     })
 
-    let submitted = 0
-    const results = await Promise.allSettled(
-      fields.map((field) =>
-        submitWikiContribution({
-          data: {
-            collection_slug: field.collection_slug,
-            field: field.field,
-            value: field.value,
-            operation: "add",
-            confidence: "inferred",
-            verifiable: field.verifiable,
-            session_id: sessionId,
-            origin: "narrative_seed_agent",
-            source_excerpt: `[Narrative seed] ${narrative.slice(0, 200)}`,
-          },
-          activeThreadId: sessionId,
-          prompt: "[wiki_seed_agent]",
-        })
-      )
-    )
+    const results: Array<WikiSubmitResult | WikiSubmitError> = []
+    for (const field of fields) {
+      results.push(await submitSeedFieldWithRetry(field, narrative, sessionId))
+    }
 
-    submitted = results.filter(
-      (r) =>
-        r.status === "fulfilled"
-        && r.value.ok
-        && (r.value.status === "published" || r.value.status === "quarantine")
+    const submitted = results.filter(
+      (r) => r.ok && (r.status === "published" || r.status === "quarantine")
     ).length
 
     const duplicates = results.filter(
-      (r) =>
-        r.status === "fulfilled" &&
-        r.value.ok &&
-        r.value.status === "duplicate"
+      (r) => r.ok && r.status === "duplicate"
     ).length
 
     const protectedByGenesis = results.filter(
-      (r) =>
-        r.status === "fulfilled"
-        && r.value.ok
-        && r.value.detail === "protected_genesis_human"
+      (r) => r.ok && r.detail === "protected_genesis_human"
     ).length
 
     console.info("[OrdinalMind][WikiSeedAgent] Seed complete", {
@@ -596,7 +625,7 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       updated_or_inserted: submitted,
       duplicates,
       protected_by_genesis_human: protectedByGenesis,
-      errors: results.filter((r) => r.status === "rejected").length,
+      errors: results.filter((r) => !r.ok).length,
     })
 
     const label =
