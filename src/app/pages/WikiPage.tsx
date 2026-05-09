@@ -9,7 +9,8 @@ import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import "../styles/features/wiki/wiki.css"
 
 export function WikiPage() {
-  const { slug } = useParams<{ slug: string }>()
+  const { slug: rawSlug } = useParams<{ slug: string }>()
+  const slug = rawSlug?.startsWith("collection:") ? rawSlug.slice("collection:".length) : rawSlug
   const navigate = useNavigate()
   const { setHeaderCenter } = useOutletContext<LayoutOutletContext>()
   const { identity } = useDiscordIdentity()

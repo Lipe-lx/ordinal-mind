@@ -29,6 +29,7 @@ export const COLLECTION_ONLY_FIELDS: CanonicalField[] = [
   "community_culture",
   "connections",
   "current_status",
+  "name",
 ]
 
 export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = [

@@ -28,6 +28,7 @@ export const COLLECTION_ONLY_FIELDS = [
   "community_culture",
   "connections",
   "current_status",
+  "name",
 ] as const
 
 /** Fields strictly for individual inscriptions (inscriber) */
