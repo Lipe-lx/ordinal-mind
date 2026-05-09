@@ -88,8 +88,8 @@ export function AddressPage() {
   if (isLoading && inscriptions.length === 0) {
     return (
       <div className="address-page fade-in">
-        <div className="chronicle-header" style={{ alignSelf: "flex-start", marginBottom: "1rem" }}>
-          <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Search</button>
+        <div className="address-header-row" style={{ alignSelf: "flex-start", marginBottom: "1rem" }}>
+          <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Back</button>
         </div>
         <div className="address-list">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -124,8 +124,8 @@ export function AddressPage() {
   if (inscriptions.length === 0) {
     return (
       <div className="address-page fade-in">
-        <div className="chronicle-header" style={{ alignSelf: "flex-start" }}>
-          <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Search</button>
+        <div className="address-header-row" style={{ alignSelf: "flex-start" }}>
+          <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Back</button>
         </div>
         
         <div className="glass-card address-empty-state">
@@ -149,11 +149,9 @@ export function AddressPage() {
 
   return (
     <div className="address-page fade-in">
-      <div className="chronicle-header" style={{ marginBottom: "1rem" }}>
-        <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Search</button>
-      </div>
-
-      <div className="address-toolbar fade-in">
+      <div className="address-header-row">
+        <button onClick={() => navigate(`/${location.search}`)} className="btn btn-ghost">← Back</button>
+        
         <div className="address-search">
           <svg className="address-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -166,6 +164,7 @@ export function AddressPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+
         {data && (
           <div className="address-stats">
             {data.total} <span style={{ opacity: 0.6 }}>inscriptions</span>
