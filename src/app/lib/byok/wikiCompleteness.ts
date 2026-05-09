@@ -8,18 +8,18 @@
 import type { ConsolidatedCollection } from "../types"
 
 export type CanonicalField =
+  | "name"
   | "founder"
   | "artist"
   | "inscriber"
   | "launch_date"
   | "launch_context"
   | "origin_narrative"
-  | "technical_details"
-  | "notable_moments"
   | "community_culture"
   | "connections"
   | "current_status"
-  | "name"
+  | "technical_details"
+  | "notable_moments"
 
 export const CANONICAL_FIELDS: CanonicalField[] = [
   "name",
@@ -36,12 +36,16 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "notable_moments",
 ]
 
-/** Alias for compatibility with existing agents that expect these lists */
-export const COLLECTION_ONLY_FIELDS: CanonicalField[] = CANONICAL_FIELDS
-export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = CANONICAL_FIELDS
+/** 
+ * No fields are strictly restricted anymore. 
+ * All fields can be used at both collection and inscription level.
+ */
+export const COLLECTION_ONLY_FIELDS: CanonicalField[] = []
+export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = []
 export const SHARED_FIELDS: CanonicalField[] = CANONICAL_FIELDS
 
 export interface CollectionCanonicalFields {
+  name: string | null
   founder: string | null
   artist: string | null
   inscriber: string | null

@@ -141,20 +141,38 @@ export async function getConsolidatedSnapshot(
     const wikiSlug = `${entityType}:${normalizedSlug}`
 
     if (consolidated.completeness.score > 0) {
+      // For inscriptions, try to find a parent collection to link back to via on-chain/market data
+      let crossRefs = "[]"
+      if (isInscription) {
+        const link = await env.DB.prepare(`
+          SELECT json_extract(metadata_json, '$.parent_inscription_id') as parent_id,
+                 json_extract(metadata_json, '$.name') as collection_name
+          FROM raw_chronicle_events
+          WHERE inscription_id = ? AND event_type = 'collection_link'
+          LIMIT 1
+        `).bind(normalizedSlug).first<{ parent_id: string | null, collection_name: string | null }>()
+
+        const parentRef = link?.parent_id || link?.collection_name
+        if (parentRef) {
+          crossRefs = JSON.stringify([`collection:${normalizeCollectionSlugInput(parentRef)}`].filter(Boolean))
+        }
+      }
+
       await env.DB.prepare(`
         INSERT INTO wiki_pages
           (slug, entity_type, title, summary, sections_json, cross_refs_json,
            source_event_ids_json, generated_at, byok_provider, unverified_count, updated_at)
-        VALUES (?, ?, ?, '', '[]', '[]', '[]', datetime('now'), 'system_seed', 0, datetime('now'))
+        VALUES (?, ?, ?, '', '[]', ?, '[]', datetime('now'), 'system_seed', 0, datetime('now'))
         ON CONFLICT(slug) DO UPDATE SET
           entity_type = excluded.entity_type,
           title = excluded.title,
+          cross_refs_json = CASE WHEN excluded.cross_refs_json <> '[]' THEN excluded.cross_refs_json ELSE wiki_pages.cross_refs_json END,
           updated_at = excluded.updated_at
       `)
-        .bind(wikiSlug, entityType, consolidated.narrative["name"]?.canonical_value || normalizedSlug)
+        .bind(wikiSlug, entityType, consolidated.narrative["name"]?.canonical_value || normalizedSlug, crossRefs)
         .run()
         .catch(() => {
-          // Seed errors are ignored to not interrupt the main consolidation process
+          // Seed errors are ignored
         })
     } else {
       // If completeness dropped to zero (e.g., after Genesis deletion), remove from search index

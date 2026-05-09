@@ -125,8 +125,8 @@ function buildSeedPrompt(
 
   const phaseInstruction =
     phase === "collection"
-      ? "Phase focus: collection scope first. Prioritize collection-only fields plus shared fields when they clearly refer to the collection."
-      : "Phase focus: inscription scope. Prioritize inscription-only fields plus shared fields when they clearly refer to this inscription."
+      ? "Phase focus: collection scope. Extract facts that describe the collection as a whole (history, overall founders, general launch, community context)."
+      : "Phase focus: inscription scope. Extract facts that are unique to THIS specific inscription (its specific creator, its unique meaning, its individual provenance)."
 
   const allowedFields = CANONICAL_FIELDS
 
@@ -200,9 +200,14 @@ function resolveScopeWithSafeFallback(
   field: CanonicalField,
   phase: SeedExtractionPhase
 ): "collection" | "inscription" {
+  // 1. Enforce logical defaults from the field lists first to prevent misclassification
   if (isInscriptionOnlyField(field)) return "inscription"
   if (isCollectionOnlyField(field)) return "collection"
+  
+  // 2. If it's a shared field, check if the LLM provided a valid scope
   if (isScope(rawScope)) return rawScope
+  
+  // 3. Final fallback is the current extraction phase focus
   return phase
 }
 

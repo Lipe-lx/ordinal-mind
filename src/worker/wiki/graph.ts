@@ -158,7 +158,11 @@ export async function buildCollectionGraph(
     .find((page): page is ParsedWikiPage => Boolean(page)) ?? null
   const collectionPages = allPages
     .filter((page) => page.entity_type === "inscription")
-    .filter((page) => page.cross_refs.some((ref) => aliasWikiSlugs.has(ref)))
+    .filter((page) => {
+      const isLinked = page.cross_refs.some((ref) => aliasWikiSlugs.has(ref))
+      const isFocus = normalizedFocus && (page.slug === `inscription:${normalizedFocus}` || page.slug === normalizedFocus)
+      return isLinked || isFocus
+    })
     .sort(sortWikiPages)
 
   const warnings: string[] = []
@@ -188,6 +192,35 @@ export async function buildCollectionGraph(
 
   const rootNodeId = collectionWikiSlug
   addNode(buildCollectionRootNode(consolidated, collectionPage, rootNodeId))
+
+  // Ensure the focused inscription is represented even if a full wiki page doesn't exist yet
+  const focusPageSlug = normalizedFocus ? `inscription:${normalizedFocus}` : null
+  const focusPage = collectionPages.find(p => p.slug === focusPageSlug)
+  
+  if (normalizedFocus && !focusPage) {
+    // Add a virtual node entry for the focused inscription if missing
+    addNode({
+      id: focusPageSlug!,
+      kind: "wiki_page",
+      label: `Inscription #${normalizedFocus.slice(0, 8)}`,
+      status: "draft",
+      description: "Asset-specific wiki context.",
+      metadata: {
+        slug: focusPageSlug!,
+        entity_type: "inscription",
+        unverified_count: 0
+      }
+    })
+    addEdge({
+      id: `${focusPageSlug}->${rootNodeId}:belongs_to_collection`,
+      kind: "belongs_to_collection",
+      source: focusPageSlug!,
+      target: rootNodeId,
+      status: "draft",
+      label: "collection member",
+      metadata: { slug: focusPageSlug! },
+    })
+  }
 
   const allowedFields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, normalizedSlug))
   for (const field of allowedFields) {
