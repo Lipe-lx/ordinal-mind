@@ -11,7 +11,7 @@ export interface SearchToolDefinition {
 export const COLLECTION_RESEARCH_TOOLS: SearchToolDefinition[] = [
   {
     name: "search_wiki",
-    description: "Search the Ordinal Mind wiki for inscription, collection, artist, or sat pages. Use this for contextual background, named entities, and relationship discovery. Do not use it as the only source for precise transfer, mint, sale, or supply claims when a factual event tool is available.",
+    description: "Search the OrdinalMind wiki for inscription, collection, artist, or sat pages. Use this for contextual background, named entities, and relationship discovery. Do not use it as the only source for precise transfer, mint, sale, or supply claims when a factual event tool is available.",
     parameters: {
       type: "object",
       properties: {

@@ -71,7 +71,7 @@ export function buildSuggestedExportFilename(now = new Date()): string {
   const year = now.getUTCFullYear()
   const month = String(now.getUTCMonth() + 1).padStart(2, "0")
   const day = String(now.getUTCDate()).padStart(2, "0")
-  return `ordinal-mind-wiki-export-${year}-${month}-${day}.zip`
+  return `ordinalmind-wiki-export-${year}-${month}-${day}.zip`
 }
 
 export function parseDownloadFilename(contentDisposition: string | null): string | null {

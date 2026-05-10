@@ -521,7 +521,7 @@ function buildContentCacheKey(chronicle: Chronicle): string {
     chronicle.media_context.content_url,
     normalizeContentType(chronicle.media_context.content_type),
   ].join("|")
-  return `ordinal-mind:content-bundle:v${CONTENT_CACHE_VERSION}:${hashString(raw)}`
+  return `ordinalmind:content-bundle:v${CONTENT_CACHE_VERSION}:${hashString(raw)}`
 }
 
 function hashString(value: string): string {

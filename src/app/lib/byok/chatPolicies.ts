@@ -9,7 +9,7 @@ export function getIntentRouterMode(): IntentRouterMode {
   if (!CHAT_INTENT_ROUTER_V1) return "off"
   if (typeof window === "undefined") return "active"
 
-  const override = window.localStorage.getItem("ordinal-mind_intent_router_mode")
+  const override = window.localStorage.getItem("ordinalmind_intent_router_mode")
   if (override === "off" || override === "shadow" || override === "active") {
     return override
   }

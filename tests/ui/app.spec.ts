@@ -66,7 +66,7 @@ async function installApiMocks(page: Page, options?: { delayStreamMs?: number })
       status: 200,
       contentType: "application/zip",
       headers: {
-        "Content-Disposition": `attachment; filename="ordinal-mind-wiki-export-2026-05-06.zip"`,
+        "Content-Disposition": `attachment; filename="ordinalmind-wiki-export-2026-05-06.zip"`,
       },
       body: "fake-zip",
     })
@@ -97,7 +97,7 @@ async function installIdentityMocks(page: Page) {
   })
 
   await page.addInitScript((jwt) => {
-    window.localStorage.setItem("ordinal-mind_discord_jwt", jwt)
+    window.localStorage.setItem("ordinalmind_discord_jwt", jwt)
   }, token)
 
   await page.route("**/api/auth/me", async (route) => {
@@ -198,7 +198,7 @@ test("identity wiki export is enabled for authenticated users and prevents doubl
       status: 200,
       contentType: "application/zip",
       headers: {
-        "Content-Disposition": `attachment; filename="ordinal-mind-wiki-export-2026-05-06.zip"`,
+        "Content-Disposition": `attachment; filename="ordinalmind-wiki-export-2026-05-06.zip"`,
       },
       body: "fake-zip",
     })
@@ -214,7 +214,7 @@ test("identity wiki export is enabled for authenticated users and prevents doubl
   await expect(exportButton).toBeDisabled()
   await exportButton.click({ force: true })
 
-  await expect(page.getByText("Saved ordinal-mind-wiki-export-2026-05-06.zip")).toBeVisible()
+  await expect(page.getByText("Saved ordinalmind-wiki-export-2026-05-06.zip")).toBeVisible()
   expect(exportRequests).toBe(1)
   await expectNoHorizontalOverflow(page)
 })

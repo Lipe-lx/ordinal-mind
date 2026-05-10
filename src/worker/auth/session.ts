@@ -1,7 +1,7 @@
 import type { Env } from "../index"
 import { verifyJWT, type JWTPayload } from "./jwt"
 
-export const AUTH_COOKIE_NAME = "ordinal_mind_auth"
+export const AUTH_COOKIE_NAME = "ordinalmind_auth"
 
 export function parseCookieHeader(header: string | null): Record<string, string> {
   if (!header) return {}

@@ -267,7 +267,7 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     const env = createMcpEnv(db)
     const prepareSpy = vi.spyOn(db, "prepare")
 
-    await getConsolidatedSnapshot("ordinal-mind", env)
+    await getConsolidatedSnapshot("ordinalmind", env)
 
     expect(prepareSpy).toHaveBeenCalledWith(expect.stringContaining("INSERT OR IGNORE INTO wiki_pages"))
   })
@@ -277,8 +277,8 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     db.contributionHasUpdatedAt = false
     db.wikiPages.push(
       {
-        slug: "collection:ordinal-mind",
-        title: "Ordinal Mind",
+        slug: "collection:ordinalmind",
+        title: "OrdinalMind",
         entity_type: "collection",
         summary: "",
         updated_at: "2026-05-07T10:00:00.000Z",
@@ -301,11 +301,11 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
       summary: "inscription seed",
       updated_at: "2026-05-07T11:30:00.000Z",
     })
-    db.wikiFts.push({ slug: "collection:ordinal-mind", title: "Ordinal Mind" })
+    db.wikiFts.push({ slug: "collection:ordinalmind", title: "OrdinalMind" })
     db.wikiFts.push({ slug: "inscription:abc123i0", title: "Inscription #1" })
     db.wikiContributions.push(
-      { collection_slug: "ordinal-mind", status: "published", created_at: "2026-05-07T13:00:00.000Z" },
-      { collection_slug: "ordinal-mind", status: "published", created_at: "2026-05-07T13:30:00.000Z" },
+      { collection_slug: "ordinalmind", status: "published", created_at: "2026-05-07T13:00:00.000Z" },
+      { collection_slug: "ordinalmind", status: "published", created_at: "2026-05-07T13:30:00.000Z" },
       { collection_slug: "node-monkes", status: "published", created_at: "2026-05-07T14:00:00.000Z" },
       { collection_slug: "quantum-cats", status: "quarantine", created_at: "2026-05-07T14:30:00.000Z" },
       { collection_slug: "quantum-cats", status: "quarantine", created_at: "2026-05-07T15:00:00.000Z" },
@@ -353,7 +353,7 @@ describe("Discovery-first and wiki stats MCP smoke", () => {
     expect(list.ok).toBe(true)
     expect(list.total).toBe(3)
     expect(list.items.some((item: Record<string, unknown>) => item.slug === "inscription:abc123i0")).toBe(true)
-    const seedItem = list.items.find((item: Record<string, unknown>) => item.slug === "collection:ordinal-mind")
+    const seedItem = list.items.find((item: Record<string, unknown>) => item.slug === "collection:ordinalmind")
     expect(seedItem.publication_status).toBe("seed")
     expect(seedItem.is_seed).toBe(true)
 

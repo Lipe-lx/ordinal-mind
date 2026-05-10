@@ -499,9 +499,9 @@ function buildConsensusMarkdown(record: ExportableConsolidatedCollection): strin
 
 function buildReadme(snapshot: WikiExportSnapshot): string {
   return [
-    "# Ordinal Mind Wiki Export",
+    "# OrdinalMind Wiki Export",
     "",
-    "This archive is a public snapshot of the Ordinal Mind wiki.",
+    "This archive is a public snapshot of the OrdinalMind wiki.",
     "",
     "## Structure",
     "",
@@ -561,7 +561,7 @@ function resolveConsensusScope(slug: string): string {
 
 function buildExportFilename(isoString: string): string {
   const day = isoString.slice(0, 10)
-  return `ordinal-mind-wiki-export-${day}.zip`
+  return `ordinalmind-wiki-export-${day}.zip`
 }
 
 function buildContentDisposition(filename: string): string {

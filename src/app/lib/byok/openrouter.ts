@@ -47,8 +47,8 @@ export class OpenRouterAdapter implements LLMAdapter {
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${this.key}`,
-      "HTTP-Referer": typeof window !== "undefined" ? window.location.href : "https://ordinal-mind.com",
-      "X-Title": "Ordinal Mind",
+      "HTTP-Referer": typeof window !== "undefined" ? window.location.href : "https://ordinalmind.com",
+      "X-Title": "OrdinalMind",
     }
   }
 

@@ -29,7 +29,7 @@ import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 const PKCE_TTL_SECONDS = 5 * 60 // 5 minutes
 const AUTH_CODE_TTL_SECONDS = 90
 const AUTH_COOKIE_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
-const PKCE_COOKIE_NAME = "ordinal_mind_pkce"
+const PKCE_COOKIE_NAME = "ordinalmind_pkce"
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",

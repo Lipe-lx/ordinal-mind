@@ -1,4 +1,4 @@
-# MCP Usage Guide (Ordinal Mind)
+# MCP Usage Guide (OrdinalMind)
 
 Short operational guide for teams and agents consuming the public MCP server.
 
@@ -6,7 +6,7 @@ Short operational guide for teams and agents consuming the public MCP server.
 
 - Base URL: `https://ordinalmind.com/mcp`
 - Transport: Streamable HTTP (SSE)
-- Server: `ordinal-mind` (`2.0.0`)
+- Server: `ordinalmind` (`2.0.0`)
 
 ## Required Headers
 

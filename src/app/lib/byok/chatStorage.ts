@@ -5,8 +5,8 @@ import type {
   ChatWorkspaceSnapshot,
 } from "./chatTypes"
 
-const STORAGE_KEY = "ordinal-mind_narrative_chat_threads_v2"
-const LEGACY_STORAGE_KEY = "ordinal-mind_narrative_chat_threads_v1"
+const STORAGE_KEY = "ordinalmind_narrative_chat_threads_v2"
+const LEGACY_STORAGE_KEY = "ordinalmind_narrative_chat_threads_v1"
 const MAX_TURNS = 8
 const MAX_MEMORY_MESSAGES = 24
 

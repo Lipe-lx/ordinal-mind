@@ -1,4 +1,4 @@
-# Codebase Map: Ordinal Mind
+# Codebase Map: OrdinalMind
 
 This is the current structure and responsibility map of the repository.
 

@@ -186,8 +186,8 @@ export async function runByokPrompt(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.key}`,
-          "HTTP-Referer": typeof window !== "undefined" ? window.location.href : "https://ordinal-mind.com",
-          "X-Title": "Ordinal Mind",
+          "HTTP-Referer": typeof window !== "undefined" ? window.location.href : "https://ordinalmind.com",
+          "X-Title": "OrdinalMind",
         },
       })
     case "anthropic":

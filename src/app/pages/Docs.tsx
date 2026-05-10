@@ -72,7 +72,7 @@ export function Docs() {
           <header>
             <h1 id="introduction">Documentation</h1>
             <p className="docs-intro">
-              Welcome to the Ordinal Mind documentation. This resource explains the philosophy, 
+              Welcome to the OrdinalMind documentation. This resource explains the philosophy, 
               technology, and features behind the first factual memory engine for Bitcoin Ordinals.
             </p>
           </header>
@@ -80,9 +80,9 @@ export function Docs() {
           <section>
             <h2 id="product-thesis">Product Thesis</h2>
             <p>
-              Ordinal Mind was built with a clear promise: <strong>Factual first, public data only.</strong> 
+              OrdinalMind was built with a clear promise: <strong>Factual first, public data only.</strong> 
               Unlike many AI-driven tools that prioritize creative storytelling over accuracy, 
-              Ordinal Mind treats the blockchain as the ultimate source of truth.
+              OrdinalMind treats the blockchain as the ultimate source of truth.
             </p>
             <blockquote>
               The raw event tree is the product. The Chronicle narrative and Wiki layers are enhancements.
@@ -97,7 +97,7 @@ export function Docs() {
           <section>
             <h2 id="how-it-works">How it Works</h2>
             <p>
-              When you provide an inscription number or a Taproot address, Ordinal Mind triggers 
+              When you provide an inscription number or a Taproot address, OrdinalMind triggers 
               a multi-layered discovery process:
             </p>
             <ul>
@@ -150,7 +150,7 @@ export function Docs() {
           <section>
             <h2 id="byok">BYOK (Bring Your Own Key)</h2>
             <p>
-              Privacy and security are non-negotiable. Ordinal Mind follows a strict 
+              Privacy and security are non-negotiable. OrdinalMind follows a strict 
               <strong>BYOK</strong> (Bring Your Own Key) policy:
             </p>
             <ul>
@@ -173,7 +173,7 @@ export function Docs() {
             <ul>
               <li><strong>Genesis:</strong> Project founders and core maintainers.</li>
               <li><strong>OG:</strong> Early contributors and recognized community members.</li>
-              <li><strong>Community:</strong> Verified members of the Ordinal Mind ecosystem.</li>
+              <li><strong>Community:</strong> Verified members of the OrdinalMind ecosystem.</li>
             </ul>
           </section>
 
@@ -181,7 +181,7 @@ export function Docs() {
             <h2 id="consensus">Community Consensus</h2>
             <p>
               When multiple users contribute different values for the same Wiki field, 
-              Ordinal Mind uses a consensus algorithm that prioritizes data from 
+              OrdinalMind uses a consensus algorithm that prioritizes data from 
               higher-tier members. This ensures that the consolidated view always 
               reflects the most trusted information available.
             </p>
@@ -190,7 +190,7 @@ export function Docs() {
           <section>
             <h2 id="mcp">Agent Layer (MCP)</h2>
             <p>
-              Ordinal Mind is designed not just for humans, but for the next generation of AI agents. 
+              OrdinalMind is designed not just for humans, but for the next generation of AI agents. 
               We implement the <strong>Model Context Protocol (MCP)</strong>, an open standard that 
               allows AI models to interact with our factual core in a structured, verifiable way.
             </p>
@@ -231,7 +231,7 @@ export function Docs() {
             </ul>
             <p>
               This ensures that even when an agent is acting on your behalf, 
-              the security and tier rules of Ordinal Mind remain strictly enforced.
+              the security and tier rules of OrdinalMind remain strictly enforced.
             </p>
           </section>
         </article>

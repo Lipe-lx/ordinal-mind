@@ -18,22 +18,22 @@ export function Policies() {
       <div className="legal-card">
         <p className="legal-meta">Last updated: {LAST_UPDATE}</p>
         <p>
-          These policies explain how Ordinal Mind handles public data, community contributions, and user privacy in alignment with the product promise: factual first, public data only, and no server-side custody of user LLM secrets.
+          These policies explain how OrdinalMind handles public data, community contributions, and user privacy in alignment with the product promise: factual first, public data only, and no server-side custody of user LLM secrets.
         </p>
 
         <h2>1. Public-data policy</h2>
         <p>
-          Ordinal Mind aggregates and normalizes public, cacheable information. Events are intended to be source-backed and traceable to public sources such as on-chain data, ordinals.com, mempool.space, and discovered public references.
+          OrdinalMind aggregates and normalizes public, cacheable information. Events are intended to be source-backed and traceable to public sources such as on-chain data, ordinals.com, mempool.space, and discovered public references.
         </p>
 
         <h2>2. Inscription content policy</h2>
         <p>
-          Inscription content is created by third parties and lives on public infrastructure. Ordinal Mind does not author, own, or control inscription content and is not responsible for legality, quality, safety, or rights status of any inscription media or metadata.
+          Inscription content is created by third parties and lives on public infrastructure. OrdinalMind does not author, own, or control inscription content and is not responsible for legality, quality, safety, or rights status of any inscription media or metadata.
         </p>
 
         <h2>3. Wiki contribution policy</h2>
         <p>
-          Wiki entries and edits are user-generated contributions. Ordinal Mind may apply community weighting and review flows, but does not guarantee that every field is correct, complete, non-infringing, or up to date.
+          Wiki entries and edits are user-generated contributions. OrdinalMind may apply community weighting and review flows, but does not guarantee that every field is correct, complete, non-infringing, or up to date.
         </p>
 
         <h2>4. Narrative and AI policy</h2>
@@ -43,17 +43,17 @@ export function Policies() {
 
         <h2>5. BYOK and key-handling policy</h2>
         <p>
-          User LLM API keys are handled client-side. Ordinal Mind does not intentionally collect, proxy, persist, or inspect those keys server-side. Authenticated users can store encrypted keys in browser local storage; guests can use session-only storage.
+          User LLM API keys are handled client-side. OrdinalMind does not intentionally collect, proxy, persist, or inspect those keys server-side. Authenticated users can store encrypted keys in browser local storage; guests can use session-only storage.
         </p>
 
         <h2>6. Privacy and telemetry policy</h2>
         <p>
-          Ordinal Mind is designed to minimize private-data handling. Public asset identifiers may be processed for request resolution, caching, and debugging. Users should avoid submitting sensitive personal data into wiki fields or prompts.
+          OrdinalMind is designed to minimize private-data handling. Public asset identifiers may be processed for request resolution, caching, and debugging. Users should avoid submitting sensitive personal data into wiki fields or prompts.
         </p>
 
         <h2>7. External-source policy</h2>
         <p>
-          Third-party APIs, explorers, and discovery sources can fail, throttle, change schema, or go offline. Ordinal Mind may return partial results and does not guarantee uninterrupted coverage from every external source.
+          Third-party APIs, explorers, and discovery sources can fail, throttle, change schema, or go offline. OrdinalMind may return partial results and does not guarantee uninterrupted coverage from every external source.
         </p>
 
         <h2>8. Community and enforcement policy</h2>

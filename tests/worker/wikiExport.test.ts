@@ -342,7 +342,7 @@ describe("wiki export route", () => {
     expect(res.headers.get("Content-Type")).toBe("application/zip")
     expect(res.headers.get("Cache-Control")).toBe("no-store")
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff")
-    expect(res.headers.get("Content-Disposition")).toContain("ordinal-mind-wiki-export-")
+    expect(res.headers.get("Content-Disposition")).toContain("ordinalmind-wiki-export-")
 
     const files = unzipArchive(new Uint8Array(await res.arrayBuffer()))
     expect(Object.keys(files)).toContain("README.md")

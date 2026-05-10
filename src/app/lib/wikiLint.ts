@@ -1,7 +1,7 @@
 import type { WikiLintReport } from "./wikiTypes"
 
-const LINT_SESSION_KEY = "ordinal-mind:wiki-lint-checked"
-const LINT_REPORT_KEY = "ordinal-mind:wiki-lint-report"
+const LINT_SESSION_KEY = "ordinalmind:wiki-lint-checked"
+const LINT_REPORT_KEY = "ordinalmind:wiki-lint-report"
 const LINT_STALE_AFTER_MS = 12 * 60 * 60 * 1000
 
 export function shouldRunLint(now = Date.now()): boolean {

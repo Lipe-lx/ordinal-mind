@@ -34,7 +34,7 @@ const DEFAULT_EMBED_VIEWPORT_SIZE = 512
 const COMPACT_EMBED_VIEWPORT_SIZE = 384
 const HTML_PREVIEW_CACHE_VERSION = 1
 const HTML_PREVIEW_CACHE_TTL_MS = 12 * 60 * 60 * 1000
-const HTML_PREVIEW_STORAGE_PREFIX = "ordinal-mind_html-preview:"
+const HTML_PREVIEW_STORAGE_PREFIX = "ordinalmind_html-preview:"
 
 type HtmlPreviewPreference = "html" | "preview"
 

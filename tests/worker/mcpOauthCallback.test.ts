@@ -181,7 +181,7 @@ describe("MCP OAuth callback state handling", () => {
 
     expect(authorizeRes.status).toBe(302)
     expect(state).toBeTruthy()
-    expect(setCookie).toContain("ordinal_mind_mcp_oauth_state=")
+    expect(setCookie).toContain("ordinalmind_mcp_oauth_state=")
 
     const callbackReq = new Request(
       `https://ordinalmind.com/mcp/oauth/callback?code=discord-code-1&state=${encodeURIComponent(state ?? "")}`,
@@ -191,7 +191,7 @@ describe("MCP OAuth callback state handling", () => {
 
     expect(callbackRes.status).toBe(302)
     expect(callbackRes.headers.get("Location")).toContain("https://client.example/callback")
-    expect(callbackRes.headers.get("Set-Cookie")).toContain("ordinal_mind_mcp_oauth_state=;")
+    expect(callbackRes.headers.get("Set-Cookie")).toContain("ordinalmind_mcp_oauth_state=;")
   })
 
   it("blocks replay by consuming state one-time in durable object", async () => {

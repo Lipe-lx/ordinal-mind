@@ -1,6 +1,6 @@
-# Architecture: Ordinal Mind
+# Architecture: OrdinalMind
 
-Ordinal Mind uses a factual-first split architecture:
+OrdinalMind uses a factual-first split architecture:
 - **Worker** builds and serves verifiable Chronicle data (Layer 0) from public sources.
 - **Client** performs optional BYOK AI synthesis/chat and Wiki contributions (Layer 1/2) on top of that data.
 - **MCP Surface** exposes read-first resources and capability-gated operational tools for agent clients.

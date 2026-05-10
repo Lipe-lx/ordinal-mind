@@ -38,7 +38,7 @@ describe("wikiExport", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("zip-fallback", {
       status: 200,
       headers: {
-        "Content-Disposition": `attachment; filename*=UTF-8''ordinal-mind-wiki-export-2026-05-06.zip`,
+        "Content-Disposition": `attachment; filename*=UTF-8''ordinalmind-wiki-export-2026-05-06.zip`,
       },
     }))
 
@@ -50,7 +50,7 @@ describe("wikiExport", () => {
     })
 
     expect(result.status).toBe("success")
-    expect(result.filename).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
+    expect(result.filename).toBe("ordinalmind-wiki-export-2026-05-06.zip")
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: "Bearer jwt-token" })
     expect(clickMock).toHaveBeenCalledTimes(1)
@@ -85,7 +85,7 @@ describe("wikiExport", () => {
   })
 
   it("builds predictable filenames and parses content disposition", () => {
-    expect(buildSuggestedExportFilename(new Date("2026-05-06T12:30:00.000Z"))).toBe("ordinal-mind-wiki-export-2026-05-06.zip")
+    expect(buildSuggestedExportFilename(new Date("2026-05-06T12:30:00.000Z"))).toBe("ordinalmind-wiki-export-2026-05-06.zip")
     expect(parseDownloadFilename(`attachment; filename="wiki.zip"`)).toBe("wiki.zip")
     expect(parseDownloadFilename(`attachment; filename*=UTF-8''wiki%20export.zip`)).toBe("wiki export.zip")
   })

@@ -18,37 +18,37 @@ export function TermsOfUse() {
       <div className="legal-card">
         <p className="legal-meta">Last updated: {LAST_UPDATE}</p>
         <p>
-          These Terms of Use govern your access to and use of Ordinal Mind. By using the platform, you agree to these terms.
+          These Terms of Use govern your access to and use of OrdinalMind. By using the platform, you agree to these terms.
         </p>
 
         <h2>1. Service nature</h2>
         <p>
-          Ordinal Mind is a factual memory engine for Bitcoin Ordinals. The service aggregates public data to build a verifiable asset timeline, with optional narrative and collaborative wiki layers.
+          OrdinalMind is a factual memory engine for Bitcoin Ordinals. The service aggregates public data to build a verifiable asset timeline, with optional narrative and collaborative wiki layers.
         </p>
 
         <h2>2. No custody and no server-side LLM key handling</h2>
         <p>
-          Ordinal Mind does not receive, store, or custody wallet private keys or user LLM API keys. BYOK AI features run client-side and remain the user&apos;s responsibility.
+          OrdinalMind does not receive, store, or custody wallet private keys or user LLM API keys. BYOK AI features run client-side and remain the user&apos;s responsibility.
         </p>
 
         <h2>3. Inscription content disclaimer</h2>
         <p>
-          Ordinal Mind does not create, endorse, pre-moderate, own, or control inscription content on-chain. All inscription content, media, and metadata remain solely the responsibility of their authors/originators.
+          OrdinalMind does not create, endorse, pre-moderate, own, or control inscription content on-chain. All inscription content, media, and metadata remain solely the responsibility of their authors/originators.
         </p>
 
         <h2>4. Wiki contribution disclaimer</h2>
         <p>
-          Wiki fields, descriptions, links, and related information are third-party user contributions. Ordinal Mind does not guarantee their accuracy, completeness, legality, ownership, or ongoing correctness.
+          Wiki fields, descriptions, links, and related information are third-party user contributions. OrdinalMind does not guarantee their accuracy, completeness, legality, ownership, or ongoing correctness.
         </p>
 
         <h2>5. No legal, financial, or tax advice</h2>
         <p>
-          Ordinal Mind content is informational only. Nothing on the platform constitutes legal, financial, tax, or investment advice.
+          OrdinalMind content is informational only. Nothing on the platform constitutes legal, financial, tax, or investment advice.
         </p>
 
         <h2>6. Limitation of liability</h2>
         <p>
-          To the maximum extent permitted by law, Ordinal Mind and its maintainers are not liable for direct or indirect losses, including damages from inaccurate third-party data, external source downtime, unlawful third-party content, or decisions made using this platform.
+          To the maximum extent permitted by law, OrdinalMind and its maintainers are not liable for direct or indirect losses, including damages from inaccurate third-party data, external source downtime, unlawful third-party content, or decisions made using this platform.
         </p>
 
         <h2>7. Acceptable use</h2>
@@ -60,7 +60,7 @@ export function TermsOfUse() {
 
         <h2>8. Public-source and third-party dependency</h2>
         <p>
-          Ordinal Mind depends on public data and third-party providers. Failures, delays, or upstream changes may produce partial, delayed, or unavailable data without notice.
+          OrdinalMind depends on public data and third-party providers. Failures, delays, or upstream changes may produce partial, delayed, or unavailable data without notice.
         </p>
 
         <h2>9. Changes to terms</h2>

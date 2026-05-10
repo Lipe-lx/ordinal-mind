@@ -96,7 +96,7 @@ export function Layout() {
           {!isHome && (
             <Link to="/" className="layout-logo">
               <LogoIcon className="layout-logo-icon" />
-              Ordinal Mind
+              OrdinalMind
             </Link>
           )}
         </div>
@@ -209,7 +209,7 @@ export function Layout() {
 
       <footer className="layout-footer">
         <div className="layout-footer-content">
-          <span className="layout-footer-name">Ordinal Mind</span>
+          <span className="layout-footer-name">OrdinalMind</span>
           <div className="layout-footer-links">
             <Link to={`/docs${location.search}`} className="layout-footer-text-link">
               Docs
@@ -229,7 +229,7 @@ export function Layout() {
             rel="noopener noreferrer"
             className="layout-footer-link"
             title="Follow on X"
-            aria-label="Follow Ordinal Mind on X"
+            aria-label="Follow OrdinalMind on X"
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M18.244 2H21l-6.56 7.5L22.5 22h-6.77l-5.3-6.93L4.34 22H1.58l7.02-8.02L1.5 2h6.94l4.79 6.31L18.244 2Zm-2.37 18h1.87L6.48 3.9H4.47L15.874 20Z" />

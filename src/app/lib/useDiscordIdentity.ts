@@ -17,11 +17,11 @@ export interface DiscordIdentity {
   badges?: Array<{ name: string; level: number }>
 }
 
-export const DISCORD_JWT_STORAGE_KEY = "ordinal-mind_discord_jwt"
-export const DISCORD_CONNECTED_STORAGE_KEY = "ordinal-mind_discord_connected"
+export const DISCORD_JWT_STORAGE_KEY = "ordinalmind_discord_jwt"
+export const DISCORD_CONNECTED_STORAGE_KEY = "ordinalmind_discord_connected"
 const AUTH_CODE_PARAM = "auth_code"
 const AUTH_ERROR_PARAM = "auth_error"
-const AUTH_SYNC_EVENT = "ordinal-mind:auth-sync"
+const AUTH_SYNC_EVENT = "ordinalmind:auth-sync"
 
 function broadcastAuthSync(): void {
   if (typeof window === "undefined") return

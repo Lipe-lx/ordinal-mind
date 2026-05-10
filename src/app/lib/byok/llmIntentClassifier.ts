@@ -106,7 +106,7 @@ function buildClassifierMessages(params: ClassifierParams): { system: string; us
     .join("\n")
 
   return {
-    system: `You classify chat intent for Ordinal Mind, a factual Bitcoin Ordinals Chronicle app.
+    system: `You classify chat intent for OrdinalMind, a factual Bitcoin Ordinals Chronicle app.
 Return only JSON with keys: intent, mode, confidence, reason.
 Allowed intents: ${INTENTS.join(", ")}.
 Allowed modes: ${MODES.join(", ")}.
@@ -148,7 +148,7 @@ async function requestOpenAI(params: ClassifierParams, signal: AbortSignal): Pro
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "ordinal_mind_intent",
+          name: "ordinalmind_intent",
           strict: true,
           schema: {
             type: "object",
@@ -238,8 +238,8 @@ async function requestOpenRouter(params: ClassifierParams, signal: AbortSignal):
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${params.config.key}`,
-      "HTTP-Referer": typeof window !== "undefined" ? window.location.href : "https://ordinal-mind.com",
-      "X-Title": "Ordinal Mind",
+      "HTTP-Referer": typeof window !== "undefined" ? window.location.href : "https://ordinalmind.com",
+      "X-Title": "OrdinalMind",
     },
     body: JSON.stringify({
       model: params.config.model,

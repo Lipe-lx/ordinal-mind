@@ -1,4 +1,4 @@
-// UniSat Open API agent — optional inscription enrichment for Ordinal Mind.
+// UniSat Open API agent — optional inscription enrichment for OrdinalMind.
 // Base: https://open-api.unisat.io
 // Auth: Bearer token from env.UNISAT_API_KEY (server-side secret, not BYOK).
 //

@@ -41,7 +41,7 @@ export function createOrdinalMindMcpServer(options: {
   auth?: McpResolvedAuth
   request: Request
 }): McpServer {
-  const server = new McpServer({ name: "ordinal-mind", version: "2.0.0" })
+  const server = new McpServer({ name: "ordinalmind", version: "2.0.0" })
   registerCompatibilityStubs(server)
   registerResources(server, options.env)
   registerTools({

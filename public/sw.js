@@ -1,4 +1,4 @@
-const STATIC_CACHE = "ordinal-mind-static-v1"
+const STATIC_CACHE = "ordinalmind-static-v1"
 const OFFLINE_URL = "/offline.html"
 const STATIC_PATHS = [
   OFFLINE_URL,

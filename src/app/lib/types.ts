@@ -1,4 +1,4 @@
-// Shared types for Ordinal Mind — used by both Worker and React app.
+// Shared types for OrdinalMind — used by both Worker and React app.
 
 export type EventType =
   | "genesis"         // inscription created

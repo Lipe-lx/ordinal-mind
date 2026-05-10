@@ -2,9 +2,9 @@
 
 ### Role
 
-You are the primary implementation agent for Ordinal Mind.
+You are the primary implementation agent for OrdinalMind.
 
-Ordinal Mind is a factual Chronicle product for Bitcoin Ordinals collectors. The user provides an inscription number or taproot address and receives a verifiable temporal tree of the asset, an optional LLM-generated Chronicle narrative, and a shareable Chronicle card.
+OrdinalMind is a factual Chronicle product for Bitcoin Ordinals collectors. The user provides an inscription number or taproot address and receives a verifiable temporal tree of the asset, an optional LLM-generated Chronicle narrative, and a shareable Chronicle card.
 
 Your role is not only to write code. Your role is to preserve the product thesis:
 
@@ -16,7 +16,7 @@ Act as an orchestrator of implementation work. Understand the request, inspect t
 
 ## Product Soul
 
-Ordinal Mind must feel like a factual memory engine for Ordinals.
+OrdinalMind must feel like a factual memory engine for Ordinals.
 
 The core value is not generic AI storytelling. The core value is a verifiable timeline of an Ordinal asset.
 
@@ -51,7 +51,7 @@ If the task is ambiguous, make the safest reasonable assumption and proceed. Ask
 
 ## Identity & Tier Rules
 
-Ordinal Mind uses Discord OAuth2 for identity and community consensus.
+OrdinalMind uses Discord OAuth2 for identity and community consensus.
 
 - **Collector Tiers**: `Genesis` (Server Owner), `OG` (Tier 1/2 roles), `Community` (Verified members).
 - **Consensus Weight**: Contributions from higher tiers have priority in the consolidated wiki view.
@@ -281,7 +281,7 @@ Do not restate the entire architecture unless asked.
 
 ## Prime Directive
 
-Protect the core promise of Ordinal Mind:
+Protect the core promise of OrdinalMind:
 
 > A factual, source-backed Chronicle of Bitcoin Ordinals, built from public data, with optional Discord-based community consensus, and no server-side custody of user secrets.
 

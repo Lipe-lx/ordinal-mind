@@ -14,7 +14,7 @@
 // Honest limitation:
 //   - Active XSS on same origin can call decryptConfig() — mitigate with CSP headers
 
-const DEVICE_KEY_STORAGE = "ordinal-mind_device_key"
+const DEVICE_KEY_STORAGE = "ordinalmind_device_key"
 
 export interface EncryptedPayload {
   ct: string  // base64 ciphertext

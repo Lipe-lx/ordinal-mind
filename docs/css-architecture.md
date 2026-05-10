@@ -1,4 +1,4 @@
-# Ordinal Mind — CSS Architecture
+# OrdinalMind — CSS Architecture
 
 > Current state of style refactoring after modularizing the former `src/app/index.css`.
 

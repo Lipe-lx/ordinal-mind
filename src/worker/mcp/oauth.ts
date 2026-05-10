@@ -38,7 +38,7 @@ const MCP_ACCESS_TOKEN_TTL_SECONDS = 30 * 60
 const MCP_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 const CALLBACK_STATE_READ_ATTEMPTS = 3
 const CALLBACK_STATE_READ_RETRY_MS = 120
-const MCP_OAUTH_STATE_COOKIE_NAME = "ordinal_mind_mcp_oauth_state"
+const MCP_OAUTH_STATE_COOKIE_NAME = "ordinalmind_mcp_oauth_state"
 const DEFAULT_PUBLIC_CLIENT_REDIRECT_URI = "https://example.com/callback"
 
 interface PendingMcpAuthorizationCookie {

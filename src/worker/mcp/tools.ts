@@ -489,7 +489,7 @@ export function registerTools(options: {
 
       return jsonToolResult({
         ok: true,
-        server: "ordinal-mind",
+        server: "ordinalmind",
         tier,
         strategy: {
           intent: "Factual-first research for Bitcoin Ordinals with optional wiki governance actions.",
