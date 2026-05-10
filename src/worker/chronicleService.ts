@@ -35,6 +35,7 @@ export function initState(
     env: {
       CHRONICLES_KV: env.CHRONICLES_KV,
       UNISAT_API_KEY: env.UNISAT_API_KEY,
+      ORD_NET_API_KEY: env.ORD_NET_API_KEY,
       DB: env.DB,
     },
     diagnostics,

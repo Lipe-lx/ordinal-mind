@@ -231,6 +231,7 @@ export async function parallelFetch(
       fetchCollectionContext(state.inscriptionId, state.meta, {
         debug: state.diagnostics.debug,
         requestId: state.diagnostics.requestId,
+        ordNetApiKey: state.env.ORD_NET_API_KEY,
         onProgress: async (desc) => {
           await state.onProgress?.("transfers", 1, desc)
         },

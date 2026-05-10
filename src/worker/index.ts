@@ -38,6 +38,7 @@ export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   ENVIRONMENT: string
   UNISAT_API_KEY?: string
+  ORD_NET_API_KEY?: string
   DB?: D1Database
   DISCORD_CLIENT_ID?: string
   DISCORD_CLIENT_SECRET?: string

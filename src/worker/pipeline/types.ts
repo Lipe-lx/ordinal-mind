@@ -48,6 +48,7 @@ export interface ChronicleState {
   env: {
     CHRONICLES_KV: KVNamespace
     UNISAT_API_KEY?: string
+    ORD_NET_API_KEY?: string
     DB?: D1Database
   }
   diagnostics: DiagnosticsContext

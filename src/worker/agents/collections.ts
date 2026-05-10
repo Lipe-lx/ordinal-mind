@@ -1386,6 +1386,43 @@ async function fetchMarketOverlay(
   sourceCatalog: SourceCatalogItem[],
   diagnostics?: CollectionDiagnosticsOptions
 ): Promise<MarketOverlayMatch | null> {
+  let apiOverlay: MarketOverlayMatch | null = null
+
+  // ── 1. API Fast Path (If Key Exists) ──
+  if (diagnostics?.ordNetApiKey) {
+    try {
+      const apiUrl = `https://ord.net/api/v1/listings?inscriptionId=${inscriptionId}`
+      const response = await fetch(apiUrl, {
+        headers: { "Authorization": `Bearer ${diagnostics.ordNetApiKey}`, "Content-Type": "application/json" }
+      })
+      if (response.ok) {
+        const data = await response.json() as any
+        const listing = data?.listings?.[0]
+        if (listing && listing.collection?.slug) {
+          apiOverlay = {
+            collection_slug: listing.collection.slug,
+            collection_name: listing.collection.name,
+            item_name: `Inscription ${inscriptionId.slice(0, 8)}`,
+            verified: true,
+            source_ref: apiUrl,
+          }
+          sourceCatalog.push({
+            source_type: "market_overlay_ord_net_api",
+            url_or_ref: apiUrl,
+            trust_level: "market_overlay",
+            fetched_at: fetchedAt,
+            partial: false,
+            detail: "ord.net API listings endpoint",
+          })
+        }
+      }
+    } catch (e) {
+      // Ignore API errors, fallback to scrape
+      debugCollection(diagnostics, inscriptionId, "ord_net_api_fetch_failed", { error: String(e) })
+    }
+  }
+
+  // ── 2. Fallback to HTML Scraping ──
   const url = `${ORD_MARKET_BASE_URL}/inscription/${inscriptionId}`
   const html = await fetchOptionalText(url, {
     sourceCatalog,
@@ -1398,7 +1435,7 @@ async function fetchMarketOverlay(
 
   if (!html) {
     debugCollection(diagnostics, inscriptionId, "ord_net_overlay_missing", {})
-    return null
+    return apiOverlay
   }
 
   const overlay = parseOrdMarketOverlay(html, url)
@@ -1407,8 +1444,20 @@ async function fetchMarketOverlay(
     collection_slug: overlay?.collection_slug ?? null,
     rarity_trait_count: overlay?.rarity_overlay?.traits.length ?? 0,
     rarity_supply: overlay?.rarity_overlay?.supply ?? null,
+    used_api_fast_path: Boolean(apiOverlay)
   })
-  return overlay
+
+  // If we have API data, merge it with the HTML scraped traits
+  if (apiOverlay && overlay) {
+    return {
+      ...overlay,
+      collection_slug: apiOverlay.collection_slug,
+      collection_name: apiOverlay.collection_name,
+      verified: true
+    }
+  }
+
+  return overlay ?? apiOverlay
 }
 
 async function fetchSatflowInscriptionOverlay(
