@@ -11,16 +11,24 @@ interface Props {
 }
 
 export function BYOKModal({ onClose, initialTab }: Props) {
-  const [config, setConfig] = useState<ByokConfig>(
-    KeyStore.get() ?? { provider: "unknown", model: "", key: "", researchKeys: {} }
-  )
+  const [config, setConfig] = useState<ByokConfig>(() => {
+    const stored = KeyStore.get()
+    if (stored) return stored
+    
+    // Default to Gemini if no config exists
+    return { 
+      provider: "gemini", 
+      model: MODELS.gemini[0].id, 
+      key: "", 
+      researchKeys: {} 
+    }
+  })
   const [activeTab, setActiveTab] = useState<"llm" | "research" | "identity" | "wiki-export">(initialTab ?? "identity")
   const { identity, isLoading: identityLoading, connect, disconnect } = useDiscordIdentity()
   const [wikiExportState, setWikiExportState] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [wikiExportMessage, setWikiExportMessage] = useState("")
 
-  function handleProviderChange(e: ChangeEvent<HTMLSelectElement>) {
-    const newProvider = e.target.value as Provider
+  function selectProvider(newProvider: Provider) {
     if (newProvider === "unknown") return
     
     const validModels = MODELS[newProvider]
@@ -159,16 +167,21 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                     <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Provider</label>
-                    <select
-                      className="input-field"
-                      value={config.provider}
-                      onChange={handleProviderChange}
-                    >
-                      <option value="unknown" disabled>Select Provider...</option>
+                    <div className="provider-grid">
                       {PROVIDERS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`provider-option-btn ${config.provider === p.id ? "active" : ""}`}
+                          onClick={() => selectProvider(p.id)}
+                        >
+                          <span className="provider-option-name">{p.name}</span>
+                          <span className={`provider-badge ${p.verified ? "verified" : "unverified"}`}>
+                            {p.verified ? "Verified" : "Unverified"}
+                          </span>
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
                   {config.provider !== "unknown" && (
@@ -187,7 +200,20 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                   )}
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                    <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>API Key</label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>API Key</label>
+                      {PROVIDERS.find(p => p.id === config.provider)?.keyLink && (
+                        <a 
+                          href={PROVIDERS.find(p => p.id === config.provider)?.keyLink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="link-minimal"
+                          style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--accent-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}
+                        >
+                          Get Your Key &rarr;
+                        </a>
+                      )}
+                    </div>
                     <input
                       className="input-field"
                       type="password"

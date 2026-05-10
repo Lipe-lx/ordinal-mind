@@ -54,10 +54,10 @@ export interface LLMAdapter {
 }
 
 export const PROVIDERS = [
-  { id: "anthropic", name: "Anthropic Claude" },
-  { id: "openai", name: "OpenAI" },
-  { id: "gemini", name: "Google Gemini" },
-  { id: "openrouter", name: "OpenRouter" }
+  { id: "gemini", name: "Google Gemini", verified: true, keyLink: "https://aistudio.google.com/app/apikey" },
+  { id: "anthropic", name: "Anthropic Claude", verified: false },
+  { id: "openai", name: "OpenAI", verified: false },
+  { id: "openrouter", name: "OpenRouter", verified: false }
 ] as const
 
 export const MODELS: Record<string, { id: string, name: string }[]> = {
@@ -74,7 +74,7 @@ export const MODELS: Record<string, { id: string, name: string }[]> = {
     { id: "o1", name: "o1" }
   ],
   gemini: [
-    { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro" },
+    // { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro" },
     { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview" },
     { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
     { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
