@@ -105,7 +105,7 @@ export function mapListingToOverlayEnrichment(
  * Maps ord.net sales into Chronicle events (event_type: "sale").
  */
 export function mapSalesToEvents(sales: OrdNetSale[]): ChronicleEvent[] {
-  return sales.map((sale, index) => ({
+  return sales.map((sale) => ({
     id: `sale-ordnet-${sale.saleId}`,
     timestamp: sale.soldAt,
     block_height: sale.blockHeight,

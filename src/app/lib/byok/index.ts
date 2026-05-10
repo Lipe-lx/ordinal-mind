@@ -53,7 +53,14 @@ export interface LLMAdapter {
   model: string
 }
 
-export const PROVIDERS = [
+export interface ProviderInfo {
+  readonly id: Provider
+  readonly name: string
+  readonly verified: boolean
+  readonly keyLink?: string
+}
+
+export const PROVIDERS: readonly ProviderInfo[] = [
   { id: "gemini", name: "Google Gemini", verified: true, keyLink: "https://aistudio.google.com/app/apikey" },
   { id: "anthropic", name: "Anthropic Claude", verified: false },
   { id: "openai", name: "OpenAI", verified: false },

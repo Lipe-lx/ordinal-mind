@@ -202,17 +202,20 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                       <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>API Key</label>
-                      {PROVIDERS.find(p => p.id === config.provider)?.keyLink && (
-                        <a 
-                          href={PROVIDERS.find(p => p.id === config.provider)?.keyLink} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="link-minimal"
-                          style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--accent-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}
-                        >
-                          Get Your Key &rarr;
-                        </a>
-                      )}
+                      {(() => {
+                        const p = PROVIDERS.find(p => p.id === config.provider);
+                        return p?.keyLink ? (
+                          <a 
+                            href={p.keyLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="link-minimal"
+                            style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--accent-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}
+                          >
+                            Get Your Key &rarr;
+                          </a>
+                        ) : null;
+                      })()}
                     </div>
                     <input
                       className="input-field"

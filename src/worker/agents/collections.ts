@@ -13,6 +13,7 @@ import type {
   RelatedInscriptionSummary,
   SourceCatalogItem,
 } from "../../app/lib/types"
+import type { OrdNetListingsResponse } from "../../app/lib/ordnet/types"
 import {
   buildOrdinalsPreviewUrl,
   detectMediaKind,
@@ -152,6 +153,7 @@ export interface CollectionContextFetchResult {
 interface CollectionDiagnosticsOptions {
   debug?: boolean
   requestId?: string
+  ordNetApiKey?: string
   onProgress?: (description: string) => Promise<void>
 }
 
@@ -1396,12 +1398,13 @@ async function fetchMarketOverlay(
         headers: { "Authorization": `Bearer ${diagnostics.ordNetApiKey}`, "Content-Type": "application/json" }
       })
       if (response.ok) {
-        const data = await response.json() as any
+        const data = await response.json() as OrdNetListingsResponse
         const listing = data?.listings?.[0]
         if (listing && listing.collection?.slug) {
           apiOverlay = {
             collection_slug: listing.collection.slug,
             collection_name: listing.collection.name,
+            collection_href: `/collection/${listing.collection.slug}`,
             item_name: `Inscription ${inscriptionId.slice(0, 8)}`,
             verified: true,
             source_ref: apiUrl,
