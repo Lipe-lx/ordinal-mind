@@ -13,7 +13,7 @@ interface SeoCollection {
   summary: string | null
 }
 
-const BOT_UA_PATTERN = /googlebot|bingbot|yandexbot|duckduckbot|gptbot|claudebot|claude-web|anthropic-ai|ccbot|perplexitybot|bimbot|applebot|facebookexternalhit|twitterbot|linkedinbot|slackbot/i
+const BOT_UA_PATTERN = /googlebot|bingbot|yandexbot|duckduckbot|gptbot|claudebot|claude-web|anthropic-ai|ccbot|perplexitybot|bimbot|applebot|facebookexternalhit|twitterbot|linkedinbot|slackbot|oai-searchbot|chatgpt-user|google-extended/i
 
 const SEO_KV_PREFIX = 'prerender:'
 const SEO_CACHE_TTL = 3600
