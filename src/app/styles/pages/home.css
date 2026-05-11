@@ -261,3 +261,14 @@
     flex-wrap: wrap;
   }
 }
+
+.home-agent-spacer {
+  height: 160px;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .home-agent-spacer {
+    height: 80px;
+  }
+}

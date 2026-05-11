@@ -263,6 +263,11 @@ export function Home() {
           <button className="btn btn-ghost" type="button" onClick={() => setInput("1000")}>#1000</button>
         </motion.div>
 
+        {/* Spacer to maintain vertical centering alignment after moving agent surface to fixed position */}
+        <div className="home-agent-spacer" aria-hidden="true" />
+      </motion.div>
+
+      <div className="agent-surface-wrapper">
         <motion.div 
           className="agent-surface"
           initial={{ opacity: 0, x: 20 }}
@@ -285,10 +290,7 @@ export function Home() {
             {error === "Copied!" ? "URL Copied" : "Connect Agent"}
           </button>
         </motion.div>
-
-        {/* Spacer to maintain vertical centering alignment after moving agent surface to fixed position */}
-        <div className="home-agent-spacer" style={{ height: "140px", pointerEvents: "none" }} aria-hidden="true" />
-      </motion.div>
+      </div>
     </div>
   )
 }
