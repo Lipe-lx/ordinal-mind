@@ -60,23 +60,27 @@ graph LR
 
 OrdinalMind resolves assets through a tiered verification pipeline:
 
-- **Layer 0 (Factual)**: Atomic event resolution from `ordinals.com`, `mempool.space`, and `UniSat`.
-- **Layer 1 (Consensus)**: Human-contributed knowledge via the **Wiki Engine**, weighted by Discord Collector Tiers (`Genesis` > `OG` > `Community`).
-- **Fiscal Agent (Safety)**: Real-time automated moderation of contributions using **Llama Guard 3** to filter illegal and explicit content.
-- **Layer 2 (Narrative)**: Deterministic prompt construction for client-side LLM synthesis.
-- **Layer 3 (Discovery)**: Heuristic web signal discovery and X (Twitter) mention scraping.
+| Layer | Type | Description |
+| :--- | :--- | :--- |
+| **Layer 0** | **Factual** | Atomic event resolution from `ordinals.com`, `mempool.space`, and `UniSat`. |
+| **Layer 1** | **Consensus** | Human-contributed knowledge via the Wiki Engine, weighted by Discord Collector Tiers. |
+| **🛡️ Safety** | **Fiscal Agent** | Real-time automated moderation of contributions using **Llama Guard 3**. |
+| **Layer 2** | **Narrative** | Deterministic prompt construction for client-side LLM synthesis. |
+| **Layer 3** | **Discovery** | Heuristic web signal discovery and X (Twitter) mention scraping. |
 
 ---
 
 ## 🚀 Key Features
 
-- **🌐 Multi-Source Orchestration**: Deterministic merging of disparate indexer data into a single chronology.
-- **🧠 Wiki Atlas**: Force-directed neural graph visualization (`cytoscape-fcose`) of asset relationships.
-- **💬 Intent-Aware Chat**: Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction.
-- **🛡️ Sealed Security**: LLM keys are encrypted at-rest in `localStorage` using **AES-256-GCM** derived from the user's JWT.
-- **⚡ SSE-Powered Progress**: Real-time resolution status and research activity monitoring via Server-Sent Events.
-- **🌱 Proactive Wiki Population**: Background extraction of structured knowledge from the first narrative to seed the wiki immediately.
-- **🛡️ Fiscal Agent**: Automated edge-based content moderation that allows community slang while blocking harmful content.
+| Feature | Description |
+| :--- | :--- |
+| **🌐 Multi-Source** | Deterministic merging of disparate indexer data into a single chronology. |
+| **🧠 Wiki Atlas** | Force-directed neural graph visualization (`cytoscape-fcose`) of asset relationships. |
+| **💬 Intent Chat** | Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction. |
+| **🛡️ Sealed Security** | LLM keys are encrypted at-rest using **AES-256-GCM** (client-side only). |
+| **⚡ SSE Progress** | Real-time resolution status and research activity monitoring via Server-Sent Events. |
+| **🌱 Proactive Wiki** | Background extraction of structured knowledge from narratives to seed the wiki immediately. |
+| **🛡️ Fiscal Agent** | Automated edge-based content moderation that allows community slang while blocking harmful content. |
 
 ---
 
@@ -133,39 +137,48 @@ npm run typecheck
 
 ### MCP Resources
 
-- `chronicle://inscription/{id}`: factual chronicle from KV-first pipeline with guardrails.
-- `wiki://page/{slug}`: direct public wiki page payload for collection/inscription/artist/sat slugs.
-- `wiki://collection/{slug}`: tier-weighted wiki consolidated snapshot.
-- `collection://context/{slug}`: collection context + graph summary (+ inscription context when slug is inscription id).
+| URI Scheme | Description |
+| :--- | :--- |
+| `chronicle://inscription/{id}` | Factual chronicle from KV-first pipeline with guardrails. |
+| `wiki://page/{slug}` | Public wiki page payload for collection/inscription/artist/sat slugs. |
+| `wiki://collection/{slug}` | Tier-weighted wiki consolidated snapshot. |
+| `collection://context/{slug}` | Collection context + graph summary (+ inscription context if applicable). |
 
 ### MCP Tools and Capability Gates
 
-- `help`: read-only usage and strategy guide for agents (`anon` and authenticated).
-- `query_chronicle`: public read-only query tool (`anon` and authenticated).
-- `search_collection_inscriptions`: public read-only query tool (`anon` and authenticated).
-- `wiki_search_pages`: public read-only wiki search across all page entity types (`anon` and authenticated), with `publication_status` shape hints.
-- `wiki_list_pages`: public read-only paginated inventory of wiki pages (`anon` and authenticated), with `publication_status` shape hints.
-- `wiki_get_page`: public read-only exact wiki page fetch by slug (`anon` and authenticated), with explicit `publication_status`.
-- `wiki_stats`: public read-only global wiki counters (`anon` and authenticated), including governance metrics (`published_pages`) and inventory/editorial metrics (`seed_pages`, `published_shape_pages`).
-- `wiki_list_fields`: public read-only canonical field discovery by entity type (`collection|inscription`) for write preflight.
-- `wiki_get_field_status`: public read-only wiki coverage/status tool (`anon` and authenticated).
-- `wiki_get_collection_context`: public read-only wiki context snapshot tool (`anon` and authenticated).
-- `wiki_propose_update`: moderated proposal tool (`community`, `og`, `genesis`) following app tier rules (`community -> quarantine`, `og/genesis -> published`).
-- `contribute_wiki`: `community`, `og`, `genesis`.
-- `review_contribution`: `genesis` only.
-- `refresh_chronicle`: `genesis` only, supports `notifications/progress`.
-- `reindex_collection`: `genesis` only, supports `notifications/progress`.
-- Anonymous MCP access exposes resources + read-only query tools.
+| Tool | Access Tier | Description |
+| :--- | :--- | :--- |
+| `help` | Public | Read-only usage and strategy guide for agents. |
+| `query_chronicle` | Public | Public read-only query tool. |
+| `search_collection_inscriptions` | Public | Public read-only query tool. |
+| `wiki_search_pages` | Public | Wiki search across all page entity types with shape hints. |
+| `wiki_list_pages` | Public | Paginated inventory of wiki pages. |
+| `wiki_get_page` | Public | Exact wiki page fetch by slug with explicit `publication_status`. |
+| `wiki_stats` | Public | Global wiki counters and governance metrics. |
+| `wiki_list_fields` | Public | Canonical field discovery for write preflight. |
+| `wiki_get_field_status` | Public | Wiki coverage and status tool. |
+| `wiki_get_collection_context` | Public | Wiki context snapshot tool. |
+| `wiki_propose_update` | `Community`+ | Moderated proposal tool following app tier rules. |
+| `contribute_wiki` | `Community`+ | Submit knowledge updates (`Genesis`, `OG`, `Community`). |
+| `review_contribution` | `Genesis` | Review and approve/reject contributions. |
+| `refresh_chronicle` | `Genesis` | Force refresh with progress tracking. |
+| `reindex_collection` | `Genesis` | Trigger reindexing with progress tracking. |
+
+> [!NOTE]
+> Anonymous MCP access exposes resources and read-only query tools only.
 
 ### MCP Runtime Flags
 
-- `MCP_ENABLED=1`: enables `/mcp` routing.
-- `MCP_OAUTH_ENABLED=1`: enables dedicated MCP OAuth endpoints and token validation.
-- `MCP_SPEC_TARGET=2025-11-25`: project compliance target marker for MCP behavior and reviews.
+| Flag | Value | Description |
+| :--- | :--- | :--- |
+| `MCP_ENABLED` | `1` | Enables `/mcp` routing. |
+| `MCP_OAUTH_ENABLED` | `1` | Enables dedicated MCP OAuth endpoints and token validation. |
+| `MCP_SPEC_TARGET` | `2025-11-25` | Project compliance target marker for MCP behavior. |
 
 ### KV Best Practice for OAuth
 
-`OAUTH_KV` should use a dedicated KV namespace (not shared with `CHRONICLES_KV`) to isolate OAuth transient state and token records from factual chronicle cache data.
+> [!IMPORTANT]
+> `OAUTH_KV` should use a dedicated KV namespace (not shared with `CHRONICLES_KV`) to isolate OAuth transient state and token records from factual chronicle cache data.
 
 ---
 
