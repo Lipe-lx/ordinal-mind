@@ -10,41 +10,41 @@ OrdinalMind uses a factual-first split architecture:
 ```mermaid
 graph TD
   U[User] --> C[React Client]
-  C -->|GET /api/chronicle| W[Cloudflare Worker]
+  C -->|"GET /api/chronicle"| W[Cloudflare Worker]
   W --> R[Resolver]
-  R -->|Address| U2[UniSat: Inscription List]
-  R -->|Inscription ID| A[Data Agents]
+  R -->|"Address"| U2[UniSat: Inscription List]
+  R -->|"Inscription ID"| A[Data Agents]
   A --> O[ordinals]
   A --> M[mempool]
   A --> K[collections/context]
   A --> S[mentions + research]
-  A --> U2_2[UniSat: Enrichment optional]
-  A --> T[Timeline + Validation + Rarity]
+  A --> U2_2["UniSat: Enrichment optional"]
+  A --> T["Timeline + Validation + Rarity"]
   T --> KV[(Cloudflare KV)]
   W -->|"JSON (Address List) or SSE (Timeline)"| C
 
-  C -->|BYOK key in browser| LLM[OpenAI/Anthropic/Gemini/OpenRouter]
+  C -->|"BYOK key in browser"| LLM[OpenAI/Anthropic/Gemini/OpenRouter]
   C --> Chat[Chronicle Narrative Chat]
   Chat --> UI[Timeline + Narrative + Genealogy + Wiki Atlas]
 
-  U -->|OAuth PKCE| D[Discord]
+  U -->|"OAuth PKCE"| D[Discord]
   D -->|code| W
   W -->|JWT| C
-  C -->|AES-256-GCM Store| LS[localStorage]
+  C -->|"AES-256-GCM Store"| LS[localStorage]
 
-  C -->|POST /api/wiki/contribute| W
+  C -->|"POST /api/wiki/contribute"| W
   W --> Cons[Consensus Engine]
   Cons --> D1[(D1: Wiki Pages + Contributions + Stats)]
   
-  C -->|GET /api/wiki/graph| W
+  C -->|"GET /api/wiki/graph"| W
   W --> Graph[Graph Engine]
-  Graph -->|Neural Layout| UI
+  Graph -->|"Neural Layout"| UI
 
-  MCPClient[MCP Client] -->|/mcp (Streamable HTTP)| W
+  MCPClient[MCP Client] -->|"/mcp (Streamable HTTP)"| W
   W --> MCPSrv[MCP Server per request]
   MCPSrv --> MCPRes[Resources: chronicle/wiki/context]
   MCPSrv --> MCPTools[Tools: contribute/review/refresh/reindex]
-  MCPClient -->|OAuth 2.1| MCPOAuth[/mcp/oauth/* + well-known/]
+  MCPClient -->|"OAuth 2.1"| MCPOAuth[/mcp/oauth/* + well-known/]
   MCPOAuth --> W
 ```
 
