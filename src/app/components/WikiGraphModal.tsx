@@ -55,6 +55,7 @@ export function WikiGraphModal({
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
+  const collapsedNodesRef = useRef<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<WikiGraphFilters>(createDefaultWikiGraphFilters)
@@ -240,6 +241,10 @@ export function WikiGraphModal({
     const cy = cyRef.current
     if (!cy) return
     cy.nodes().unlock()
+    // Restore all collapsed nodes in tree mode
+    collapsedNodesRef.current.clear()
+    cy.elements().removeClass("is-collapsed is-tree-hidden")
+    refreshCollapsibleClasses(cy)
     cy.layout(buildGraphLayout(filters.viewMode, {
       randomize: !deterministicRendering,
       deterministic: deterministicRendering,
@@ -431,6 +436,34 @@ export function WikiGraphModal({
     })
 
     cy.on("dbltap", "node", (event) => {
+      // In tree mode, double-tap toggles collapse instead of navigating
+      if (filters.viewMode === "tree") {
+        const nodeId = event.target.id()
+        const successors = collectSuccessors(cy, nodeId)
+        if (successors.length === 0) return // Leaf node — nothing to collapse
+
+        const collapsed = collapsedNodesRef.current
+        if (collapsed.has(nodeId)) {
+          // Expand: show direct children (and recursively their children if not manually collapsed)
+          collapsed.delete(nodeId)
+          event.target.removeClass("is-collapsed")
+          showDescendants(cy, nodeId, collapsed)
+        } else {
+          // Collapse: hide all downstream descendants
+          collapsed.add(nodeId)
+          event.target.addClass("is-collapsed")
+          hideDescendants(cy, nodeId)
+        }
+
+        // Re-run layout on visible elements only
+        cy.layout(buildGraphLayout("tree", {
+          randomize: !deterministicRendering,
+          deterministic: deterministicRendering,
+          nodeCount: cy.nodes().not(".is-tree-hidden").length,
+        })).run()
+        return
+      }
+
       const node = filteredPayload?.nodes.find((item) => item.id === event.target.id())
       if (!node) return
       const target = resolveNavigationTarget(node, currentInscriptionId)
@@ -485,6 +518,12 @@ export function WikiGraphModal({
         fitGraph()
       }
     })
+
+    // Mark collapsible nodes (those with outgoing successors) in tree mode
+    if (filters.viewMode === "tree") {
+      collapsedNodesRef.current.clear()
+      refreshCollapsibleClasses(cy)
+    }
 
     const initialFocus = filteredPayload?.focus_node_id ?? filteredPayload?.nodes[0]?.id ?? null
     if (initialFocus) {
@@ -706,6 +745,9 @@ export function WikiGraphModal({
                     <div className="wiki-graph-stats">
                       <span>{filteredPayload.counts.nodes} nodes</span>
                       <span>{filteredPayload.counts.edges} edges</span>
+                      {filters.viewMode === "tree" && (
+                        <span className="wiki-graph-hint">double-tap to expand/collapse</span>
+                      )}
                     </div>
                     <div ref={containerRef} className="wiki-graph-canvas" />
 
@@ -906,6 +948,72 @@ function collectFullNetwork(cy: cytoscape.Core, rootId: string): cytoscape.Colle
   return result
 }
 
+/**
+ * Collect direct successors (outgoing edge targets) of a node.
+ * In the wiki graph, edges go source→target (parent→child).
+ */
+function collectSuccessors(cy: cytoscape.Core, nodeId: string): cytoscape.NodeSingular[] {
+  const node = cy.getElementById(nodeId)
+  if (!node.length) return []
+  const outgoing = node.connectedEdges(`[source = "${nodeId}"]`)
+  const successors: cytoscape.NodeSingular[] = []
+  outgoing.forEach((edge) => {
+    const target = edge.target()
+    if (target.id() !== nodeId) {
+      successors.push(target)
+    }
+  })
+  return successors
+}
+
+/**
+ * Recursively hide all downstream descendants of a node and their connecting edges.
+ */
+function hideDescendants(cy: cytoscape.Core, nodeId: string): void {
+  const successors = collectSuccessors(cy, nodeId)
+  for (const child of successors) {
+    // Hide the edge(s) from parent to this child
+    cy.edges(`[source = "${nodeId}"][target = "${child.id()}"]`).addClass("is-tree-hidden")
+    // Hide the child node
+    child.addClass("is-tree-hidden")
+    // Recursively hide the child's descendants
+    hideDescendants(cy, child.id())
+  }
+}
+
+/**
+ * Recursively show descendants of a node, respecting manually collapsed children.
+ * If a child was manually collapsed by the user, show the child itself but keep its subtree hidden.
+ */
+function showDescendants(cy: cytoscape.Core, nodeId: string, collapsed: Set<string>): void {
+  const successors = collectSuccessors(cy, nodeId)
+  for (const child of successors) {
+    // Show the edge from parent to this child
+    cy.edges(`[source = "${nodeId}"][target = "${child.id()}"]`).removeClass("is-tree-hidden")
+    // Show the child node
+    child.removeClass("is-tree-hidden")
+    // Only recurse into child's subtree if it was NOT manually collapsed
+    if (!collapsed.has(child.id())) {
+      showDescendants(cy, child.id(), collapsed)
+    }
+  }
+}
+
+/**
+ * Add 'is-collapsible' class to nodes that have at least one outgoing edge (i.e., they have children).
+ * This enables the visual toggle indicator in the Cytoscape stylesheet.
+ */
+function refreshCollapsibleClasses(cy: cytoscape.Core): void {
+  cy.nodes().forEach((node) => {
+    const outgoing = node.connectedEdges(`[source = "${node.id()}"]`)
+    if (outgoing.length > 0) {
+      node.addClass("is-collapsible")
+    } else {
+      node.removeClass("is-collapsible")
+    }
+  })
+}
+
 function buildGraphLayout(
   mode: "tree" | "neural",
   options?: { randomize?: boolean; deterministic?: boolean; nodeCount?: number }
@@ -992,18 +1100,34 @@ function buildGraphLayout(
   return {
     name: "elk",
     fit: true,
-    padding: 72,
+    padding: 80,
     animate: false,
     nodeDimensionsIncludeLabels: true,
     elk: {
       algorithm: "layered",
       "elk.direction": "RIGHT",
-      "elk.padding": "[top=32,left=32,bottom=32,right=32]",
-      "elk.spacing.nodeNode": 40,
-      "elk.layered.spacing.nodeNodeBetweenLayers": 64,
-      "elk.layered.spacing.edgeNodeBetweenLayers": 42,
-      "elk.edgeRouting": "ORTHOGONAL",
+      "elk.padding": "[top=40,left=40,bottom=40,right=40]",
+      // Generous spacing for readability
+      "elk.spacing.nodeNode": "56",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "90",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "50",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "24",
+      "elk.spacing.edgeNode": "30",
+      "elk.spacing.edgeEdge": "18",
+      // NETWORK_SIMPLEX gives the most balanced, readable distribution
+      "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+      "elk.layered.nodePlacement.favorStraightEdges": "true",
+      // Better crossing minimization for cleaner visual flow
+      "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+      "elk.layered.crossingMinimization.greedySwitch.type": "TWO_SIDED",
+      // SPLINES for smooth curves instead of harsh right-angles
+      "elk.edgeRouting": "SPLINES",
       "elk.layered.nodePlacement.bk.edgeStraightening": "IMPROVE_STRAIGHTNESS",
+      // Higher thoroughness for better quality (our graphs are small enough)
+      "elk.layered.thoroughness": "10",
+      // Separate disconnected components so they don't overlap
+      "elk.separateConnectedComponents": "true",
+      "elk.spacing.componentComponent": "80",
     },
   } as cytoscape.LayoutOptions
 }
@@ -1041,8 +1165,11 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
           "shadow-opacity": 0.7,
           "border-width": 0,
         } : {
-          "border-width": 1.5,
+        "border-width": 1.5,
           "border-color": "rgba(255,255,255,0.16)",
+          "shadow-blur": 8,
+          "shadow-color": "rgba(0, 0, 0, 0.3)",
+          "shadow-opacity": 0.5,
         })
       },
     },
@@ -1084,7 +1211,7 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
       style: {
         "background-color": "#f7931a",
         "border-color": "rgba(255,255,255,0.4)",
-        "font-size": 16,
+        "font-size": isNeural ? 16 : 14,
         "font-weight": 800,
         "width": isNeural ? 42 : "label",
         "height": isNeural ? 42 : "label",
@@ -1094,23 +1221,34 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
           "shadow-color": "rgba(247, 147, 26, 0.65)",
           "shadow-opacity": 0.9,
         } : {
-          "shadow-blur": 20,
-          "shadow-color": "rgba(247, 147, 26, 0.65)",
-          "shadow-opacity": 0.4,
+          "background-color": "rgba(247, 147, 26, 0.18)",
+          "border-color": "rgba(247, 147, 26, 0.6)",
+          "border-width": 2,
+          "color": "#fbbf24",
+          "text-outline-color": "rgba(10,10,15,0.95)",
+          "shadow-blur": 12,
+          "shadow-color": "rgba(247, 147, 26, 0.3)",
+          "shadow-opacity": 0.6,
         })
       },
     },
     {
       selector: "node.kind-field",
       style: {
-        "background-color": "rgba(17, 24, 39, 0.96)",
-        "border-color": "rgba(148, 163, 184, 0.22)",
         "font-size": 12,
         "font-weight": 700,
         ...(isNeural ? {
+          "background-color": "rgba(17, 24, 39, 0.96)",
+          "border-color": "rgba(148, 163, 184, 0.22)",
           "background-gradient-stop-colors": "#cffafe #06b6d4 #0891b2",
           "shadow-color": "rgba(6, 182, 212, 0.6)",
-        } : {})
+        } : {
+          "background-color": "rgba(6, 182, 212, 0.12)",
+          "border-color": "rgba(6, 182, 212, 0.5)",
+          "border-width": 2,
+          "color": "#67e8f9",
+          "text-outline-color": "rgba(10,10,15,0.95)",
+        })
       },
     },
     {
@@ -1121,44 +1259,68 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
         ...(isNeural ? {
           "background-gradient-stop-colors": "#fbcfe8 #ec4899 #db2777",
           "shadow-color": "rgba(236, 72, 153, 0.6)",
-        } : {})
+        } : {
+          "background-color": "rgba(236, 72, 153, 0.1)",
+          "border-color": "rgba(236, 72, 153, 0.4)",
+          "border-width": 1.5,
+          "color": "#f9a8d4",
+          "text-outline-color": "rgba(10,10,15,0.95)",
+        })
       },
     },
     {
       selector: "node.kind-wiki_page",
       style: {
-        "background-color": "#D6ED4E",
-        "border-color": "rgba(214, 237, 78, 0.28)",
-        "color": "#0a0a0f",
-        "text-outline-color": "rgba(255,255,255,0.8)",
         ...(isNeural ? {
+          "background-color": "#D6ED4E",
+          "border-color": "rgba(214, 237, 78, 0.28)",
+          "color": "#0a0a0f",
+          "text-outline-color": "rgba(255,255,255,0.8)",
           "background-gradient-stop-colors": "#f7fee7 #d6ed4e #84cc16",
           "shadow-color": "rgba(214, 237, 78, 0.6)",
-        } : {})
+        } : {
+          "background-color": "rgba(132, 204, 22, 0.12)",
+          "border-color": "rgba(132, 204, 22, 0.45)",
+          "border-width": 2,
+          "color": "#bef264",
+          "text-outline-color": "rgba(10,10,15,0.95)",
+        })
       },
     },
     {
       selector: "node.kind-source_event",
       style: {
-        "background-color": "rgba(71, 85, 105, 0.92)",
-        "border-color": "rgba(148, 163, 184, 0.22)",
         "font-size": 10,
         ...(isNeural ? {
+          "background-color": "rgba(71, 85, 105, 0.92)",
+          "border-color": "rgba(148, 163, 184, 0.22)",
           "background-gradient-stop-colors": "#dcfce7 #22c55e #16a34a",
           "shadow-color": "rgba(34, 197, 94, 0.6)",
-        } : {})
+        } : {
+          "background-color": "rgba(34, 197, 94, 0.1)",
+          "border-color": "rgba(34, 197, 94, 0.4)",
+          "border-width": 1.5,
+          "color": "#86efac",
+          "text-outline-color": "rgba(10,10,15,0.95)",
+        })
       },
     },
     {
       selector: "node.kind-external_ref",
       style: {
-        "background-color": "rgba(69, 26, 3, 0.92)",
         "border-style": "dashed",
-        "border-color": "rgba(251, 191, 36, 0.32)",
         ...(isNeural ? {
+          "background-color": "rgba(69, 26, 3, 0.92)",
+          "border-color": "rgba(251, 191, 36, 0.32)",
           "background-gradient-stop-colors": "#fef3c7 #fbbf24 #d97706",
           "shadow-color": "rgba(251, 191, 36, 0.6)",
-        } : {})
+        } : {
+          "background-color": "rgba(251, 191, 36, 0.08)",
+          "border-color": "rgba(251, 191, 36, 0.35)",
+          "border-width": 1.5,
+          "color": "#fcd34d",
+          "text-outline-color": "rgba(10,10,15,0.95)",
+        })
       },
     },
     {
@@ -1197,19 +1359,24 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
     {
       selector: "edge",
       style: {
-        "curve-style": isNeural ? "bezier" : "taxi",
+        "curve-style": isNeural ? "bezier" : "bezier",
         "taxi-direction": "rightward",
-        "line-color": isNeural ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.34)",
-        "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.42)",
+        "line-color": isNeural ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.28)",
+        "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.5)",
         "target-arrow-shape": isNeural ? "none" : "triangle",
-        "arrow-scale": isNeural ? 0.5 : 0.8,
-        "width": isNeural ? 1.0 : 1.4,
-        "font-size": 9,
+        "arrow-scale": isNeural ? 0.5 : 0.7,
+        "width": isNeural ? 1.0 : 1.2,
+        "font-size": isNeural ? 9 : 8,
         "color": "#cbd5e1",
         "label": isNeural ? "" : "data(label)",
-        "text-background-opacity": 1,
+        "text-background-opacity": isNeural ? 1 : 0.85,
         "text-background-color": "rgba(10,10,15,0.82)",
-        "text-background-padding": "2",
+        "text-background-padding": isNeural ? "2" : "4",
+        "text-background-shape": "round-rectangle",
+        "text-border-opacity": isNeural ? 0 : 0.15,
+        "text-border-color": "rgba(148, 163, 184, 0.3)",
+        "text-border-width": isNeural ? 0 : 1,
+        "text-border-style": "solid",
         "transition-property": "line-color, width, opacity, target-arrow-color",
         "transition-duration": 300,
       },
@@ -1254,6 +1421,27 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
         "target-arrow-color": "rgba(244, 114, 182, 0.9)",
       },
     },
+    // Tree mode: visual indicators for expand/collapse
+    ...(!isNeural ? [
+      {
+        selector: "node.is-collapsible",
+        style: {
+          "border-width": 2,
+          "text-halign": "center" as const,
+          "padding": "12px",
+        },
+      },
+      {
+        selector: "node.is-collapsed",
+        style: {
+          "border-style": "dashed" as const,
+          "border-width": 2.5,
+          "shadow-blur": 15,
+          "shadow-color": "rgba(247, 147, 26, 0.35)",
+          "shadow-opacity": 0.8,
+        },
+      },
+    ] : []),
     {
       selector: ".is-faded",
       style: {
@@ -1264,6 +1452,12 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
       selector: ".is-highlighted",
       style: {
         "opacity": 1,
+      },
+    },
+    {
+      selector: ".is-tree-hidden",
+      style: {
+        "display": "none",
       },
     },
   ] as unknown as cytoscape.StylesheetJson

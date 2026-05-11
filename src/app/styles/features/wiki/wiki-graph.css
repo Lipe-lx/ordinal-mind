@@ -501,6 +501,13 @@
   backdrop-filter: blur(4px);
 }
 
+.wiki-graph-hint {
+  font-style: italic;
+  color: var(--text-tertiary) !important;
+  border-color: rgba(247, 147, 26, 0.2) !important;
+  background: rgba(247, 147, 26, 0.06) !important;
+}
+
 .wiki-graph-canvas {
   min-height: 0;
   width: 100%;
@@ -521,6 +528,13 @@
   background-size: 32px 32px, 128px 128px;
   opacity: 0.8;
   mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+}
+
+.wiki-graph-body.view-tree .wiki-graph-canvas {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
 .wiki-graph-inline-warnings {
