@@ -10,6 +10,8 @@ import { resolveInput } from "./resolver"
 import { cacheGet } from "./cache"
 import { handleWikiRoute } from "./routes/wiki"
 import { handleAuthRoute } from "./routes/auth"
+import { handleSitemapRoute } from "./routes/sitemap"
+import { seoMiddleware } from "./routes/seo"
 import { fetchUnisat } from "./agents/unisat"
 import { attachSecurityHeaders } from "./security"
 import { newRequestId, runChroniclePipeline } from "./chronicleService"
@@ -226,11 +228,15 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
   }
 
+  if (url.pathname === "/sitemap.xml") {
+    return handleSitemapRoute(env)
+  }
+
   if (url.pathname.startsWith("/api/")) {
     return handleApi(request, url, env)
   }
 
-  return env.ASSETS.fetch(request)
+  return seoMiddleware(request, env, async () => env.ASSETS.fetch(request))
 }
 
 async function handleApi(

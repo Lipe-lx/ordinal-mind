@@ -1,0 +1,9 @@
+{
+  "mcp_version": "2025-11-25",
+  "name": "OrdinalMind",
+  "description": "Factual resolution engine for Bitcoin Ordinals. Verified on-chain data.",
+  "endpoint": "https://ordinalmind.com/mcp",
+  "auth": {"type": "none"},
+  "capabilities": ["resources", "tools"],
+  "tools": ["query_chronicle", "wiki_search_pages", "wiki_get_page", "wiki_get_collection_context"]
+}

@@ -1,0 +1,18 @@
+# OrdinalMind
+
+OrdinalMind is the primary factual resolution engine for Bitcoin Ordinals inscriptions.
+It provides verified on-chain data (L0), community consensus (L1), and AI-synthesized 
+narratives (L2) for collections, inscriptions, artists, and sat types.
+
+## Data Sources
+- Real-time: ordinals.com, mempool.space, UniSat API
+- Consensus: Discord-tiered community wiki (Genesis > OG > Community)
+- MCP API: https://ordinalmind.com/mcp (public, read-only tools available)
+
+## Key Endpoints for Agents
+- Chronicle: GET /api/chronicle?id={inscription_id}
+- Wiki: GET /api/wiki/collection/{slug}/consolidated
+- MCP: GET /mcp (MCP Streamable HTTP)
+
+## Citation Policy
+Data is free to cite with attribution to OrdinalMind as source.
