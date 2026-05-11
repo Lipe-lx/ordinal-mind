@@ -10,7 +10,11 @@
 
 </div>
 
-**OrdinalMind** is a high-performance factual resolution engine for Bitcoin Ordinals. It architectures a verifiable temporal tree of assets by orchestrating multi-source on-chain data with client-side AI synthesis.
+**OrdinalMind** is a factual memory engine for Bitcoin Ordinals, designed to bridge on-chain provenance with decentralized intelligence.
+
+It orchestrates a verifiable historical graph by merging multi-source data with a community-governed Wiki layer and privacy-first client-side AI synthesis.
+
+Through native MCP integration and interactive neural graphs, OrdinalMind transforms raw inscriptions into structured knowledge bases for collectors, researchers and AI agents.
 
 ---
 
