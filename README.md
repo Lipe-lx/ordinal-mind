@@ -75,17 +75,17 @@ OrdinalMind resolves assets through a tiered verification pipeline:
 
 | Feature | Description |
 | :--- | :--- |
-| **🌐 Multi-Source** | Deterministic merging of disparate indexer data into a single chronology. |
-| **🧠 Wiki Atlas** | Force-directed neural graph visualization (`cytoscape-fcose`) of asset relationships. |
-| **💬 Intent Chat** | Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction. |
-| **🛡️ Sealed Security** | LLM keys are encrypted at-rest using **AES-256-GCM** (client-side only). |
-| **⚡ SSE Progress** | Real-time resolution status and research activity monitoring via Server-Sent Events. |
-| **🌱 Proactive Wiki** | Background extraction of structured knowledge from narratives to seed the wiki immediately. |
-| **🛡️ Fiscal Agent** | Automated edge-based content moderation that allows community slang while blocking harmful content. |
+| **Multi-Source** | Deterministic merging of disparate indexer data into a single chronology. |
+| **Wiki Atlas** | Force-directed neural graph visualization (`cytoscape-fcose`) of asset relationships. |
+| **Intent Chat** | Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction. |
+| **Sealed Security** | LLM keys are encrypted at-rest using **AES-256-GCM** (client-side only). |
+| **SSE Progress** | Real-time resolution status and research activity monitoring via Server-Sent Events. |
+| **Proactive Wiki** | Background extraction of structured knowledge from narratives to seed the wiki immediately. |
+| **Fiscal Agent** | Automated edge-based content moderation that allows community slang while blocking harmful content. |
 
 ---
 
-## 🏁 Quick Start
+## Quick Start
 
 ### Development Environment
 ```bash
@@ -110,7 +110,7 @@ npm run typecheck
 
 ---
 
-## 📡 API Interface
+## API Interface
 
 | Endpoint | Method | Scope | Description |
 | :--- | :--- | :--- | :--- |
@@ -120,7 +120,7 @@ npm run typecheck
 | `/api/wiki/contribute` | `POST` | Auth | Submit structured knowledge updates. |
 | `/api/auth/discord` | `GET` | Public | Initiate Discord PKCE handshake. |
 
-## 🔌 MCP Interface
+## MCP Interface
 
 | Endpoint | Method | Scope | Description |
 | :--- | :--- | :--- | :--- |
@@ -183,16 +183,16 @@ npm run typecheck
 
 ---
 
-## 📖 Technical Documentation
+## Technical Documentation
 
-- 🗺️ [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Deep dive into data flow and consensus.
-- 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Responsibility map and directory structure.
-- 🔌 [**mcp-usage.md**](./docs/mcp-usage.md): Practical MCP usage (`initialize`, `resources/read`, OAuth, troubleshooting).
-- 🤖 [**AGENTS.md**](./AGENTS.md): Product thesis and implementation constraints.
+- [**ARCHITECTURE.md**](./docs/ARCHITECTURE.md): Deep dive into data flow and consensus.
+- [**CODEBASE.md**](./docs/CODEBASE.md): Responsibility map and directory structure.
+- [**mcp-usage.md**](./docs/mcp-usage.md): Practical MCP usage (`initialize`, `resources/read`, OAuth, troubleshooting).
+- [**AGENTS.md**](./AGENTS.md): Product thesis and implementation constraints.
 
 ---
 
-## ⚖️ Trademark & Brand
+## Trademark & Brand
 
 **OrdinalMind™** and the OrdinalMind identity are associated with the official project and public deployment maintained by the original creators.
 
