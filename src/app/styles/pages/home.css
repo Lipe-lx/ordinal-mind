@@ -7,8 +7,23 @@
   text-align: center;
   gap: var(--space-3xl);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   width: 100%;
+}
+
+.layout.is-home .layout-main,
+.home {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.layout.is-home .layout-main::-webkit-scrollbar,
+.home::-webkit-scrollbar {
+  display: none;
+}
+
+.layout.is-home .layout-main {
+  overflow: visible;
 }
 
 .layout.is-home {
@@ -127,10 +142,10 @@
   max-width: 820px;
   padding: 0.5rem;
   background: rgba(255, 255, 255, 0.18);
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--accent-glow-strong);
   border-radius: var(--radius-xl);
   backdrop-filter: blur(12px);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 15px 35px rgba(247, 147, 26, 0.1);
   transition: all var(--duration-normal) var(--ease-smooth);
 }
 

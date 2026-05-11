@@ -233,7 +233,7 @@ export function Home() {
           </div>
           <button
             id="scan-button"
-            className="btn btn-primary effect-glow-pulse"
+            className={`btn btn-primary ${input.trim().length > 0 ? "effect-glow-solid" : "effect-glow-pulse"}`}
             type="submit"
             disabled={isPending}
           >

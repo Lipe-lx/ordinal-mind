@@ -45,6 +45,13 @@
 
 .effect-glow-pulse {
   animation: pulse-glow 4s infinite ease-in-out;
+  transition: filter var(--duration-normal) var(--ease-smooth);
+}
+
+.effect-glow-pulse:hover,
+.effect-glow-solid {
+  animation: none;
+  filter: drop-shadow(0 0 25px var(--accent-glow-strong));
 }
 
 .effect-on-chain-bg {
