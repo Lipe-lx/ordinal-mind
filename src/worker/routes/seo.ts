@@ -1,5 +1,18 @@
 import type { Env } from "../index"
 
+interface SeoInscription {
+  collection_id?: string
+  inscription_number: number
+  genesis_block: number
+  sat_rarity: string
+  genesis_timestamp: string
+}
+
+interface SeoCollection {
+  title: string
+  summary: string | null
+}
+
 const BOT_UA_PATTERN = /googlebot|bingbot|yandexbot|duckduckbot|gptbot|claudebot|claude-web|anthropic-ai|ccbot|perplexitybot|bimbot|applebot|facebookexternalhit|twitterbot|linkedinbot|slackbot/i
 
 const SEO_KV_PREFIX = 'prerender:'
@@ -58,7 +71,7 @@ async function generateStaticHtml(pathname: string, env: Env): Promise<string | 
   const chronicleMatch = pathname.match(/^\/chronicle\/([^/]+)$/)
   if (chronicleMatch) {
     const id = chronicleMatch[1]
-    const raw = await env.CHRONICLES_KV.get(`inscriptions:${id}`, 'json') as any
+    const raw = await env.CHRONICLES_KV.get(`inscriptions:${id}`, 'json') as SeoInscription
     if (!raw) return null
     return buildInscriptionHtml(id, raw)
   }
@@ -69,7 +82,7 @@ async function generateStaticHtml(pathname: string, env: Env): Promise<string | 
     const slug = collectionMatch[1]
     const result = await env.DB.prepare(
       'SELECT title, summary FROM wiki_pages WHERE slug = ? AND entity_type = "collection"'
-    ).bind(slug).first() as any
+    ).bind(slug).first() as SeoCollection | null
     
     if (!result) return null
     return buildCollectionHtml(slug, result)
@@ -78,7 +91,7 @@ async function generateStaticHtml(pathname: string, env: Env): Promise<string | 
   return null
 }
 
-function buildInscriptionHtml(id: string, data: any): string {
+function buildInscriptionHtml(id: string, data: SeoInscription): string {
   const collectionName = data.collection_id ?? "Unknown Collection"
   const title = `Inscription ${id.slice(0, 8)}... — ${collectionName} #${data.inscription_number} | OrdinalMind`
   const description = `Complete chronicle of ${collectionName} #${data.inscription_number}: inscribed in block ${data.genesis_block}, sat ${data.sat_rarity} rarity, verified on-chain events.`
@@ -128,7 +141,7 @@ function buildInscriptionHtml(id: string, data: any): string {
 </html>`
 }
 
-function buildCollectionHtml(slug: string, data: any): string {
+function buildCollectionHtml(slug: string, data: SeoCollection): string {
   const title = `${data.title} — Ordinals Wiki | OrdinalMind`
   const description = data.summary ?? `${data.title} Verified provenance, community knowledge, and complete on-chain history.`
   
