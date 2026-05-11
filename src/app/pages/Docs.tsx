@@ -46,6 +46,13 @@ export function Docs() {
         { id: "mcp-oauth", label: "MCP OAuth2" },
       ],
     },
+    {
+      title: "Project Governance",
+      links: [
+        { id: "license", label: "Open Source (Apache 2.0)" },
+        { id: "trademark", label: "Trademark & Brand" },
+      ],
+    },
   ]
 
   return (
@@ -232,6 +239,33 @@ export function Docs() {
             <p>
               This ensures that even when an agent is acting on your behalf, 
               the security and tier rules of OrdinalMind remain strictly enforced.
+            </p>
+          </section>
+
+          <section>
+            <h2 id="license">Open Source (Apache 2.0)</h2>
+            <p>
+              OrdinalMind is committed to the principles of open-source software. 
+              The entire codebase is licensed under the <strong>Apache License, Version 2.0</strong>.
+            </p>
+            <p>
+              This means you are free to use, modify, and distribute the code for both 
+              commercial and non-commercial purposes, provided you include the original 
+              copyright notice and license text.
+            </p>
+          </section>
+
+          <section>
+            <h2 id="trademark">Trademark & Brand</h2>
+            <p>
+              While the code is open, the <strong>OrdinalMind™</strong> identity, branding, 
+              and associated public infrastructure are protected.
+            </p>
+            <p>
+              We encourage forks and experimentation, but we ask that you do not use the 
+              "OrdinalMind" name or logo in a way that implies official endorsement or 
+              causes confusion with the primary project deployment maintained by the 
+              original creators.
             </p>
           </section>
         </article>

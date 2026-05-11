@@ -170,6 +170,7 @@ graph TD
 - **Public Data Only**: The Worker only scrapes public, cacheable data.
 - **Stateless Identity**: Session state is carried by signed JWTs.
 - **MCP Origin Hardening**: MCP requests validate `Origin` against trusted origins to mitigate DNS rebinding classes.
+- **Open Source & Trademark**: Licensed under **Apache 2.0**. The "OrdinalMind" brand and associated identity are preserved for the official project deployment to prevent confusion.
 
 ## Failure and Degradation Strategy
 
