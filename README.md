@@ -66,6 +66,7 @@ OrdinalMind resolves assets through a tiered verification pipeline:
 | **Layer 1** | **Consensus** | Human-contributed knowledge via the Wiki Engine, weighted by Discord Collector Tiers. |
 | **🛡️ Safety** | **Fiscal Agent** | Real-time automated moderation of contributions using **Llama Guard 3**. |
 | **Layer 2** | **Narrative** | Deterministic prompt construction for client-side LLM synthesis. |
+| **🌱 Seed** | **Wiki Seed Agent** | Proactive extraction of structured wiki fields from initial narratives. |
 | **Layer 3** | **Discovery** | Heuristic web signal discovery and X (Twitter) mention scraping. |
 
 ---
