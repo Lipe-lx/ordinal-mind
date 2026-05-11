@@ -91,7 +91,7 @@ async function generateStaticHtml(pathname: string, env: Env): Promise<string | 
   // Rotas estáticas institucionais
   if (pathname === '/policies') return buildStaticPageHtml('Policies', 'OrdinalMind privacy, BYOK handling, and data integrity policies.')
   if (pathname === '/terms') return buildStaticPageHtml('Terms of Use', 'Terms and conditions for using the OrdinalMind factual resolution engine.')
-  if (pathname === '/docs') return buildStaticPageHtml('Documentation', 'Complete documentation for OrdinalMind: Temporal Tree, Wiki Atlas, and Agent Layer (MCP).')
+  if (pathname === '/docs') return buildStaticPageHtml('Documentation', 'Complete documentation for OrdinalMind: Temporal Tree, Wiki Atlas, and Agent Layer (MCP). Source code available at github.com/Lipe-lx/ordinal-mind.')
 
   return null
 }

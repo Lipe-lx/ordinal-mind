@@ -82,6 +82,9 @@ export function Docs() {
               Welcome to the OrdinalMind documentation. This resource explains the philosophy, 
               technology, and features behind the first factual memory engine for Bitcoin Ordinals.
             </p>
+            <p className="docs-repo-link">
+              <strong>Source Code:</strong> <a href="https://github.com/Lipe-lx/ordinal-mind" target="_blank" rel="noopener noreferrer">github.com/Lipe-lx/ordinal-mind</a>
+            </p>
           </header>
 
           <section>
