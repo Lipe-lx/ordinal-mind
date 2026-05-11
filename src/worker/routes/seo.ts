@@ -88,7 +88,38 @@ async function generateStaticHtml(pathname: string, env: Env): Promise<string | 
     return buildCollectionHtml(slug, result)
   }
 
+  // Rotas estáticas institucionais
+  if (pathname === '/policies') return buildStaticPageHtml('Policies', 'OrdinalMind privacy, BYOK handling, and data integrity policies.')
+  if (pathname === '/terms') return buildStaticPageHtml('Terms of Use', 'Terms and conditions for using the OrdinalMind factual resolution engine.')
+  if (pathname === '/docs') return buildStaticPageHtml('Documentation', 'Complete documentation for OrdinalMind: Temporal Tree, Wiki Atlas, and Agent Layer (MCP).')
+
   return null
+}
+
+function buildStaticPageHtml(title: string, description: string): string {
+  const fullTitle = `${title} | OrdinalMind`
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${fullTitle}</title>
+  <meta name="description" content="${description}">
+  <meta name="robots" content="index, follow">
+  <meta property="og:title" content="${fullTitle}">
+  <meta property="og:description" content="${description}">
+  <meta name="twitter:card" content="summary">
+</head>
+<body>
+  <main>
+    <h1>${title}</h1>
+    <p>${description}</p>
+    <p>Please enable JavaScript to view the full interactive content of this page.</p>
+  </main>
+  <div id="root"></div>
+  <script type="module" src="/src/app/main.tsx"></script>
+</body>
+</html>`
 }
 
 function buildInscriptionHtml(id: string, data: SeoInscription): string {
