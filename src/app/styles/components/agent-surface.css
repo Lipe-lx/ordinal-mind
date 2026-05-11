@@ -1,35 +1,41 @@
 .agent-surface {
-  margin-top: var(--space-3xl);
-  padding: var(--space-md) var(--space-xl);
-  background: rgba(247, 147, 26, 0.03);
-  border: 1px solid rgba(247, 147, 26, 0.1);
-  border-radius: var(--radius-2xl);
-  backdrop-filter: blur(8px);
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 100;
+  padding: 8px 16px;
+  background: rgba(10, 10, 10, 0.5);
+  border: 1px solid rgba(247, 147, 26, 0.15);
+  border-radius: 100px;
+  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
-  transition: all var(--duration-normal) var(--ease-smooth);
+  gap: 12px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
 }
 
 .agent-surface:hover {
-  background: rgba(247, 147, 26, 0.06);
-  border-color: rgba(247, 147, 26, 0.2);
+  background: rgba(15, 15, 15, 0.8);
+  border-color: rgba(247, 147, 26, 0.4);
   transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .agent-status-indicator {
   position: relative;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   background: #10b981;
   border-radius: 50%;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+  flex-shrink: 0;
 }
 
 .agent-status-indicator::after {
   content: "";
   position: absolute;
-  inset: -4px;
+  inset: -3px;
   border: 1px solid #10b981;
   border-radius: 50%;
   animation: pulse-ring 2s infinite;
@@ -38,40 +44,45 @@
 
 @keyframes pulse-ring {
   0% { transform: scale(0.5); opacity: 0.8; }
-  100% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 
 .agent-info {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 1px;
 }
 
 .agent-label {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 800;
   color: var(--accent-primary);
   text-transform: uppercase;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.15em;
+  line-height: 1;
 }
 
 .agent-url {
   font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: var(--text-tertiary);
-  opacity: 0.8;
+  opacity: 0.7;
+  line-height: 1;
 }
 
 .agent-connect-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: var(--space-xs) var(--space-md);
-  border-radius: var(--radius-md);
-  font-size: 0.7rem;
-  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.6rem;
+  font-weight: 700;
   color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .agent-connect-btn:hover {
@@ -88,12 +99,10 @@
 
 @media (max-width: 640px) {
   .agent-surface {
-    flex-direction: column;
-    text-align: center;
-    padding: var(--space-lg);
-  }
-  
-  .agent-info {
-    align-items: center;
+    bottom: 16px;
+    right: 16px;
+    left: 16px;
+    justify-content: center;
+    padding: 10px;
   }
 }

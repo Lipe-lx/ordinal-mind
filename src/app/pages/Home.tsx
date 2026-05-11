@@ -265,9 +265,9 @@ export function Home() {
 
         <motion.div 
           className="agent-surface"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.0, duration: 0.8 }}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 1.2, duration: 0.8, ease: "easeOut" }}
         >
           <div className="agent-status-indicator" title="MCP Server Online" />
           <div className="agent-info">
@@ -285,6 +285,9 @@ export function Home() {
             {error === "Copied!" ? "URL Copied" : "Connect Agent"}
           </button>
         </motion.div>
+
+        {/* Spacer to maintain vertical centering alignment after moving agent surface to fixed position */}
+        <div className="home-agent-spacer" style={{ height: "140px", pointerEvents: "none" }} aria-hidden="true" />
       </motion.div>
     </div>
   )
