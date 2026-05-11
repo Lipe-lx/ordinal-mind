@@ -216,7 +216,7 @@ If this project helped you preserve or explore Bitcoin history, consider support
 
 BTC address:
 ```
-3DDvVXKEeXp4q5og3JQ8ytnhQ3cty2eHiV
+3P9Hoz2Ha2ijC5mgStJUEW21cpaYRKdYT7
 ```
 
 ---
