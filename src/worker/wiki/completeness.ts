@@ -10,6 +10,7 @@ import { CANONICAL_FIELDS, type CanonicalField } from "./contribute"
 import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
 
 export interface CollectionCanonicalFields {
+  name: string | null
   founder: string | null
   artist: string | null
   inscriber: string | null
@@ -34,6 +35,7 @@ export interface CompletenessMap {
 
 function emptyFields(): CollectionCanonicalFields {
   return {
+    name: null,
     founder: null,
     artist: null,
     inscriber: null,
@@ -95,8 +97,9 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
     // Return an empty completeness map rather than 500 — fail soft
   }
 
-  const filledFields = CANONICAL_FIELDS.filter((f) => fields[f] !== null)
-  const missingFields = CANONICAL_FIELDS.filter((f) => fields[f] === null)
+  const fieldsRecord = fields as unknown as Record<CanonicalField, string | null>
+  const filledFields = CANONICAL_FIELDS.filter((f) => fieldsRecord[f] !== null)
+  const missingFields = CANONICAL_FIELDS.filter((f) => fieldsRecord[f] === null)
   const filled = filledFields.length
   const total = CANONICAL_FIELDS.length
 
