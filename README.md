@@ -174,6 +174,19 @@ npm run typecheck
 
 ---
 
+## Support OrdinalMind
+
+OrdinalMind is open-source and community-driven.
+
+If this project helped you preserve or explore Bitcoin history, consider supporting its development.
+
+BTC address:
+```
+3DDvVXKEeXp4q5og3JQ8ytnhQ3cty2eHiV
+```
+
+---
+
 <p align="center">
-  <i>Ordinals are forever. Deal with it.</i>
+  <i>Ordinals are forever and your history is being written. Help us write it.</i>
 </p>
