@@ -3,7 +3,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **OrdinalMind** is a high-performance factual resolution engine for Bitcoin Ordinals. It architectures a verifiable temporal tree of assets by orchestrating multi-source on-chain data with client-side AI synthesis.
 
@@ -171,6 +171,17 @@ npm run typecheck
 - 🗺️ [**CODEBASE.md**](./docs/CODEBASE.md): Responsibility map and directory structure.
 - 🔌 [**mcp-usage.md**](./docs/mcp-usage.md): Practical MCP usage (`initialize`, `resources/read`, OAuth, troubleshooting).
 - 🤖 [**AGENTS.md**](./AGENTS.md): Product thesis and implementation constraints.
+
+---
+
+## ⚖️ Trademark & Brand
+
+**OrdinalMind™** and the OrdinalMind identity are associated with the official project and public deployment maintained by the original creators.
+
+This repository is open-source under the **Apache 2.0 License**.  
+You are free to use, modify and distribute the code in accordance with the license terms.
+
+However, use of the "OrdinalMind" name, branding, visual identity and associated public infrastructure in ways that may cause confusion or imply official endorsement is discouraged without explicit permission.
 
 ---
 
