@@ -82,6 +82,13 @@ export async function fetchWikiGraph(
 }
 
 export function toCytoscapeElements(payload: WikiGraphPayload): CytoscapeElementDefinition[] {
+  // Pre-compute degree for each node so Cytoscape styles can use mapData(degree, ...)
+  const degreeMap = new Map<string, number>()
+  for (const edge of payload.edges) {
+    degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1)
+    degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1)
+  }
+
   const nodeElements = payload.nodes.map((node) => ({
     group: "nodes" as const,
     data: {
@@ -93,6 +100,7 @@ export function toCytoscapeElements(payload: WikiGraphPayload): CytoscapeElement
       parent: node.parent_id ?? undefined,
       href: node.href ?? undefined,
       description: node.description ?? undefined,
+      degree: degreeMap.get(node.id) ?? 0,
     },
     classes: `kind-${node.kind} status-${node.status}`,
   }))

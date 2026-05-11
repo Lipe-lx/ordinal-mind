@@ -30,20 +30,7 @@ cytoscape.use(cytoscapeElk)
 cytoscape.use(cytoscapeFcose)
 cytoscape.use(cytoscapeCola)
 
-interface ColaLayoutOptions extends cytoscape.ShapedLayoutOptions {
-  name: "cola"
-  refresh?: number
-  maxSimulationTime?: number
-  ungrabifyWhileSimulating?: boolean
-  nodeSpacing?: (node: cytoscape.NodeSingular) => number
-  edgeLength?: number | ((edge: cytoscape.EdgeSingular) => number)
-  infinite?: boolean
-  avoidOverlap?: boolean
-  alphaTest?: number
-  initialUnconstrainedIterations?: number
-  initialUserConstraintIterations?: number
-  initialAllConstraintsIterations?: number
-}
+
 
 interface Props {
   open: boolean
@@ -256,6 +243,7 @@ export function WikiGraphModal({
     cy.layout(buildGraphLayout(filters.viewMode, {
       randomize: !deterministicRendering,
       deterministic: deterministicRendering,
+      nodeCount: cy.nodes().length,
     })).run()
   }
 
@@ -386,6 +374,7 @@ export function WikiGraphModal({
       layout: buildGraphLayout(filters.viewMode, {
         randomize: !deterministicRendering,
         deterministic: deterministicRendering,
+        nodeCount: filteredPayload.nodes.length,
       }),
       wheelSensitivity: 0.35,
       minZoom: 0.02,
@@ -919,52 +908,85 @@ function collectFullNetwork(cy: cytoscape.Core, rootId: string): cytoscape.Colle
 
 function buildGraphLayout(
   mode: "tree" | "neural",
-  options?: { randomize?: boolean; deterministic?: boolean }
+  options?: { randomize?: boolean; deterministic?: boolean; nodeCount?: number }
 ): cytoscape.LayoutOptions {
-  const randomize = options?.randomize ?? false
+  const _randomize = options?.randomize ?? false
   const deterministic = options?.deterministic ?? false
+  const nodeCount = options?.nodeCount ?? 0
 
   if (mode === "neural") {
+    // Quality mode: use 'proof' for small graphs, 'default' for large ones
+    const quality = deterministic ? "proof"
+      : nodeCount > 150 ? "default"
+      : "proof"
+
     return {
-      name: "cola",
+      name: "fcose",
+      quality,
+      randomize: !deterministic,
       animate: !deterministic,
-      refresh: 2,
-      maxSimulationTime: deterministic ? 5000 : 25000, 
-      ungrabifyWhileSimulating: false,
+      animationDuration: 800,
+      animationEasing: "ease-out-cubic",
       fit: false,
-      padding: 150, 
-      randomize,
-      avoidOverlap: true,
-      nodeSpacing: (node: cytoscape.NodeSingular) => {
+      padding: 120,
+
+      // Spectral initialization handles cluster separation automatically
+      nodeDimensionsIncludeLabels: false,
+      packComponents: true,
+
+      // --- Degree-based repulsion ---
+      // Hub nodes push MUCH harder than leaves.
+      // Logarithmic scaling prevents extreme outliers while still separating hubs.
+      nodeRepulsion: (node: cytoscape.NodeSingular) => {
         const degree = node.degree()
         const kind = node.data("kind")
-        // Hubs get more room; orbiters stay tight
-        const base = kind === "collection" ? 100 : 40
-        return base + Math.min(degree * 12, 120)
+        const baseRepulsion = kind === "collection" ? 12000 : 4500
+        return baseRepulsion * (1 + Math.log2(Math.max(degree, 1)))
       },
-      edgeLength: (edge: cytoscape.EdgeSingular) => {
-        const source = edge.source()
-        const target = edge.target()
+
+      // --- Semantic edge lengths ---
+      idealEdgeLength: (edge: cytoscape.EdgeSingular) => {
         const edgeKind = edge.data("kind")
-        const avgDegree = (source.degree() + target.degree()) / 2
-        
-        // Harmonic orbit distances: tight for leaves, wide for hubs
-        let baseLength = 60 // Default tight orbit
-        if (edgeKind === "belongs_to_collection") baseLength = 220
-        if (edgeKind === "has_field") baseLength = 100
-        if (edgeKind === "has_claim") baseLength = 45
-        
-        // Scaling distance primarily for high-connectivity nodes
-        const dynamicFactor = Math.min(avgDegree * 20, 300)
-        return baseLength + dynamicFactor
+        const sourceDegree = edge.source().degree()
+        const targetDegree = edge.target().degree()
+        const maxDegree = Math.max(sourceDegree, targetDegree)
+
+        // Base lengths by relationship type
+        let base: number
+        switch (edgeKind) {
+          case "belongs_to_collection": base = 250; break
+          case "has_field":             base = 140; break
+          case "has_claim":             base = 65;  break
+          case "cites_event":           base = 100; break
+          case "links_to":              base = 120; break
+          default:                      base = 90;  break
+        }
+
+        // High-degree nodes need longer edges to prevent orbital overlap
+        const degreeFactor = Math.sqrt(maxDegree) * 20
+        return base + degreeFactor
       },
-      infinite: !deterministic, // Enable continuous living graph in neural mode
-      alphaTest: 0.001,
-      convergenceThreshold: 0.0005,
-      initialUnconstrainedIterations: deterministic ? 800 : 2000, 
-      initialUserConstraintIterations: deterministic ? 400 : 1000,
-      initialAllConstraintsIterations: deterministic ? 400 : 1000,
-    } as ColaLayoutOptions
+
+      // Edge elasticity: stiffer for structural edges, looser for refs
+      edgeElasticity: (edge: cytoscape.EdgeSingular) => {
+        const edgeKind = edge.data("kind")
+        if (edgeKind === "has_claim" || edgeKind === "has_field") return 0.45
+        if (edgeKind === "belongs_to_collection") return 0.35
+        return 0.55
+      },
+
+      // Gravity keeps the graph centered without crushing clusters
+      gravity: 0.25,
+      gravityRange: 3.8,
+
+      // Number of iterations for force phase
+      numIter: 2500,
+
+      // Tile disconnected components nicely
+      tile: true,
+      tilingPaddingVertical: 40,
+      tilingPaddingHorizontal: 40,
+    } as cytoscape.LayoutOptions
   }
 
   return {
@@ -1006,8 +1028,8 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
         "text-outline-width": 2.5,
         "shape": isNeural ? "ellipse" : "round-rectangle",
         "padding": isNeural ? "0px" : "10px",
-        "width": isNeural ? 16 : "label",
-        "height": isNeural ? 16 : "label",
+        "width": isNeural ? "mapData(degree, 0, 10, 14, 32)" : "label",
+        "height": isNeural ? "mapData(degree, 0, 10, 14, 32)" : "label",
         "transition-property": "background-color, border-color, border-width, width, height, opacity, shadow-blur, shadow-opacity, shadow-color",
         "transition-duration": deterministic ? 0 : 300,
         ...(isNeural ? {
@@ -1024,6 +1046,15 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
         })
       },
     },
+    // Show labels on medium/high-degree nodes for Obsidian-like readability
+    ...(isNeural ? [{
+      selector: "node[degree >= 3]",
+      style: {
+        "label": "data(label)",
+        "font-size": 10,
+        "text-opacity": 0.7,
+      },
+    }] : []),
     {
       selector: "node:selected",
       style: {
@@ -1042,8 +1073,8 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
       selector: "node.is-highlighted",
       style: {
         "label": "data(label)",
-        "width": isNeural ? 24 : "label",
-        "height": isNeural ? 24 : "label",
+        "width": isNeural ? "mapData(degree, 0, 10, 20, 36)" : "label",
+        "height": isNeural ? "mapData(degree, 0, 10, 20, 36)" : "label",
         "shadow-blur": isNeural ? 25 : 10,
         "shadow-color": isNeural ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.25)",
       },
@@ -1166,9 +1197,7 @@ function buildGraphStylesheet(mode: "tree" | "neural", deterministic = false): c
     {
       selector: "edge",
       style: {
-        "curve-style": isNeural ? "unbundled-bezier" : "taxi",
-        "control-point-distances": isNeural ? 30 : undefined,
-        "control-point-weights": isNeural ? 0.5 : undefined,
+        "curve-style": isNeural ? "bezier" : "taxi",
         "taxi-direction": "rightward",
         "line-color": isNeural ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.34)",
         "target-arrow-color": isNeural ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.42)",
