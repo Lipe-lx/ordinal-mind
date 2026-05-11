@@ -1,6 +1,7 @@
 <div align="center">
 
-# <img src="./src/app/assets/logo.svg" width="32" height="32"> OrdinalMind
+<img src="./src/app/assets/logo.svg" width="80" height="80">
+<h1>OrdinalMind</h1>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
