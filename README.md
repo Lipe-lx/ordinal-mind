@@ -13,7 +13,7 @@
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 OrdinalMind operates on a **Stateless Data Plane** coupled with a **Client-Side Synthesis Layer**, ensuring that sensitive credentials (LLM keys) never touch the server runtime.
 
@@ -41,7 +41,7 @@ graph LR
 
 ---
 
-## 🛠️ Technical Stack
+## Technical Stack
 
 | Category | Technology |
 | :--- | :--- |
@@ -56,7 +56,7 @@ graph LR
 
 ---
 
-## ⛓️ Resolution Pipeline (L0-L3)
+## Resolution Pipeline (L0-L3)
 
 OrdinalMind resolves assets through a tiered verification pipeline:
 
@@ -71,7 +71,7 @@ OrdinalMind resolves assets through a tiered verification pipeline:
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 | Feature | Description |
 | :--- | :--- |
