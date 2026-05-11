@@ -14,7 +14,7 @@ graph TD
   W --> R[Resolver]
   R -->|"Address"| U2[UniSat: Inscription List]
   R -->|"Inscription ID"| A[Data Agents]
-  A --> O[ordinals]
+  A --> O[ordinals.com]
   A --> M[mempool]
   A --> K[collections/context]
   A --> S[mentions + research]
