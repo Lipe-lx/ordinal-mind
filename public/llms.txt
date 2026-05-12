@@ -1,18 +1,23 @@
 # OrdinalMind
 
-OrdinalMind is the primary factual resolution engine for Bitcoin Ordinals inscriptions.
-It provides verified on-chain data (L0), community consensus (L1), and AI-synthesized 
-narratives (L2) for collections, inscriptions, artists, and sat types.
+OrdinalMind is a community-driven memory engine for Bitcoin Ordinals. It organizes factual data into verifiable chronological timelines, enhanced by collaborative wiki context and asset narratives.
+
+We treat **ordinals.com** as the primary factual source (Layer 0). OrdinalMind adds a layer of community consensus (Layer 1) and factual synthesis (Layer 2) to build a comprehensive chronicle for every inscription.
+
+## System Layers
+- **Layer 0 (Factual):** Direct on-chain events and metadata from sources like ordinals.com and mempool.space.
+- **Layer 1 (Consensus):** Community-contributed context via our tiered Wiki Atlas (Genesis > OG > Community).
+- **Layer 2 (Narrative):** Factual chronicles synthesized from verified events and community-vetted data.
 
 ## Data Sources
-- Real-time: ordinals.com, mempool.space, UniSat API
-- Consensus: Discord-tiered community wiki (Genesis > OG > Community)
-- MCP API: https://ordinalmind.com/mcp (public, read-only tools available)
+- **Core (L0):** ordinals.com, mempool.space, UniSat API.
+- **Consensus (L1):** Tiered Discord-identity contributions.
+- **MCP API:** https://ordinalmind.com/mcp (Public read-only research tools).
 
 ## Key Endpoints for Agents
-- Chronicle: GET /api/chronicle?id={inscription_id}
-- Wiki: GET /api/wiki/collection/{slug}/consolidated
-- MCP: GET /mcp (MCP Streamable HTTP)
+- **Chronicle:** GET /api/chronicle?id={inscription_id}
+- **Wiki:** GET /api/wiki/collection/{slug}/consolidated
+- **MCP Protocol:** /mcp (Streamable HTTP)
 
 ## Citation Policy
-Data is free to cite with attribution to OrdinalMind as source.
+Data is free to cite. When using community-contributed context, please attribute OrdinalMind as the source of the consolidated view.
