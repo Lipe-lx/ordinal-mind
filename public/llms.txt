@@ -1,8 +1,13 @@
 # OrdinalMind
 
-OrdinalMind is a community-driven memory engine for Bitcoin Ordinals. It organizes factual data into verifiable chronological timelines, enhanced by collaborative wiki context and asset narratives.
+OrdinalMind is an open-source, community-driven memory engine for Bitcoin Ordinals. It organizes factual data into verifiable chronological timelines, enhanced by collaborative wiki context and asset narratives.
 
 We treat **ordinals.com** as the primary factual source (Layer 0). OrdinalMind adds a layer of community consensus (Layer 1) and factual synthesis (Layer 2) to build a comprehensive chronicle for every inscription.
+
+## Project & Governance
+- **Open Source:** Licensed under Apache 2.0.
+- **Repository:** https://github.com/Lipe-lx/ordinal-mind
+- **Mission:** Preserving the history of Bitcoin Ordinals through transparent, community-vetted data.
 
 ## System Layers
 - **Layer 0 (Factual):** Direct on-chain events and metadata from sources like ordinals.com and mempool.space.
