@@ -228,8 +228,9 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
   }
 
-  if (url.pathname === "/sitemap.xml") {
-    return handleSitemapRoute(env)
+  if (url.pathname === "/sitemap.xml" || url.pathname.endsWith(".txt")) {
+    if (url.pathname === "/sitemap.xml") return handleSitemapRoute(env);
+    return env.ASSETS.fetch(request);
   }
 
   if (url.pathname.startsWith("/api/")) {
