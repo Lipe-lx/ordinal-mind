@@ -1,18 +1,19 @@
 import type { Env } from "../index"
 
 export async function handleSitemapRoute(env: Env): Promise<Response> {
-  let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://ordinalmind.com/</loc>
-    <priority>1.0</priority>
-    <changefreq>daily</changefreq>
-  </url>
-  <url>
-    <loc>https://ordinalmind.com/wiki/collections</loc>
-    <priority>0.9</priority>
-    <changefreq>daily</changefreq>
-  </url>`
+  const entries = new Map<string, { priority: string; changefreq: string }>()
+
+  function addEntry(pathname: string, priority: string, changefreq: string) {
+    const url = `https://ordinalmind.com${pathname}`
+    if (entries.has(url)) return
+    entries.set(url, { priority, changefreq })
+  }
+
+  addEntry("/", "1.0", "daily")
+  addEntry("/docs", "0.9", "weekly")
+  addEntry("/terms", "0.4", "monthly")
+  addEntry("/policies", "0.4", "monthly")
+  addEntry("/wiki/collections", "0.9", "daily")
 
   if (env.DB) {
     try {
@@ -25,10 +26,11 @@ export async function handleSitemapRoute(env: Env): Promise<Response> {
           let priority = "0.7"
           let prefix = "wiki/page/"
           let changefreq = "weekly"
-          
           const rawSlug = row.slug.replace(/^(collection|inscription):/, "")
+          const isInscriptionId = /^[a-f0-9]{64}i\d+$/i.test(rawSlug)
 
           if (row.entity_type === "collection" || row.slug.startsWith("collection:")) {
+            if (isInscriptionId) continue
             priority = "0.9"
             prefix = "wiki/collection/"
             changefreq = "daily"
@@ -39,21 +41,11 @@ export async function handleSitemapRoute(env: Env): Promise<Response> {
             priority = "0.8"
             prefix = "wiki/artist/"
           }
-          
-          xml += `
-  <url>
-    <loc>https://ordinalmind.com/${prefix}${encodeURIComponent(rawSlug)}</loc>
-    <priority>${priority}</priority>
-    <changefreq>${changefreq}</changefreq>
-  </url>`
+
+          addEntry(`/${prefix}${encodeURIComponent(rawSlug)}`, priority, changefreq)
 
           if (row.entity_type === "inscription" || row.slug.startsWith("inscription:")) {
-            xml += `
-  <url>
-    <loc>https://ordinalmind.com/chronicle/${encodeURIComponent(rawSlug)}</loc>
-    <priority>0.6</priority>
-    <changefreq>never</changefreq>
-  </url>`
+            addEntry(`/chronicle/${encodeURIComponent(rawSlug)}`, "0.6", "never")
           }
         }
       }
@@ -62,7 +54,20 @@ export async function handleSitemapRoute(env: Env): Promise<Response> {
     }
   }
 
-  xml += `\n</urlset>`
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`
+
+  for (const [loc, meta] of entries) {
+    xml += `
+  <url>
+    <loc>${loc}</loc>
+    <priority>${meta.priority}</priority>
+    <changefreq>${meta.changefreq}</changefreq>
+  </url>`
+  }
+
+  xml += `
+</urlset>`
 
   return new Response(xml, {
     headers: {

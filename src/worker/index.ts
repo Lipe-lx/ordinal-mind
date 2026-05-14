@@ -11,6 +11,7 @@ import { cacheGet } from "./cache"
 import { handleWikiRoute } from "./routes/wiki"
 import { handleAuthRoute } from "./routes/auth"
 import { handleSitemapRoute } from "./routes/sitemap"
+import { handleRobotsRoute } from "./routes/robots"
 import { seoMiddleware } from "./routes/seo"
 import { fetchUnisat } from "./agents/unisat"
 import { attachSecurityHeaders } from "./security"
@@ -229,7 +230,8 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (url.pathname === "/sitemap.xml" || url.pathname.endsWith(".txt")) {
-    if (url.pathname === "/sitemap.xml") return handleSitemapRoute(env);
+    if (url.pathname === "/sitemap.xml") return handleSitemapRoute(env)
+    if (url.pathname === "/robots.txt") return handleRobotsRoute()
     return env.ASSETS.fetch(request);
   }
 
