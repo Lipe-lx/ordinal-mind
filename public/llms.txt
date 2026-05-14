@@ -1,8 +1,8 @@
 # OrdinalMind
 
-OrdinalMind is an open-source, community-driven memory engine for Bitcoin Ordinals. It organizes factual data into verifiable chronological timelines, enhanced by collaborative wiki context and asset narratives.
+OrdinalMind is an open-source factual memory engine for Bitcoin Ordinals. It resolves public on-chain and public web signals into verifiable chronological timelines, enhanced by collaborative wiki context and optional client-side narratives.
 
-We treat **ordinals.com** as the primary factual source (Layer 0). OrdinalMind adds a layer of community consensus (Layer 1) and factual synthesis (Layer 2) to build a comprehensive chronicle for every inscription.
+We treat **ordinals.com** as the primary factual source (Layer 0). OrdinalMind adds a layer of community consensus (Layer 1) and optional factual synthesis (Layer 2) to build a comprehensive chronicle for every inscription.
 
 ## Project & Governance
 - **Open Source:** Licensed under Apache 2.0.
@@ -17,12 +17,35 @@ We treat **ordinals.com** as the primary factual source (Layer 0). OrdinalMind a
 ## Data Sources
 - **Core (L0):** ordinals.com, mempool.space, UniSat API.
 - **Consensus (L1):** Tiered Discord-identity contributions.
-- **MCP API:** https://ordinalmind.com/mcp (Public read-only research tools).
+- **Discovery:** Public web references when available.
+
+## Public HTTP Surface
+- **Chronicle:** `GET https://ordinalmind.com/api/chronicle?id={inscription_number|inscription_id|taproot_address}`
+- **Wiki consolidated view:** `GET https://ordinalmind.com/api/wiki/collection/{slug}/consolidated`
+- **Wiki graph:** `GET https://ordinalmind.com/api/wiki/collection/{slug}/graph`
+- **Docs:** `https://ordinalmind.com/docs`
+
+## Public MCP Surface
+- **Endpoint:** `https://ordinalmind.com/mcp`
+- **Anonymous access:** Read-only resources and read-only research tools.
+- **Authenticated access:** OAuth is required only for writable or tier-gated actions.
 
 ## Key Endpoints for Agents
-- **Chronicle:** GET /api/chronicle?id={inscription_id}
-- **Wiki:** GET /api/wiki/collection/{slug}/consolidated
-- **MCP Protocol:** /mcp (Streamable HTTP)
+- **MCP Protocol:** `/mcp` (Streamable HTTP)
+- **OAuth metadata / flow:** `/mcp/oauth/*`
+- **Robots:** `/robots.txt`
+- **Sitemap:** `/sitemap.xml`
+
+## Authentication & Write Limits
+- **No auth required:** Read-only Chronicle and wiki lookups, public MCP reads.
+- **Auth required:** Community contributions and other tier-gated actions.
+- **Identity model:** Discord OAuth2 with stateless JWTs and tier-based capability checks.
+- **Secret handling:** User LLM keys must stay client-side. OrdinalMind does not receive, proxy, or persist user LLM API keys server-side.
+
+## Factual Policy
+- Prefer structured, source-backed events over narrative text.
+- Every Chronicle event should remain traceable to a public source.
+- If LLM synthesis is unavailable, the factual timeline should still be used as the primary result.
 
 ## Citation Policy
-Data is free to cite. When using community-contributed context, please attribute OrdinalMind as the source of the consolidated view.
+Public factual data is available to cite. When using community-contributed context or consolidated wiki output, attribute OrdinalMind as the source of the consolidated view.
