@@ -80,7 +80,9 @@ export function ChronicleCard({
 
   // Built data sources from chronicle response metadata
   const sources = buildDataSources(chronicle)
-  const [rawLayoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">("split")
+  const [rawLayoutMode, setLayoutMode] = useState<"split" | "narrative" | "genealogy">(
+    hasKey ? "split" : "genealogy"
+  )
   const [showWikiGraph, setShowWikiGraph] = useState(false)
 
 
@@ -104,11 +106,7 @@ export function ChronicleCard({
       return
     }
 
-    if (layoutMode === target) {
-      setLayoutMode("split")
-    } else {
-      setLayoutMode(target)
-    }
+    setLayoutMode(target === "narrative" ? "split" : "genealogy")
   }
 
   return (
@@ -154,7 +152,7 @@ export function ChronicleCard({
 
           <div className="chronicle-tabs">
             <button 
-              className={`chronicle-tab ${layoutMode === "narrative" ? "active is-expanded" : ""}`}
+              className={`chronicle-tab ${layoutMode === "split" || layoutMode === "narrative" ? "active is-expanded" : ""}`}
               onClick={() => toggleExpand("narrative")}
             >
               <span>Chronicle Narrative</span>

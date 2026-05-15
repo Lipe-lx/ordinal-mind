@@ -230,13 +230,31 @@ test("wiki graph modal visual baseline", async ({ page }) => {
   await expectNoHorizontalOverflow(page)
 })
 
+test("chronicle tabs prioritize genealogy without BYOK on desktop", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.startsWith("desktop"), "Desktop-only layout behavior")
+
+  await installApiMocks(page)
+  await page.goto("/chronicle/7")
+  await expect(page.getByRole("heading", { name: /Runestone/i })).toBeVisible()
+
+  const chronicleCard = page.locator(".chronicle-card")
+  await expect(chronicleCard).toHaveClass(/layout-mode-genealogy/)
+
+  await page.getByRole("button", { name: /Chronicle Narrative/i }).click()
+  await expect(chronicleCard).toHaveClass(/layout-mode-split/)
+
+  await page.getByRole("button", { name: /Genealogical Tree/i }).click()
+  await expect(chronicleCard).toHaveClass(/layout-mode-genealogy/)
+})
+
 test("core mobile-safe flows stay functional", async ({ page }) => {
   await installApiMocks(page)
 
   await page.goto("/")
   await page.getByLabel("Configuration").click()
   await expect(page.getByRole("heading", { name: "Configuration" })).toBeVisible()
-  await page.locator(".byok-overlay").click({ position: { x: 8, y: 8 } })
+  await page.getByLabel("Close modal").click()
+  await expect(page.getByRole("heading", { name: "Configuration" })).toBeHidden()
 
   await page.getByPlaceholder("Inscription # · hex ID · bc1p address").fill("7")
   await page.getByRole("button", { name: "Trace the Chronicle" }).click()
