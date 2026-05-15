@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildEdgeInspector,
   buildNodeInspector,
+  buildTreeNodeLayoutOptions,
   createDefaultWikiGraphFilters,
   filterWikiGraphPayload,
   toCytoscapeElements,
@@ -60,10 +61,10 @@ const payload: WikiGraphPayload = {
       metadata: { contribution_id: "wc_founder" },
     },
     {
-      id: "page->collection",
+      id: "collection->page",
       kind: "belongs_to_collection",
-      source: "inscription:frog0001i0",
-      target: "collection:bitcoin-frogs",
+      source: "collection:bitcoin-frogs",
+      target: "inscription:frog0001i0",
       status: "supporting",
       label: "collection wiki",
       metadata: {},
@@ -113,7 +114,10 @@ describe("wikiGraph client helpers", () => {
     const filters = createDefaultWikiGraphFilters()
     const filtered = filterWikiGraphPayload(payload, filters)
 
-    expect(filtered).toBe(payload)
+    expect(filtered.edges).toEqual(payload.edges)
+    expect(filtered.focus_node_id).toBe(payload.focus_node_id)
+    expect(filtered.nodes.map((node) => node.id)).toEqual(payload.nodes.map((node) => node.id))
+    expect(filtered.nodes.every((node) => node.parent_id === null)).toBe(true)
   })
 
   it("formats node and edge inspector data for the modal", () => {
@@ -125,5 +129,21 @@ describe("wikiGraph client helpers", () => {
     const edgeInspector = buildEdgeInspector(payload.edges[0])
     expect(edgeInspector.subtitle).toContain("Has Claim")
     expect(edgeInspector.details[0]).toEqual({ label: "Source", value: "field:bitcoin-frogs:founder" })
+  })
+
+  it("assigns tree layout partitions to separate collection and inscription branches", () => {
+    expect(buildTreeNodeLayoutOptions({ kind: "collection" })).toEqual({
+      "elk.partitioning.partition": 0,
+      "elk.layered.layering.layerConstraint": "FIRST",
+    })
+    expect(buildTreeNodeLayoutOptions({ kind: "field", scope: "collection" })).toEqual({
+      "elk.partitioning.partition": 1,
+    })
+    expect(buildTreeNodeLayoutOptions({ kind: "wiki_page", entity_type: "inscription" })).toEqual({
+      "elk.partitioning.partition": 2,
+    })
+    expect(buildTreeNodeLayoutOptions({ kind: "source_event" })).toEqual({
+      "elk.partitioning.partition": 3,
+    })
   })
 })

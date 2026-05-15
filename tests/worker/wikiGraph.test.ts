@@ -76,7 +76,7 @@ class GraphTestStatement {
         }))
     }
 
-    if (sql.includes("select id, field, value, confidence, verifiable") && sql.includes("from wiki_contributions")) {
+    if (sql.includes("select id, collection_slug, field, value, confidence, verifiable") && sql.includes("from wiki_contributions")) {
       const slug = String(this.params[0] ?? "")
       return this.db.wikiContributions
         .filter((row) => String(row.collection_slug) === slug)
@@ -86,6 +86,7 @@ class GraphTestStatement {
         })
         .map((row) => ({
           id: row.id,
+          collection_slug: row.collection_slug,
           field: row.field,
           value: row.value,
           confidence: row.confidence,
@@ -291,6 +292,13 @@ describe("buildCollectionGraph", () => {
     expect(graph.nodes.some((node) => node.id === "inscription:frog0001i0" && node.kind === "wiki_page")).toBe(true)
     expect(graph.nodes.some((node) => node.id === "inscription:frog0002i0" && node.kind === "wiki_page")).toBe(true)
     expect(graph.nodes.some((node) => node.id === "external:artist:ghost-frog" && node.kind === "external_ref")).toBe(true)
+    expect(
+      graph.edges.some((edge) =>
+        edge.kind === "belongs_to_collection"
+        && edge.source === "collection:bitcoin-frogs"
+        && edge.target === "inscription:frog0001i0"
+      )
+    ).toBe(true)
 
     const sourceEventNodes = graph.nodes.filter((node) => node.kind === "source_event")
     expect(sourceEventNodes.map((node) => node.id)).toEqual(["ev_genesis_1", "ev_transfer_1"])
