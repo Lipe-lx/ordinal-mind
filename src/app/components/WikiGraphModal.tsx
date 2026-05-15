@@ -14,6 +14,7 @@ import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import type { WikiGraphNode } from "../lib/types"
 import {
   buildNodeInspector,
+  buildTreeNodeLayoutOptions,
   createDefaultWikiGraphFilters,
   fetchWikiGraph,
   filterWikiGraphPayload,
@@ -1103,13 +1104,15 @@ function buildGraphLayout(
     padding: 80,
     animate: false,
     nodeDimensionsIncludeLabels: true,
+    nodeLayoutOptions: (node: cytoscape.NodeSingular) => buildTreeNodeLayoutOptions(node.data() as Record<string, unknown>),
     elk: {
       algorithm: "layered",
       "elk.direction": "RIGHT",
+      "elk.partitioning.activate": true,
       "elk.padding": "[top=40,left=40,bottom=40,right=40]",
       // Generous spacing for readability
       "elk.spacing.nodeNode": "56",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "90",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "110",
       "elk.layered.spacing.edgeNodeBetweenLayers": "50",
       "elk.layered.spacing.edgeEdgeBetweenLayers": "24",
       "elk.spacing.edgeNode": "30",
@@ -1117,6 +1120,8 @@ function buildGraphLayout(
       // NETWORK_SIMPLEX gives the most balanced, readable distribution
       "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
       "elk.layered.nodePlacement.favorStraightEdges": "true",
+      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+      "elk.layered.crossingMinimization.forceNodeModelOrder": true,
       // Better crossing minimization for cleaner visual flow
       "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
       "elk.layered.crossingMinimization.greedySwitch.type": "TWO_SIDED",

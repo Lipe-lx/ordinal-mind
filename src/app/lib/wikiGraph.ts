@@ -197,6 +197,39 @@ export function buildEdgeInspector(edge: WikiGraphEdge): WikiGraphInspectorData 
   }
 }
 
+export function buildTreeNodeLayoutOptions(data: Record<string, unknown>): Record<string, unknown> | undefined {
+  const kind = typeof data.kind === "string" ? data.kind : null
+  const scope = typeof data.scope === "string" ? data.scope : null
+  const entityType = typeof data.entity_type === "string" ? data.entity_type : null
+
+  if (kind === "collection") {
+    return {
+      "elk.partitioning.partition": 0,
+      "elk.layered.layering.layerConstraint": "FIRST",
+    }
+  }
+
+  if (kind === "field" || kind === "claim") {
+    return {
+      "elk.partitioning.partition": scope === "inscription" ? 2 : 1,
+    }
+  }
+
+  if (kind === "wiki_page") {
+    return {
+      "elk.partitioning.partition": entityType === "inscription" ? 2 : 1,
+    }
+  }
+
+  if (kind === "source_event" || kind === "external_ref") {
+    return {
+      "elk.partitioning.partition": 3,
+    }
+  }
+
+  return undefined
+}
+
 export function formatKindLabel(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
 }

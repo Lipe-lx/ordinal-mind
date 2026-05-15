@@ -222,10 +222,10 @@ export async function buildCollectionGraph(
       }
     })
     addEdge({
-      id: `${focusPageSlug}->${rootNodeId}:belongs_to_collection`,
+      id: `${rootNodeId}->${focusPageSlug}:belongs_to_collection`,
       kind: "belongs_to_collection",
-      source: focusPageSlug!,
-      target: rootNodeId,
+      source: rootNodeId,
+      target: focusPageSlug!,
       status: "draft",
       label: "collection member",
       metadata: { slug: focusPageSlug! },
@@ -248,6 +248,7 @@ export async function buildCollectionGraph(
         resolved_by_tier: consolidatedField?.resolved_by_tier ?? "none",
         contribution_count: consolidatedField?.contributions.length ?? 0,
         canonical_value: consolidatedField?.canonical_value,
+        scope: "collection",
       },
     })
     addEdge({
@@ -298,6 +299,7 @@ export async function buildCollectionGraph(
             contributor_id: row.contributor_id,
             created_at: row.created_at,
             moderation_status: row.status,
+            scope: isInscriptionId(targetSlug) ? "inscription" : "collection",
           },
         })
         addEdge({
@@ -416,10 +418,10 @@ export async function buildCollectionGraph(
       },
     })
     addEdge({
-      id: `${page.slug}->${rootNodeId}:belongs_to_collection`,
+      id: `${rootNodeId}->${page.slug}:belongs_to_collection`,
       kind: "belongs_to_collection",
-      source: page.slug,
-      target: rootNodeId,
+      source: rootNodeId,
+      target: page.slug,
       status: pageStatus,
       label: "collection wiki",
       metadata: { slug: page.slug },
