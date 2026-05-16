@@ -43,6 +43,17 @@ class GraphTestStatement {
   private select(): Row[] {
     const sql = this.norm()
 
+    if (sql.includes("pragma table_info('wiki_contributions')")) {
+      return [
+        { name: "value_norm" },
+        { name: "contributor_key" },
+        { name: "updated_at" },
+        { name: "public_author_mode" },
+        { name: "public_author_username" },
+        { name: "public_author_avatar_url" },
+      ]
+    }
+
     if (sql.startsWith("select slug, entity_type, title, summary, sections_json") && sql.includes("from wiki_pages")) {
       return this.db.wikiPages.map((page) => ({
         slug: page.slug,
@@ -70,9 +81,11 @@ class GraphTestStatement {
           field: row.field,
           value: row.value,
           value_norm: row.value_norm,
-          contributor_id: row.contributor_id,
           og_tier: row.og_tier,
           created_at: row.created_at,
+          public_author_mode: row.public_author_mode,
+          public_author_username: row.public_author_username,
+          public_author_avatar_url: row.public_author_avatar_url,
         }))
     }
 
@@ -91,10 +104,12 @@ class GraphTestStatement {
           value: row.value,
           confidence: row.confidence,
           verifiable: row.verifiable,
-          contributor_id: row.contributor_id,
           og_tier: row.og_tier,
           status: row.status,
           created_at: row.created_at,
+          public_author_mode: row.public_author_mode,
+          public_author_username: row.public_author_username,
+          public_author_avatar_url: row.public_author_avatar_url,
         }))
     }
 
@@ -228,6 +243,9 @@ function seedDb(): GraphTestDatabase {
       og_tier: "og",
       status: "published",
       created_at: "2026-04-10T00:00:00.000Z",
+      public_author_mode: "public",
+      public_author_username: "PepeMint",
+      public_author_avatar_url: "https://cdn.discordapp.com/avatars/u1/pepemint.png",
     },
     {
       id: "wc_culture",
@@ -276,6 +294,7 @@ function seedDb(): GraphTestDatabase {
       og_tier: "community",
       status: "published",
       created_at: "2026-04-14T00:00:00.000Z",
+      public_author_mode: "anonymous",
     }
   )
 
@@ -339,6 +358,14 @@ describe("buildCollectionGraph", () => {
     const emptyFieldNode = graph.nodes.find((node) => node.id === "field:frog0001i0:artist")
     expect(emptyFieldNode?.metadata.is_gap).toBe(true)
     expect(emptyFieldNode?.metadata.has_contributions).toBe(false)
+
+    const founderClaimNode = graph.nodes.find((node) => node.id === "claim:bitcoin-frogs:wc_founder")
+    expect(founderClaimNode?.metadata.public_author).toEqual({
+      mode: "public",
+      username: "PepeMint",
+      avatar_url: "https://cdn.discordapp.com/avatars/u1/pepemint.png",
+    })
+    expect("contributor_id" in (founderClaimNode?.metadata ?? {})).toBe(false)
   })
 
   it("builds the same deterministic order across repeated runs", async () => {

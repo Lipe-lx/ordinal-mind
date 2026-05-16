@@ -127,6 +127,83 @@ describe("wikiContribute handler", () => {
     expect(data.tier_applied).toBe("community")
   })
 
+  it("stores public author snapshots for opted-in contributions", async () => {
+    const executedStatements: Array<{ sql: string; params: unknown[] }> = []
+
+    const db = {
+      currentSql: "",
+      currentParams: [] as unknown[],
+      prepare(sql: string) {
+        this.currentSql = sql
+        return this
+      },
+      bind(...params: unknown[]) {
+        this.currentParams = params
+        return this
+      },
+      async all() {
+        if (String(this.currentSql).toLowerCase().includes("pragma table_info('wiki_contributions')")) {
+          return {
+            results: [
+              { name: "value_norm" },
+              { name: "contributor_key" },
+              { name: "updated_at" },
+              { name: "public_author_mode" },
+              { name: "public_author_username" },
+              { name: "public_author_avatar_url" },
+            ],
+          }
+        }
+        return { results: [] }
+      },
+      async first() {
+        return null
+      },
+      async run() {
+        executedStatements.push({ sql: String(this.currentSql), params: [...this.currentParams] })
+        return { success: true }
+      },
+    }
+
+    const localMockEnv = {
+      DB: db,
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
+      },
+      JWT_SECRET: "test-secret",
+    } as unknown as Env
+
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "community_user",
+      avatar: "https://cdn.discordapp.com/avatars/123/community.png",
+      iat: 0,
+      exp: 0,
+    })
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "test-slug",
+        field: "founder",
+        value: "Satoshi",
+        confidence: "stated_by_user",
+        session_id: "s1",
+        public_author_mode: "public",
+      },
+    }, {
+      Authorization: "Bearer fake-jwt",
+    })
+
+    const res = await handleContribute(req, localMockEnv)
+    expect(res.status).toBe(200)
+
+    const insert = executedStatements.find((statement) => statement.sql.toLowerCase().includes("insert into wiki_contributions"))
+    expect(insert?.params).toContain("public")
+    expect(insert?.params).toContain("community_user")
+    expect(insert?.params).toContain("https://cdn.discordapp.com/avatars/123/community.png")
+  })
+
   it("processes valid OG contribution (published)", async () => {
     vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
       sub: "123",

@@ -11,8 +11,9 @@ import { useMediaQuery } from "../lib/useMediaQuery"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { submitWikiContribution } from "../lib/byok/wikiSubmit"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
-import type { WikiGraphNode } from "../lib/types"
+import type { PublicAuthor, WikiGraphNode } from "../lib/types"
 import { WikiContributionModal, buildWikiContributionSessionId, resolveContributionStatusMessage } from "./WikiContributionModal"
+import { WikiPublicAuthorAvatar } from "./WikiPublicAuthorAvatar"
 import {
   buildNodeInspector,
   buildTreeNodeLayoutOptions,
@@ -180,6 +181,11 @@ export function WikiGraphModal({
     return buildNodeInspector(selectedNode)
   }, [selectedNode])
 
+  const selectedNodePublicAuthor = useMemo(() => {
+    if (!selectedNode) return null
+    return parsePublicAuthor(selectedNode.metadata.public_author)
+  }, [selectedNode])
+
   // Mobile inspector state is managed by Cytoscape events (select/unselect/tap)
 
   const handleFitGraph = () => {
@@ -274,7 +280,7 @@ export function WikiGraphModal({
     setContributionDraft(null)
   }, [])
 
-  const handleContributionSubmit = useCallback(async (value: string) => {
+  const handleContributionSubmit = useCallback(async (value: string, publicAuthorMode: "anonymous" | "public") => {
     if (!contributionDraft) {
       return { ok: false, message: "No contribution target selected." }
     }
@@ -288,6 +294,7 @@ export function WikiGraphModal({
           operation: "add",
           confidence: "stated_by_user",
           verifiable: false,
+          public_author_mode: publicAuthorMode,
         },
         activeThreadId: buildWikiContributionSessionId(contributionDraft.targetSlug, contributionDraft.field),
         prompt: value,
@@ -889,6 +896,16 @@ export function WikiGraphModal({
                             </p>
                           )}
 
+                          {selectedNodePublicAuthor && (
+                            <div className="wiki-graph-inspector-author">
+                              <WikiPublicAuthorAvatar author={selectedNodePublicAuthor} size="sm" label="Visible author" />
+                              <div className="wiki-graph-inspector-author-copy">
+                                <span className="wiki-graph-inspector-author-label">Visible author</span>
+                                <span className="wiki-graph-inspector-author-name">{selectedNodePublicAuthor.username}</span>
+                              </div>
+                            </div>
+                          )}
+
                           {inspectorData.sections.length > 0 && (
                             <div className="wiki-graph-inspector-sections">
                               {inspectorData.sections.map((section) => (
@@ -1013,6 +1030,7 @@ export function WikiGraphModal({
             description={contributionDraft?.description}
             submitLabel={contributionDraft?.submitLabel}
             identityTier={identity?.tier}
+            identityPreview={identity ? { username: identity.username, avatar: identity.avatar } : null}
             onClose={closeContributionComposer}
             onSubmit={handleContributionSubmit}
           />
@@ -1040,6 +1058,19 @@ function toggleValue<T>(current: T[], value: T, fallback: T[]): T[] {
     return next.length > 0 ? next : [...fallback]
   }
   return [...uniqueCurrent, value]
+}
+
+function parsePublicAuthor(value: unknown): PublicAuthor | null {
+  if (!value || typeof value !== "object") return null
+  const record = value as Record<string, unknown>
+  if (record.mode !== "public" || typeof record.username !== "string" || !record.username.trim()) {
+    return null
+  }
+  return {
+    mode: "public",
+    username: record.username.trim(),
+    avatar_url: typeof record.avatar_url === "string" && record.avatar_url.trim() ? record.avatar_url.trim() : null,
+  }
 }
 
 function resolveNavigationTarget(node: WikiGraphNode, currentContextId?: string | null): string | null {

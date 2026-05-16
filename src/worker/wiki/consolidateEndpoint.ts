@@ -4,6 +4,7 @@ import type { Env } from "../index"
 import { buildConsolidation } from "./consolidate"
 import type { ConsolidatedCollection } from "../../app/lib/types"
 import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
+import { sanitizePublicConsolidatedCollection } from "./publicAuthor"
 
 export interface ConsolidatedSnapshotResult {
   data: ConsolidatedCollection
@@ -122,7 +123,7 @@ export async function getConsolidatedSnapshot(
     if (Number.isFinite(updatedTime) && now - updatedTime <= oneHour) {
       try {
         return {
-          data: JSON.parse(cacheRow.snapshot_json) as ConsolidatedCollection,
+          data: sanitizePublicConsolidatedCollection(JSON.parse(cacheRow.snapshot_json) as ConsolidatedCollection),
           cached: true,
         }
       } catch {
@@ -131,7 +132,7 @@ export async function getConsolidatedSnapshot(
     }
   }
 
-  const consolidated = await buildConsolidation(normalizedSlug, env)
+  const consolidated = sanitizePublicConsolidatedCollection(await buildConsolidation(normalizedSlug, env))
 
   // Proactive seed: if the collection has data, ensure it exists in the search index (wiki_pages)
   // This allows it to be found in MCP even without a full narrative.
