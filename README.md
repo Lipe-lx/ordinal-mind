@@ -85,7 +85,7 @@ OrdinalMind resolves assets through a tiered verification pipeline:
 | **Intent Chat** | Client-side chat loop with integrated research tools and `<wiki_contribution>` extraction. |
 | **Sealed Security** | LLM keys are encrypted at-rest using **AES-256-GCM** (client-side only). |
 | **SSE Progress** | Real-time resolution status and research activity monitoring via Server-Sent Events. |
-| **Proactive Wiki** | Background extraction of structured knowledge from narratives to seed the wiki immediately. |
+| **Proactive Wiki** | Background extraction of structured knowledge from narratives to seed the public wiki for authenticated Discord members. |
 | **Fiscal Agent** | Automated edge-based content moderation that allows community slang while blocking harmful content. |
 
 ---
@@ -122,7 +122,7 @@ npm run typecheck
 | `/api/chronicle` | `GET` | Public | SSE stream of inscription metadata and events. |
 | `/api/wiki/collection/:slug/consolidated` | `GET` | Public | Merged L0/L1 consensus-driven data. |
 | `/api/wiki/collection/:slug/graph` | `GET` | Public | Neural graph nodes and edges. |
-| `/api/wiki/contribute` | `POST` | Auth | Submit structured knowledge updates. |
+| `/api/wiki/contribute` | `POST` | Auth | Submit structured knowledge updates. Client-provided seed metadata is non-privileged and follows normal auth/safety rules. |
 | `/api/auth/discord` | `GET` | Public | Initiate Discord PKCE handshake. |
 
 ## MCP Interface
@@ -172,6 +172,12 @@ npm run typecheck
 
 > [!NOTE]
 > Anonymous MCP access exposes resources and read-only query tools only.
+
+> [!IMPORTANT]
+> BYOK-only guests can still generate Chronicle narratives, but automatic Wiki Seed persistence now requires an active Discord identity. Without Discord, seed extraction stays local and does not write to the public wiki.
+
+> [!IMPORTANT]
+> Interactive HTML/SVG inscription previews run inside an opaque-origin sandbox. Scripts may still execute for UX compatibility, but the preview no longer receives same-origin access to the app runtime or browser storage.
 
 ### MCP Runtime Flags
 

@@ -40,6 +40,7 @@ This is the current structure and responsibility map of the repository.
 
 - `useDiscordIdentity.ts`: React hook for managing OAuth, JWT session, and Collector Tiers.
 - `keyEncryption.ts`: AES-256-GCM encrypted persistence for LLM keys.
+- `previewFit.ts`: iframe sandbox policy and HTML/SVG preview bridge for opaque-origin rendering.
 
 ### BYOK and Chat Engine (`src/app/lib/byok`)
 
@@ -50,7 +51,7 @@ This is the current structure and responsibility map of the repository.
 - `toolExecutor.ts`: client-side execution of research tools (mempool, ordinals, web).
 - `chatStorage.ts`: indexedDB/localStorage persistence for chat threads.
 - `useChronicleNarrativeChat.ts`: main orchestration hook for the narrative experience.
-- `wikiSeedAgent.ts`: proactive background extraction of wiki fields from narrative.
+- `wikiSeedAgent.ts`: proactive background extraction of wiki fields from narrative; persists to the public wiki only for active Discord members.
 - `wikiSubmit.ts`: shared utility for submitting wiki contributions.
 - `adapters/`: `openai.ts`, `anthropic.ts`, `gemini.ts`, `openrouter.ts` provider implementations.
 
@@ -71,7 +72,7 @@ This is the current structure and responsibility map of the repository.
 - `validation.ts`: cross-checks data between indexers to ensure factuality.
 - `rarity.ts`: calculates satoshi rarity and provenance markers.
 - `db.ts`: shared D1 database interface and helpers.
-- `security.ts`: CSP headers, rate limiting, and origin validation.
+- `security.ts`: CSP headers, rate limiting, origin validation, and sensitive-route CORS hardening.
 
 ### Entry and Routing
 
@@ -97,6 +98,7 @@ This is the current structure and responsibility map of the repository.
 - `consolidate.ts`: multi-tier consensus logic (Genesis/OG/Community).
 - `graph.ts`: generates nodes and edges for the Wiki Atlas.
 - `reviews.ts`: handles approval/rejection of contributions.
+- `contribute.ts`: authenticated contribution intake; client seed metadata is accepted for compatibility but treated as non-privileged.
 - `lint.ts`: server-side validation and formatting of contributions.
 - `completeness.ts`: calculates knowledge gaps for builder mode incentives.
 - `schema.ts`: D1 schema management and readiness checks.

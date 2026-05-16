@@ -4,6 +4,9 @@ import {
   computeFitScale,
   isNonImageFitKind,
   resolveNonImagePrimaryMode,
+  SANDBOXED_SRC_DOC_FRAME_ID_TOKEN,
+  SANDBOXED_SRC_DOC_METRICS_MESSAGE_TYPE,
+  UNTRUSTED_IFRAME_SANDBOX,
 } from "../../src/app/lib/previewFit"
 
 describe("preview fit helpers", () => {
@@ -103,6 +106,9 @@ describe("preview fit helpers", () => {
 
     expect(srcDoc).toContain("<base href=\"https://ordinals.com/content/\">")
     expect(srcDoc).toContain("<img src=\"./asset.png\"")
+    expect(srcDoc).toContain(SANDBOXED_SRC_DOC_FRAME_ID_TOKEN)
+    expect(srcDoc).toContain(SANDBOXED_SRC_DOC_METRICS_MESSAGE_TYPE)
+    expect(srcDoc).toContain("postMessage")
   })
 
   it("wraps svg into html document shell with base href", () => {
@@ -115,5 +121,11 @@ describe("preview fit helpers", () => {
     expect(srcDoc).toContain("<base href=\"https://ordinals.com/content/\">")
     expect(srcDoc).toContain("<body class=\"om-svg-root\">")
     expect(srcDoc).toContain("<svg")
+    expect(srcDoc).toContain("ResizeObserver")
+  })
+
+  it("uses an opaque-origin sandbox for untrusted iframe previews", () => {
+    expect(UNTRUSTED_IFRAME_SANDBOX).toBe("allow-scripts")
+    expect(UNTRUSTED_IFRAME_SANDBOX.includes("allow-same-origin")).toBe(false)
   })
 })

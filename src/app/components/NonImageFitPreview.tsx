@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isEmojiOnly } from "../lib/media"
 import type { MediaKind } from "../lib/types"
-import { buildSandboxedSrcDoc, computeFitScale, resolveNonImagePrimaryMode } from "../lib/previewFit"
+import {
+  buildSandboxedSrcDoc,
+  computeFitScale,
+  resolveNonImagePrimaryMode,
+  SANDBOXED_SRC_DOC_FRAME_ID_TOKEN,
+  SANDBOXED_SRC_DOC_METRICS_MESSAGE_TYPE,
+  UNTRUSTED_IFRAME_SANDBOX,
+} from "../lib/previewFit"
 
 type NonImageMode = "default" | "compact"
 type FitPolicy = "readable"
@@ -9,7 +16,7 @@ type FitPolicy = "readable"
 type RenderState =
   | { status: "loading" }
   | { status: "text"; text: string; truncated: boolean }
-  | { status: "html"; srcDoc: string }
+  | { status: "html"; srcDoc: string; frameId: string }
   | { status: "preview"; url: string }
   | { status: "preview_image"; imageUrl: string; iframeUrl: string }
   | { status: "fallback"; reason: string }
@@ -32,9 +39,18 @@ interface Props {
 const DEFAULT_MAX_TEXT_PREVIEW_BYTES = 24 * 1024
 const DEFAULT_EMBED_VIEWPORT_SIZE = 512
 const COMPACT_EMBED_VIEWPORT_SIZE = 384
-const HTML_PREVIEW_CACHE_VERSION = 1
+const HTML_PREVIEW_CACHE_VERSION = 2
 const HTML_PREVIEW_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 const HTML_PREVIEW_STORAGE_PREFIX = "ordinalmind_html-preview:"
+
+interface HtmlPreviewMetricsMessage {
+  type: typeof SANDBOXED_SRC_DOC_METRICS_MESSAGE_TYPE
+  frameId: string
+  reason?: string
+  width?: number
+  height?: number
+  hasRenderableContent?: boolean
+}
 
 type HtmlPreviewPreference = "html" | "preview"
 
@@ -49,6 +65,13 @@ const MEMORY_HTML_PREVIEW_CACHE = new Map<string, HtmlPreviewCacheEntry>()
 
 function getEmbedViewportSize(mode: NonImageMode): number {
   return mode === "compact" ? COMPACT_EMBED_VIEWPORT_SIZE : DEFAULT_EMBED_VIEWPORT_SIZE
+}
+
+function buildHtmlFrameId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `html-preview-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 function buildHtmlPreviewStorageKey(contentUrl: string): string {
@@ -163,7 +186,7 @@ function createInitialRenderState(params: {
     }
 
     if (cached?.srcDoc) {
-      return { status: "html", srcDoc: cached.srcDoc }
+      return { status: "html", srcDoc: cached.srcDoc, frameId: buildHtmlFrameId() }
     }
 
     return { status: "loading" }
@@ -219,14 +242,18 @@ export function NonImageFitPreview({
     const trimmed = state.text.trim()
     return trimmed.length > 0 && trimmed.length < 120 && trimmed.split("\n").length <= 3
   }, [state, isEmojiText])
+  const resolvedHtmlSrcDoc = useMemo(() => {
+    if (state.status !== "html") return ""
+    return state.srcDoc.replaceAll(SANDBOXED_SRC_DOC_FRAME_ID_TOKEN, state.frameId)
+  }, [state])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const textSurfaceRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const htmlLoadTimeoutRef = useRef<number | null>(null)
-  const htmlProbeTimeoutsRef = useRef<number[]>([])
   const htmlRenderedRef = useRef(false)
+  const htmlMetricsRef = useRef<{ width: number; height: number } | null>(null)
 
   const minScale = useMemo(() => {
     if (fitPolicy !== "readable") return 0.5
@@ -332,7 +359,7 @@ export function NonImageFitPreview({
           const srcDoc = buildSandboxedSrcDoc(raw, contentType, contentUrl)
           writeHtmlPreviewCache(contentUrl, { srcDoc })
           setSurfaceSize({ width: viewportSize, height: viewportSize })
-          setState({ status: "html", srcDoc })
+          setState({ status: "html", srcDoc, frameId: buildHtmlFrameId() })
         } catch (error) {
           if ((error as DOMException).name !== "AbortError") {
             setPreviewFallbackState("Could not render this inscription inline.")
@@ -388,72 +415,26 @@ export function NonImageFitPreview({
     setSurfaceSize({ width: textSurface.scrollWidth, height: textSurface.scrollHeight })
   }, [isEmojiText, minScale, state.status])
 
-  const clearHtmlProbeTimeouts = useCallback(() => {
-    for (const timeoutId of htmlProbeTimeoutsRef.current) {
-      window.clearTimeout(timeoutId)
-    }
-    htmlProbeTimeoutsRef.current = []
-  }, [])
-
   const recomputeHtmlScale = useCallback(() => {
     if (state.status !== "html") return
-    if (!stageRef.current || !iframeRef.current) return
+    if (!stageRef.current) return
 
-    const doc = iframeRef.current.contentDocument
-    if (!doc) return
-    normalizeSingleMediaHtmlLayout(doc)
-
-    const root = doc.documentElement
-    const body = doc.body
-
-    const contentWidth = Math.max(
-      root?.scrollWidth ?? 0,
-      root?.offsetWidth ?? 0,
-      body?.scrollWidth ?? 0,
-      body?.offsetWidth ?? 0,
-      1
-    )
-
-    const contentHeight = Math.max(
-      root?.scrollHeight ?? 0,
-      root?.offsetHeight ?? 0,
-      body?.scrollHeight ?? 0,
-      body?.offsetHeight ?? 0,
-      1
-    )
+    const metrics = htmlMetricsRef.current
+    if (!metrics) return
+    const contentWidth = Math.max(1, metrics.width)
+    const contentHeight = Math.max(1, metrics.height)
 
     const stageWidth = Math.max(1, stageRef.current.clientWidth)
     const stageHeight = Math.max(1, stageRef.current.clientHeight)
-    const hasRenderableContent = isRenderableHtmlDocument(doc, contentWidth, contentHeight)
 
     // HTML/SVG should fit within the preview box footprint (contain) to ensure visibility.
     const containScale = Math.min(stageWidth / contentWidth, stageHeight / contentHeight)
     const safeScale = Number.isFinite(containScale) && containScale > 0 ? Math.min(containScale, 1) : 1
     const clipped = false
 
-    if (hasRenderableContent) {
-      htmlRenderedRef.current = true
-      writeHtmlPreviewCache(contentUrl, { preferredMode: "html" })
-    }
-
     setScaleState({ scale: safeScale, clipped })
     setSurfaceSize({ width: contentWidth, height: contentHeight })
-  }, [contentUrl, state.status])
-
-  const scheduleHtmlScaleProbes = useCallback(() => {
-    clearHtmlProbeTimeouts()
-
-    // Some HTML inscriptions finish layout after load because they bootstrap
-    // via delayed scripts, fonts, or canvas work. We keep probing for a while
-    // instead of assuming the first onLoad measurement is final.
-    const delays = [0, 80, 180, 320, 500, 800, 1200, 1800, 2600, 3600]
-
-    htmlProbeTimeoutsRef.current = delays.map((delay) =>
-      window.setTimeout(() => {
-        recomputeHtmlScale()
-      }, delay)
-    )
-  }, [clearHtmlProbeTimeouts, recomputeHtmlScale])
+  }, [state.status])
 
   const recomputePreviewScale = useCallback(() => {
     if (state.status !== "preview") return
@@ -494,25 +475,14 @@ export function NonImageFitPreview({
 
   // Note: surfaceSize syncing is handled by remounting via key in parent
 
-  const handleFrameLoad = useCallback(() => {
-    if (htmlLoadTimeoutRef.current !== null) {
-      window.clearTimeout(htmlLoadTimeoutRef.current)
-      htmlLoadTimeoutRef.current = null
-    }
-    scheduleHtmlScaleProbes()
-  }, [scheduleHtmlScaleProbes])
-
   useEffect(() => {
     if (state.status !== "html") return
 
     htmlRenderedRef.current = false
-    scheduleHtmlScaleProbes()
+    htmlMetricsRef.current = null
 
     htmlLoadTimeoutRef.current = window.setTimeout(() => {
-      const doc = iframeRef.current?.contentDocument
-      const hasRenderableContent = doc ? isRenderableHtmlDocument(doc) : false
-
-      if (!doc || doc.readyState !== "complete" || !htmlRenderedRef.current || !hasRenderableContent) {
+      if (!htmlRenderedRef.current) {
         if (previewUrl) {
           writeHtmlPreviewCache(contentUrl, { preferredMode: "preview" })
         }
@@ -520,15 +490,58 @@ export function NonImageFitPreview({
       }
     }, 7000)
 
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return
+      if (!event.data || typeof event.data !== "object") return
+
+      const payload = event.data as Partial<HtmlPreviewMetricsMessage>
+      if (payload.type !== SANDBOXED_SRC_DOC_METRICS_MESSAGE_TYPE) return
+      if (payload.frameId !== state.frameId) return
+
+      const width = typeof payload.width === "number" && Number.isFinite(payload.width)
+        ? Math.max(1, payload.width)
+        : 1
+      const height = typeof payload.height === "number" && Number.isFinite(payload.height)
+        ? Math.max(1, payload.height)
+        : 1
+      const hasRenderableContent = Boolean(payload.hasRenderableContent) || width > 1 || height > 1
+      if (!hasRenderableContent) return
+
+      htmlRenderedRef.current = true
+      htmlMetricsRef.current = { width, height }
+      writeHtmlPreviewCache(contentUrl, { preferredMode: "html" })
+
+      if (htmlLoadTimeoutRef.current !== null) {
+        window.clearTimeout(htmlLoadTimeoutRef.current)
+        htmlLoadTimeoutRef.current = null
+      }
+
+      if (!stageRef.current) {
+        setSurfaceSize({ width, height })
+        return
+      }
+
+      const stageWidth = Math.max(1, stageRef.current.clientWidth)
+      const stageHeight = Math.max(1, stageRef.current.clientHeight)
+      const containScale = Math.min(stageWidth / width, stageHeight / height)
+      const safeScale = Number.isFinite(containScale) && containScale > 0 ? Math.min(containScale, 1) : 1
+
+      setScaleState({ scale: safeScale, clipped: false })
+      setSurfaceSize({ width, height })
+    }
+
+    window.addEventListener("message", handleMessage)
+
     return () => {
       if (htmlLoadTimeoutRef.current !== null) {
         window.clearTimeout(htmlLoadTimeoutRef.current)
         htmlLoadTimeoutRef.current = null
       }
       htmlRenderedRef.current = false
-      clearHtmlProbeTimeouts()
+      htmlMetricsRef.current = null
+      window.removeEventListener("message", handleMessage)
     }
-  }, [clearHtmlProbeTimeouts, contentUrl, previewUrl, scheduleHtmlScaleProbes, setPreviewFallbackState, state.status])
+  }, [contentUrl, previewUrl, setPreviewFallbackState, state])
 
   const rootClassName = [
     "non-image-fit-preview",
@@ -588,7 +601,7 @@ export function NonImageFitPreview({
               title={title ?? "Inscription preview"}
               src={state.url}
               scrolling="no"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox={UNTRUSTED_IFRAME_SANDBOX}
               loading="lazy"
               onLoad={recomputePreviewScale}
               referrerPolicy="no-referrer"
@@ -631,10 +644,10 @@ export function NonImageFitPreview({
               ref={iframeRef}
               className="non-image-fit-iframe"
               title={title ?? "Inscription preview"}
-              srcDoc={state.srcDoc}
+              srcDoc={resolvedHtmlSrcDoc}
               scrolling="no"
-              sandbox="allow-scripts allow-same-origin"
-              onLoad={handleFrameLoad}
+              sandbox={UNTRUSTED_IFRAME_SANDBOX}
+              referrerPolicy="no-referrer"
             />
           </div>
         </div>
@@ -740,79 +753,4 @@ async function readTextPreview(
     text: new TextDecoder().decode(merged),
     truncated,
   }
-}
-
-function normalizeSingleMediaHtmlLayout(doc: Document): void {
-  const root = doc.documentElement
-  const body = doc.body
-  if (!body) return
-
-  const directChildren = Array.from(body.children) as HTMLElement[]
-  const mediaTags = new Set(["IMG", "SVG", "CANVAS", "VIDEO"])
-
-  const applyFillStyle = (target: HTMLElement) => {
-    target.style.width = "100%"
-    target.style.height = "100%"
-    target.style.maxWidth = "100%"
-    target.style.maxHeight = "100%"
-    target.style.margin = "0"
-    target.style.display = "block"
-    if (target instanceof HTMLImageElement || target instanceof HTMLVideoElement) {
-      target.style.objectFit = "contain"
-    }
-  }
-
-  if (directChildren.length === 1) {
-    const only = directChildren[0]
-    const onlyTag = only.tagName.toUpperCase()
-
-    if (mediaTags.has(onlyTag)) {
-      root.style.width = "100%"
-      root.style.height = "100%"
-      body.style.margin = "0"
-      body.style.width = "100%"
-      body.style.height = "100%"
-      body.style.overflow = "hidden"
-      applyFillStyle(only)
-      return
-    }
-
-    const nestedMedia = Array.from(only.querySelectorAll("img, svg, canvas, video")) as HTMLElement[]
-    if (nestedMedia.length === 1) {
-      root.style.width = "100%"
-      root.style.height = "100%"
-      body.style.margin = "0"
-      body.style.width = "100%"
-      body.style.height = "100%"
-      body.style.overflow = "hidden"
-      only.style.width = "100%"
-      only.style.height = "100%"
-      only.style.margin = "0"
-      applyFillStyle(nestedMedia[0])
-    }
-  }
-}
-
-function isRenderableHtmlDocument(
-  doc: Document,
-  measuredWidth?: number,
-  measuredHeight?: number
-): boolean {
-  const body = doc.body
-  if (!body) return false
-
-  if ((measuredWidth ?? 0) > 1 || (measuredHeight ?? 0) > 1) {
-    return true
-  }
-
-  const visibleText = body.textContent?.replace(/\s+/g, "") ?? ""
-  if (visibleText.length > 0) {
-    return true
-  }
-
-  return Boolean(
-    body.querySelector(
-      "img,svg,canvas,video,iframe,audio,object,embed,p,pre,code,blockquote,h1,h2,h3,h4,h5,h6,section,article,main,div,span"
-    )
-  )
 }

@@ -36,6 +36,15 @@ export function readStoredDiscordJWT(): string | null {
   }
 }
 
+export function hasStoredDiscordConnection(): boolean {
+  try {
+    const marker = localStorage.getItem(DISCORD_CONNECTED_STORAGE_KEY)
+    return Boolean(marker && marker !== "0")
+  } catch {
+    return false
+  }
+}
+
 function clearLegacyJWT(): void {
   try {
     localStorage.removeItem(DISCORD_JWT_STORAGE_KEY)

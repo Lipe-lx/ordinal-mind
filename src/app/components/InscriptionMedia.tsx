@@ -2,7 +2,7 @@ import { useState, memo } from "react"
 import { detectMediaKind, getMediaPreviewMode, buildOrdinalsPreviewUrl } from "../lib/media"
 import type { RelatedInscriptionSummary } from "../lib/types"
 import { NonImageFitPreview } from "./NonImageFitPreview"
-import { isNonImageFitKind } from "../lib/previewFit"
+import { isNonImageFitKind, UNTRUSTED_IFRAME_SANDBOX } from "../lib/previewFit"
 
 interface Props {
   inscription: RelatedInscriptionSummary
@@ -40,7 +40,7 @@ export const InscriptionMedia = memo(({
         src={previewUrl}
         loading={loading}
         scrolling="no"
-        sandbox="allow-scripts allow-same-origin"
+        sandbox={UNTRUSTED_IFRAME_SANDBOX}
       />
     )
   }

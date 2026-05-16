@@ -484,7 +484,7 @@ async function handleAuthMe(request: Request, env: Env): Promise<Response> {
   if (!auth.ok) {
     // Quietly return 200 for missing tokens to avoid console noise for guests
     const status = auth.error === "missing_auth_token" ? 200 : auth.status
-    return json({ ok: false, error: auth.error }, status)
+    return json({ ok: false, error: auth.error }, status, { "Cache-Control": "no-store" })
   }
 
   return json({
@@ -496,7 +496,7 @@ async function handleAuthMe(request: Request, env: Env): Promise<Response> {
       tier: auth.payload.tier,
       badges: auth.payload.badges || [],
     },
-  })
+  }, 200, { "Cache-Control": "no-store" })
 }
 
 // ---------------------------------------------------------------------------

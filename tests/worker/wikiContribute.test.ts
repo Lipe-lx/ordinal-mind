@@ -374,13 +374,16 @@ describe("wikiContribute handler", () => {
     expect(run).toHaveBeenCalled()
   })
 
-  it("auto-publishes narrative seed contributions as system genesis", async () => {
+  it("rejects anonymous narrative seed requests without authenticated session", async () => {
     const localMockEnv = {
       DB: {
         prepare: vi.fn().mockReturnThis(),
         bind: vi.fn().mockReturnThis(),
         first: vi.fn().mockResolvedValue(null),
         run: vi.fn().mockResolvedValue({ success: true }),
+      },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
       },
       JWT_SECRET: "test-secret",
     } as unknown as Env
@@ -399,13 +402,66 @@ describe("wikiContribute handler", () => {
 
     const res = await handleContribute(req, localMockEnv)
     const data = await res.json() as any
+    expect(res.status).toBe(401)
+    expect(data.ok).toBe(false)
+    expect(data.error).toBe("missing_auth_token")
+  })
+
+  it("treats authenticated narrative seed requests as normal user contributions", async () => {
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "seed_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
+
+    const localMockEnv = {
+      DB: {
+        prepare: vi.fn().mockReturnThis(),
+        bind: vi.fn().mockReturnThis(),
+        first: vi.fn().mockResolvedValue(null),
+        run: vi.fn().mockResolvedValue({ success: true }),
+      },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
+      },
+      JWT_SECRET: "test-secret",
+    } as unknown as Env
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "collection:test",
+        field: "founder",
+        value: "Seed Founder",
+        confidence: "inferred",
+        verifiable: true,
+        session_id: "seed-session",
+        origin: "narrative_seed_agent",
+      },
+    }, {
+      Authorization: "Bearer fake-jwt",
+    })
+
+    const res = await handleContribute(req, localMockEnv)
+    const data = await res.json() as any
     expect(res.status).toBe(200)
     expect(data.ok).toBe(true)
     expect(data.status).toBe("published")
-    expect(data.tier_applied).toBe("genesis")
+    expect(data.tier_applied).toBe("community")
   })
 
-  it("returns duplicate for seed when published value is semantically equal", async () => {
+  it("returns duplicate for authenticated seed when published value is semantically equal", async () => {
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "user-1",
+      tier: "community",
+      username: "seed_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
+
     const localMockEnv = {
       DB: {
         prepare: vi.fn().mockReturnThis(),
@@ -421,6 +477,9 @@ describe("wikiContribute handler", () => {
         }),
         run: vi.fn().mockResolvedValue({ success: true }),
       },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
+      },
       JWT_SECRET: "test-secret",
     } as unknown as Env
 
@@ -434,6 +493,8 @@ describe("wikiContribute handler", () => {
         session_id: "seed-session",
         origin: "narrative_seed_agent",
       },
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
 
     const res = await handleContribute(req, localMockEnv)
@@ -443,23 +504,33 @@ describe("wikiContribute handler", () => {
     expect(data.contribution_id).toBe("seed_same")
   })
 
-  it("updates existing seed-owned field for seed when value changes and clears consolidated cache", async () => {
+  it("updates existing authenticated seed-owned field and clears consolidated cache", async () => {
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "seed_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
+
     const prepare = vi.fn().mockReturnThis()
     const bind = vi.fn().mockReturnThis()
-    const first = vi.fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: "seed_update",
-        value: "Old founder",
-        value_norm: "old founder",
-        status: "published",
-        og_tier: "genesis",
-        contributor_id: "system:narrative-seed-agent",
-        contributor_key: "system:narrative-seed-agent",
-      })
+    const first = vi.fn().mockResolvedValue({
+      id: "seed_update",
+      value: "Old founder",
+      value_norm: "old founder",
+      status: "published",
+      og_tier: "community",
+      contributor_id: "123",
+      contributor_key: "user:123",
+    })
     const run = vi.fn().mockResolvedValue({ success: true })
     const localMockEnv = {
       DB: { prepare, bind, first, run },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
+      },
       JWT_SECRET: "test-secret",
     } as unknown as Env
 
@@ -473,6 +544,8 @@ describe("wikiContribute handler", () => {
         session_id: "seed-session",
         origin: "narrative_seed_agent",
       },
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
 
     const res = await handleContribute(req, localMockEnv)
@@ -483,171 +556,16 @@ describe("wikiContribute handler", () => {
     expect(prepare.mock.calls.some((call) => String(call[0]).includes("DELETE FROM consolidated_cache"))).toBe(true)
   })
 
-  it("does not overwrite divergent community-human field with seed updates", async () => {
-    const run = vi.fn().mockResolvedValue({ success: true })
-    const localMockEnv = {
-      DB: {
-        prepare: vi.fn().mockReturnThis(),
-        bind: vi.fn().mockReturnThis(),
-        first: vi.fn()
-          .mockResolvedValueOnce({
-            id: "community_human",
-            status: "published",
-            og_tier: "community",
-            contributor_id: "user-community",
-            contributor_key: "user:user-community",
-          })
-          .mockResolvedValueOnce(null),
-        run,
-      },
-      JWT_SECRET: "test-secret",
-    } as unknown as Env
-
-    const req = createRequest({
-      contribution: {
-        collection_slug: "collection:test",
-        field: "founder",
-        value: "Seed founder",
-        confidence: "inferred",
-        verifiable: true,
-        session_id: "seed-session",
-        origin: "narrative_seed_agent",
-      },
+  it("applies rate limits to authenticated narrative seed writes", async () => {
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "seed_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
     })
 
-    const res = await handleContribute(req, localMockEnv)
-    const data = await res.json() as any
-    expect(res.status).toBe(200)
-    expect(data.status).toBe("duplicate")
-    expect(data.detail).toBe("protected_human_contribution")
-    expect(data.contribution_id).toBe("community_human")
-    expect(run).not.toHaveBeenCalled()
-  })
-
-  it("does not overwrite divergent og-human field with seed updates", async () => {
-    const run = vi.fn().mockResolvedValue({ success: true })
-    const localMockEnv = {
-      DB: {
-        prepare: vi.fn().mockReturnThis(),
-        bind: vi.fn().mockReturnThis(),
-        first: vi.fn()
-          .mockResolvedValueOnce({
-            id: "og_human",
-            status: "published",
-            og_tier: "og",
-            contributor_id: "user-og",
-            contributor_key: "user:user-og",
-          })
-          .mockResolvedValueOnce(null),
-        run,
-      },
-      JWT_SECRET: "test-secret",
-    } as unknown as Env
-
-    const req = createRequest({
-      contribution: {
-        collection_slug: "collection:test",
-        field: "founder",
-        value: "Seed founder",
-        confidence: "inferred",
-        verifiable: true,
-        session_id: "seed-session",
-        origin: "narrative_seed_agent",
-      },
-    })
-
-    const res = await handleContribute(req, localMockEnv)
-    const data = await res.json() as any
-    expect(res.status).toBe(200)
-    expect(data.status).toBe("duplicate")
-    expect(data.detail).toBe("protected_human_contribution")
-    expect(data.contribution_id).toBe("og_human")
-    expect(run).not.toHaveBeenCalled()
-  })
-
-  it("does not overwrite divergent genesis-human field with seed updates", async () => {
-    const run = vi.fn().mockResolvedValue({ success: true })
-    const localMockEnv = {
-      DB: {
-        prepare: vi.fn().mockReturnThis(),
-        bind: vi.fn().mockReturnThis(),
-        first: vi.fn()
-          .mockResolvedValueOnce({
-            id: "genesis_human",
-            status: "published",
-            og_tier: "genesis",
-            contributor_id: "747550957432471654",
-            contributor_key: "user:747550957432471654",
-          })
-          .mockResolvedValueOnce(null),
-        run,
-      },
-      JWT_SECRET: "test-secret",
-    } as unknown as Env
-
-    const req = createRequest({
-      contribution: {
-        collection_slug: "collection:test",
-        field: "founder",
-        value: "Seed founder",
-        confidence: "inferred",
-        verifiable: true,
-        session_id: "seed-session",
-        origin: "narrative_seed_agent",
-      },
-    })
-
-    const res = await handleContribute(req, localMockEnv)
-    const data = await res.json() as any
-    expect(res.status).toBe(200)
-    expect(data.status).toBe("duplicate")
-    expect(data.detail).toBe("protected_human_contribution")
-    expect(data.contribution_id).toBe("genesis_human")
-    expect(run).not.toHaveBeenCalled()
-  })
-
-  it("does not insert seed contribution when a human quarantine contribution exists", async () => {
-    const run = vi.fn().mockResolvedValue({ success: true })
-    const localMockEnv = {
-      DB: {
-        prepare: vi.fn().mockReturnThis(),
-        bind: vi.fn().mockReturnThis(),
-        first: vi.fn()
-          .mockResolvedValueOnce({
-            id: "quarantine_human",
-            status: "quarantine",
-            og_tier: "community",
-            contributor_id: "user-quarantine",
-            contributor_key: "user:user-quarantine",
-          })
-          .mockResolvedValueOnce(null),
-        run,
-      },
-      JWT_SECRET: "test-secret",
-    } as unknown as Env
-
-    const req = createRequest({
-      contribution: {
-        collection_slug: "collection:test",
-        field: "founder",
-        value: "Seed founder",
-        confidence: "inferred",
-        verifiable: true,
-        session_id: "seed-session",
-        origin: "narrative_seed_agent",
-      },
-    })
-
-    const res = await handleContribute(req, localMockEnv)
-    const data = await res.json() as any
-    expect(res.status).toBe(200)
-    expect(data.status).toBe("duplicate")
-    expect(data.detail).toBe("protected_human_contribution")
-    expect(data.contribution_id).toBe("quarantine_human")
-    expect(run).not.toHaveBeenCalled()
-  })
-
-  it("does not apply rate limits to narrative seed agent writes", async () => {
     const localMockEnv = {
       DB: {
         prepare: vi.fn().mockReturnThis(),
@@ -672,14 +590,15 @@ describe("wikiContribute handler", () => {
         session_id: "seed-session",
         origin: "narrative_seed_agent",
       },
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
 
     const res = await handleContribute(req, localMockEnv)
     const data = await res.json() as any
-    expect(res.status).toBe(200)
-    expect(data.ok).toBe(true)
-    expect(data.status).toBe("published")
-    expect(data.tier_applied).toBe("genesis")
+    expect(res.status).toBe(429)
+    expect(data.ok).toBe(false)
+    expect(data.error).toBe("rate_limited")
   })
 
   it("keeps rate limits for non-seed writes", async () => {

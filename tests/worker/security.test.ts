@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { attachSecurityHeaders, enforceRateLimit } from "../../src/worker/security"
+import {
+  attachSecurityHeaders,
+  buildApiPreflightResponse,
+  enforceRateLimit,
+} from "../../src/worker/security"
 
 describe("attachSecurityHeaders", () => {
   it("allows ordinals preview framing and external inscription media via CSP", async () => {
@@ -14,6 +18,66 @@ describe("attachSecurityHeaders", () => {
     expect(csp).toContain("default-src 'self'")
     expect(csp).toContain("frame-src 'self' https://ordinals.com")
     expect(csp).toContain("media-src 'self' data: blob: https:")
+  })
+
+  it("reflects allowed origins for sensitive authenticated routes instead of wildcard", () => {
+    const request = new Request("https://ordinalmind.local/api/auth/me", {
+      headers: { Origin: "https://ordinalmind.local" },
+    })
+    const response = new Response(JSON.stringify({ ok: true }), {
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    })
+
+    const secured = attachSecurityHeaders(request, response, false)
+    expect(secured.headers.get("Access-Control-Allow-Origin")).toBe("https://ordinalmind.local")
+    expect(secured.headers.get("Access-Control-Allow-Credentials")).toBe("true")
+    expect(secured.headers.get("Vary")).toContain("Origin")
+  })
+
+  it("removes wildcard CORS from sensitive originless responses while keeping the body readable server-side", async () => {
+    const request = new Request("https://ordinalmind.local/api/wiki/export")
+    const response = new Response("zip-bytes", {
+      headers: {
+        "Content-Type": "application/zip",
+        "Access-Control-Allow-Origin": "*",
+      },
+    })
+
+    const secured = attachSecurityHeaders(request, response, false)
+    expect(secured.headers.get("Access-Control-Allow-Origin")).toBeNull()
+    expect(await secured.text()).toBe("zip-bytes")
+  })
+})
+
+describe("buildApiPreflightResponse", () => {
+  it("blocks sensitive preflight requests from disallowed origins", () => {
+    const response = buildApiPreflightResponse(new Request("https://ordinalmind.local/api/wiki/contribute", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://evil.example",
+        "Access-Control-Request-Method": "POST",
+      },
+    }))
+
+    expect(response.status).toBe(403)
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull()
+  })
+
+  it("reflects allowed origin on sensitive preflight requests", () => {
+    const response = buildApiPreflightResponse(new Request("https://ordinalmind.local/api/wiki/contribute", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://ordinalmind.local",
+        "Access-Control-Request-Method": "POST",
+      },
+    }))
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://ordinalmind.local")
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true")
   })
 })
 

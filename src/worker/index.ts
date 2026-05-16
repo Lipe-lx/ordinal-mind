@@ -14,7 +14,7 @@ import { handleSitemapRoute } from "./routes/sitemap"
 import { handleRobotsRoute } from "./routes/robots"
 import { seoMiddleware } from "./routes/seo"
 import { fetchUnisat } from "./agents/unisat"
-import { attachSecurityHeaders } from "./security"
+import { attachSecurityHeaders, buildApiPreflightResponse } from "./security"
 import { newRequestId, runChroniclePipeline } from "./chronicleService"
 import type { DiagnosticsContext, ProgressCallback } from "./pipeline/types"
 import { handleMcpRequest, isMcpEnabled } from "./mcp"
@@ -118,7 +118,7 @@ export default {
 
       const response = await coreFetch(request, env, ctx)
 
-      return attachSecurityHeaders(request, response, isDev)
+      return attachSecurityHeaders(request, response, isDev, env.ALLOWED_ORIGINS)
     } catch (err) {
       console.error("Worker fetch error:", err)
       return new Response(err instanceof Error ? err.message : "Internal Worker Error", { status: 500 })
@@ -153,7 +153,7 @@ async function coreFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
   const url = new URL(request.url)
 
   if (request.method === "OPTIONS") {
-    return new Response(null, { headers: CORS_HEADERS })
+    return buildApiPreflightResponse(request, env.ALLOWED_ORIGINS)
   }
 
   if (isMcpEnabled(env)) {
