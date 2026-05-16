@@ -41,6 +41,7 @@ We treat **ordinals.com** as the primary factual source (Layer 0). OrdinalMind a
 - **Auth required:** Community contributions and other tier-gated actions.
 - **Identity model:** Discord OAuth2 with stateless JWTs and tier-based capability checks.
 - **Secret handling:** User LLM keys must stay client-side. OrdinalMind does not receive, proxy, or persist user LLM API keys server-side.
+- **Seed protection rule:** The narrative seed agent may fill empty wiki fields and refresh its own prior system seed, but it must never overwrite an active human contribution for the same field. Human `published` and `quarantine` contributions both take precedence over later seed writes.
 
 ## Factual Policy
 - Prefer structured, source-backed events over narrative text.

@@ -387,4 +387,42 @@ describe("wikiSeedAgent", () => {
     expect(submitWikiContribution).toHaveBeenCalledTimes(1)
     expect(vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.collection_slug).toBe("the_dishonorables")
   })
+
+  it("treats protected human contribution responses as expected non-error skips", async () => {
+    mockConsolidatedResponse(null)
+    vi.mocked(runByokPrompt).mockResolvedValue("{}")
+    vi.mocked(parseFirstJsonObject).mockReturnValue({
+      fields: [
+        {
+          field: "founder",
+          value: "Protected Founder",
+          verifiable: true,
+          scope: "collection",
+        },
+      ],
+    })
+    vi.mocked(submitWikiContribution).mockResolvedValue({
+      ok: true,
+      status: "duplicate",
+      detail: "protected_human_contribution",
+    })
+
+    const statuses: Array<{ state: string; label: string }> = []
+
+    await runWikiSeedAgent({
+      narrative: "Protected Founder is already covered by a human contribution.",
+      chronicle: buildChronicle(),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+      onProgress: (status) => {
+        statuses.push({ state: status.state, label: status.label })
+      },
+    })
+
+    expect(submitWikiContribution).toHaveBeenCalledTimes(1)
+    expect(statuses.at(-1)).toEqual({
+      state: "done",
+      label: "Wiki seed complete (fields protected by human contributions).",
+    })
+  })
 })

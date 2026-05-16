@@ -609,8 +609,8 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       (r) => r.ok && r.status === "duplicate"
     ).length
 
-    const protectedByGenesis = results.filter(
-      (r) => r.ok && r.detail === "protected_genesis_human"
+    const protectedByHumanContribution = results.filter(
+      (r) => r.ok && r.detail === "protected_human_contribution"
     ).length
 
     console.info("[OrdinalMind][WikiSeedAgent] Seed complete", {
@@ -624,14 +624,14 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       attempted: fields.length,
       updated_or_inserted: submitted,
       duplicates,
-      protected_by_genesis_human: protectedByGenesis,
+      protected_by_human_contribution: protectedByHumanContribution,
       errors: results.filter((r) => !r.ok).length,
     })
 
     const label =
       submitted === 0
-        ? (protectedByGenesis > 0
-            ? "Wiki seed complete (fields protected by Genesis human consensus)."
+        ? (protectedByHumanContribution > 0
+            ? "Wiki seed complete (fields protected by human contributions)."
             : duplicates > 0
               ? "Wiki seed complete (fields already synchronized)."
               : "Wiki seed complete (no deterministic updates needed).")
