@@ -113,6 +113,14 @@ interface PublishedFieldRow extends ActiveContributionRow {
   contributor_key: string | null
 }
 
+interface BlockingHumanContributionRow {
+  id: string
+  status: string
+  og_tier: OGTier | string
+  contributor_id: string | null
+  contributor_key: string | null
+}
+
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
   return tier === "community" || tier === "og" || tier === "genesis" ? "published" : "quarantine"
 }
@@ -240,7 +248,7 @@ function buildPublicAuthorSnapshot(payload: JWTPayload | null, mode: PublicAutho
   }
 }
 
-async function readPublishedFieldContribution(
+async function readSeedOwnedContribution(
   env: Env,
   slug: string,
   field: CanonicalField,
@@ -255,6 +263,37 @@ async function readPublishedFieldContribution(
     WHERE collection_slug = ?
       AND field = ?
       AND status = 'published'
+      AND (
+        contributor_key = ?
+        OR contributor_id = ?
+      )
+    ORDER BY datetime(created_at) DESC, id DESC
+    LIMIT 1
+  `)
+    .bind(slug, field, SYSTEM_SEED_CONTRIBUTOR_KEY, SYSTEM_SEED_CONTRIBUTOR_ID)
+    .first<PublishedFieldRow>()
+
+  return row ?? null
+}
+
+async function readBlockingHumanContribution(
+  env: Env,
+  slug: string,
+  field: CanonicalField,
+  caps: ContributionColumnCaps
+): Promise<BlockingHumanContributionRow | null> {
+  if (!env.DB) return null
+  const contributorKeyExpr = caps.hasContributorKey ? "contributor_key" : "NULL AS contributor_key"
+  const row = await env.DB.prepare(`
+    SELECT id, status, og_tier, contributor_id, ${contributorKeyExpr}
+    FROM wiki_contributions
+    WHERE collection_slug = ?
+      AND field = ?
+      AND status IN ('published', 'quarantine')
+      AND NOT (
+        contributor_key = ?
+        OR contributor_id = ?
+      )
     ORDER BY
       CASE og_tier
         WHEN 'genesis' THEN 4
@@ -262,12 +301,17 @@ async function readPublishedFieldContribution(
         WHEN 'community' THEN 2
         ELSE 1
       END DESC,
+      CASE status
+        WHEN 'published' THEN 2
+        WHEN 'quarantine' THEN 1
+        ELSE 0
+      END DESC,
       datetime(created_at) DESC,
       id DESC
     LIMIT 1
   `)
-    .bind(slug, field)
-    .first<PublishedFieldRow>()
+    .bind(slug, field, SYSTEM_SEED_CONTRIBUTOR_KEY, SYSTEM_SEED_CONTRIBUTOR_ID)
+    .first<BlockingHumanContributionRow>()
 
   return row ?? null
 }
@@ -462,9 +506,16 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
   let activeRow: ActiveContributionRow | null
   let publishedFieldRow: PublishedFieldRow | null = null
+  let blockingHumanRow: BlockingHumanContributionRow | null = null
   try {
     if (isSeedOrigin) {
-      publishedFieldRow = await readPublishedFieldContribution(
+      blockingHumanRow = await readBlockingHumanContribution(
+        env,
+        contribution.collection_slug,
+        contribution.field,
+        caps
+      )
+      publishedFieldRow = await readSeedOwnedContribution(
         env,
         contribution.collection_slug,
         contribution.field,
@@ -508,24 +559,21 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       return json(duplicateResponse)
     }
 
-    if (
-      isSeedOrigin
-      && publishedFieldRow
-      && publishedFieldRow.og_tier === "genesis"
-      && publishedFieldRow.contributor_key !== SYSTEM_SEED_CONTRIBUTOR_KEY
-    ) {
-      console.info("[WikiContribute] Seed write skipped due to genesis human protection", {
+    if (isSeedOrigin && blockingHumanRow) {
+      console.info("[WikiContribute] Seed write skipped due to active human contribution", {
         at: new Date().toISOString(),
         slug: contribution.collection_slug,
         field: contribution.field,
-        contribution_id: publishedFieldRow.id,
+        contribution_id: blockingHumanRow.id,
+        blocking_status: blockingHumanRow.status,
+        blocking_tier: blockingHumanRow.og_tier,
       })
       const protectedResponse: ContributeResponse = {
         ok: true,
-        contribution_id: publishedFieldRow.id,
+        contribution_id: blockingHumanRow.id,
         status: "duplicate",
         tier_applied: resolvedTier,
-        detail: "protected_genesis_human",
+        detail: "protected_human_contribution",
       }
       return json(protectedResponse)
     }
@@ -621,6 +669,26 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   }
 
   const id = generateId()
+
+  if (isSeedOrigin && blockingHumanRow) {
+    console.info("[WikiContribute] Seed insert skipped due to active human contribution", {
+      at: new Date().toISOString(),
+      slug: contribution.collection_slug,
+      field: contribution.field,
+      contribution_id: blockingHumanRow.id,
+      blocking_status: blockingHumanRow.status,
+      blocking_tier: blockingHumanRow.og_tier,
+    })
+
+    const protectedResponse: ContributeResponse = {
+      ok: true,
+      contribution_id: blockingHumanRow.id,
+      status: "duplicate",
+      tier_applied: resolvedTier,
+      detail: "protected_human_contribution",
+    }
+    return json(protectedResponse)
+  }
 
   try {
     const insertColumns = [

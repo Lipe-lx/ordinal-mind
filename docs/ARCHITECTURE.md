@@ -94,7 +94,10 @@ graph TD
 - **Strict Scoping**: Fields are scoped to `inscription` or `collection` levels (e.g., `artist` vs `founder`) to prevent data bleed.
 - **Review Loop**: Anonymous or low-tier contributions enter a quarantine state for community/OG review.
 - **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
-- **Parallel Wiki Seed Agent**: A client-side background agent that extract facts from the initial narrative to proactively populate the wiki database.
+- **Parallel Wiki Seed Agent**: A client-side background agent that extracts facts from the initial narrative to proactively populate the wiki database.
+    - **Human-First Protection**: Seed writes are allowed only when a field has no active human contribution.
+    - **No Overwrite Rule**: Once a human contribution exists for the same `slug + field`, even as a community draft or quarantine item, the seed agent must not overwrite or supersede it.
+    - **Seed Ownership**: The seed agent may refresh only its own prior system-seeded contribution when no human contribution blocks that field.
 - **Discovery-First Indexing**: Collections with any consensus data (completeness > 0) are automatically seeded into the search index (`wiki_pages`), enabling immediate discovery via MCP and UI even before full narrative generation.
 - **Fiscal Agent (Automated Moderation)**: All contributions are asynchronously scanned by a **Fiscal Agent** powered by **Llama Guard 3**.
     - **Nuanced Policy**: Specifically tuned to allow community slang and profanity while strictly blocking illegal content and explicit sexual descriptions.
@@ -151,7 +154,7 @@ graph TD
   - `wiki_list_fields`: `anon|community|og|genesis`
   - `wiki_get_field_status`: `anon|community|og|genesis`
   - `wiki_get_collection_context`: `anon|community|og|genesis`
-  - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> published draft`, `og/genesis -> published`, unsafe content -> `quarantine`)
+  - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> published draft`, `og/genesis -> published`, unsafe content -> `quarantine`; any active human contribution blocks later seed-agent overwrites for that field)
   - `contribute_wiki`: `community|og|genesis`
   - `review_contribution`: `genesis`
   - `refresh_chronicle`: `genesis`

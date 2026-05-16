@@ -190,18 +190,18 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                       animate={{ opacity: 1, height: "auto" }}
                       style={{ 
                         fontSize: "0.7rem", 
-                        color: "var(--accent-primary)", 
-                        background: "rgba(247, 147, 26, 0.08)", 
+                        color: "#10b981", 
+                        background: "rgba(16, 185, 129, 0.06)", 
                         padding: "8px 12px", 
                         borderRadius: "8px",
-                        border: "1px solid rgba(247, 147, 26, 0.15)",
+                        border: "1px solid rgba(16, 185, 129, 0.12)",
                         display: "flex",
                         alignItems: "center",
                         gap: "10px",
                         lineHeight: "1.4"
                       }}
                     >
-                      <span style={{ fontSize: "1rem" }}>💡</span>
+                      <span style={{ fontSize: "1rem" }}>✨</span>
                       <span>
                         <strong>Google AI Studio</strong> offers a generous <strong>Free Tier</strong> for these models. 
                         No credit card required for most regions.
@@ -243,7 +243,9 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                               padding: "0 10px", 
                               fontSize: "0.65rem",
                               borderRadius: "6px",
-                              background: "linear-gradient(135deg, rgba(247, 147, 26, 0.2), rgba(247, 147, 26, 0.1))"
+                              background: "linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1))",
+                              borderColor: "rgba(16, 185, 129, 0.3)",
+                              color: "#10b981"
                             } : { 
                               fontSize: "0.65rem", 
                               fontWeight: "700", 
@@ -252,12 +254,12 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                               letterSpacing: "0.05em" 
                             }}
                           >
-                            {isGemini ? (
-                              <>
-                                <span style={{ marginRight: "4px" }}>Google AI Studio (Free API)</span>
-                                <span>&rarr;</span>
-                              </>
-                            ) : "Get Your Key \u0026rarr;"}
+                             {isGemini ? (
+                               <>
+                                 <span style={{ marginRight: "4px" }}>Get Your Free Key 🔑</span>
+                                 <span>&rarr;</span>
+                               </>
+                             ) : "Get Your Free Key 🔑 \u0026rarr;"}
                           </a>
                         );
                       })()}
@@ -282,9 +284,9 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+                  style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}
                 >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.25rem" }}>
                     <span style={{ 
                       alignSelf: "flex-start",
                       fontSize: "0.65rem", 
@@ -304,10 +306,11 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                     </p>
                   </div>
                   
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Brave Search API Key</label>
                     <input
                       className="input-field"
+                      style={{ minHeight: "36px", padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
                       type="password"
                       value={config.researchKeys?.braveSearchApiKey || ""}
                       onChange={(e) => handleResearchKeyChange("braveSearchApiKey", e.target.value)}
@@ -316,10 +319,11 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                     />
                   </div>
                   
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Exa API Key</label>
                     <input
                       className="input-field"
+                      style={{ minHeight: "36px", padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
                       type="password"
                       value={config.researchKeys?.exaApiKey || ""}
                       onChange={(e) => handleResearchKeyChange("exaApiKey", e.target.value)}
@@ -328,10 +332,11 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                     />
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>Perplexity API Key</label>
                     <input
                       className="input-field"
+                      style={{ minHeight: "36px", padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
                       type="password"
                       value={config.researchKeys?.perplexityApiKey || ""}
                       onChange={(e) => handleResearchKeyChange("perplexityApiKey", e.target.value)}
@@ -340,10 +345,11 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                     />
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)" }}>SerpApi Key (Google Trends)</label>
                     <input
                       className="input-field"
+                      style={{ minHeight: "36px", padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
                       type="password"
                       value={config.researchKeys?.serpapiApiKey || ""}
                       onChange={(e) => handleResearchKeyChange("serpapiApiKey", e.target.value)}

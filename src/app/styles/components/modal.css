@@ -18,7 +18,8 @@
 .byok-modal {
   width: 100%;
   max-width: 480px;
-  max-height: calc(100dvh - max(var(--space-md), var(--safe-area-top)) - max(var(--space-md), var(--safe-area-bottom)));
+  max-height: 90vh;
+  max-height: 90dvh;
   padding: var(--space-2xl);
   background: var(--bg-modal-elevated);
   overflow-y: auto;
