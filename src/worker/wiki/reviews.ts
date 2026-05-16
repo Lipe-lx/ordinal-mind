@@ -2,6 +2,7 @@ import type { Env } from "../index"
 import type { OGTier } from "../auth/jwt"
 import { requireSessionUser } from "../auth/session"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
+import { getContributionColumnCaps, type ContributionColumnCaps } from "./contributionColumns"
 
 interface ReviewActor {
   discordId: string
@@ -26,6 +27,16 @@ interface PendingReviewRow {
   current_tier: string | null
   safety_status: string
   safety_metadata: string | null
+}
+
+interface ReviewDecisionRow {
+  id: string
+  collection_slug: string
+  field: string
+  value: string
+  contributor_id: string | null
+  contributor_key: string | null
+  session_id: string | null
 }
 
 function json(data: unknown, status = 200): Response {
@@ -327,15 +338,23 @@ export async function handleReviewDecision(
     return json({ ok: false, error: "invalid_review_action" }, 400)
   }
 
+  const columnCaps = await getContributionColumnCaps(env)
   const row = await env.DB.prepare(`
-    SELECT id, collection_slug, field, value
+    SELECT
+      id,
+      collection_slug,
+      field,
+      value,
+      contributor_id,
+      ${columnCaps.hasContributorKey ? "contributor_key" : "NULL AS contributor_key"},
+      session_id
     FROM wiki_contributions
     WHERE id = ?
       AND status = 'quarantine'
     LIMIT 1
   `)
     .bind(reviewId)
-    .first<{ id: string; collection_slug: string; field: string; value: string }>()
+    .first<ReviewDecisionRow>()
 
   if (!row) {
     return json({ ok: false, error: "review_item_not_found" }, 404)
@@ -343,21 +362,23 @@ export async function handleReviewDecision(
 
   const nextStatus = action === "approve" ? "published" : "rejected"
 
-  await env.DB.prepare(`
-    UPDATE wiki_contributions
-    SET status = ?, reviewed_at = datetime('now')
-    WHERE id = ?
-  `)
-    .bind(nextStatus, reviewId)
-    .run()
+  try {
+    if (action === "approve") {
+      await retirePublishedContributionConflicts(env, row, columnCaps)
+    }
 
-  if (action === "approve") {
-    await env.DB.prepare(`
-      DELETE FROM consolidated_cache
-      WHERE collection_slug = ?
-    `)
-      .bind(row.collection_slug)
-      .run()
+    await updateReviewedContributionStatus(env, reviewId, nextStatus, columnCaps)
+
+    if (action === "approve") {
+      await clearConsolidatedCacheBestEffort(env, row.collection_slug)
+    }
+  } catch (error) {
+    console.error("[WikiReviews] review decision failed:", {
+      reviewId,
+      action,
+      error,
+    })
+    return json({ ok: false, error: "review_action_failed" }, 500)
   }
 
   return json({
@@ -376,4 +397,130 @@ export async function handleReviewDecision(
       proposed_value: row.value,
     },
   })
+}
+
+async function retirePublishedContributionConflicts(
+  env: Env,
+  row: ReviewDecisionRow,
+  columnCaps: ContributionColumnCaps
+): Promise<void> {
+  const setClause = buildStatusUpdateClause("'duplicate'", columnCaps, true)
+
+  if (columnCaps.hasContributorKey && row.contributor_key) {
+    await env.DB!.prepare(`
+      UPDATE wiki_contributions
+      SET ${setClause}
+      WHERE collection_slug = ?
+        AND field = ?
+        AND contributor_key = ?
+        AND status = 'published'
+        AND id <> ?
+    `)
+      .bind(row.collection_slug, row.field, row.contributor_key, row.id)
+      .run()
+    return
+  }
+
+  if (row.contributor_id) {
+    await env.DB!.prepare(`
+      UPDATE wiki_contributions
+      SET ${setClause}
+      WHERE collection_slug = ?
+        AND field = ?
+        AND contributor_id = ?
+        AND status = 'published'
+        AND id <> ?
+    `)
+      .bind(row.collection_slug, row.field, row.contributor_id, row.id)
+      .run()
+    return
+  }
+
+  if (!row.session_id) {
+    return
+  }
+
+  await env.DB!.prepare(`
+    UPDATE wiki_contributions
+    SET ${setClause}
+    WHERE collection_slug = ?
+      AND field = ?
+      AND contributor_id IS NULL
+      AND session_id = ?
+      AND status = 'published'
+      AND id <> ?
+  `)
+    .bind(row.collection_slug, row.field, row.session_id, row.id)
+    .run()
+}
+
+async function updateReviewedContributionStatus(
+  env: Env,
+  reviewId: string,
+  nextStatus: string,
+  columnCaps: ContributionColumnCaps
+): Promise<void> {
+  const primarySetClause = buildStatusUpdateClause("?", columnCaps, false)
+  try {
+    await env.DB!.prepare(`
+      UPDATE wiki_contributions
+      SET ${primarySetClause}
+      WHERE id = ?
+    `)
+      .bind(nextStatus, reviewId)
+      .run()
+    return
+  } catch (error) {
+    if (!(error instanceof Error)) {
+      throw error
+    }
+    const msg = error.message.toLowerCase()
+    if (!msg.includes("no such column: reviewed_at") && !msg.includes("no such column: updated_at")) {
+      throw error
+    }
+  }
+
+  const fallbackSetClause = columnCaps.hasUpdatedAt
+    ? "status = ?, updated_at = datetime('now')"
+    : "status = ?"
+  await env.DB!.prepare(`
+    UPDATE wiki_contributions
+    SET ${fallbackSetClause}
+    WHERE id = ?
+  `)
+    .bind(nextStatus, reviewId)
+    .run()
+}
+
+function buildStatusUpdateClause(
+  statusValueSql: string,
+  columnCaps: ContributionColumnCaps,
+  preserveReviewedAt: boolean
+): string {
+  const clauses = [`status = ${statusValueSql}`]
+  if (columnCaps.hasUpdatedAt) {
+    clauses.push("updated_at = datetime('now')")
+  }
+  clauses.push(preserveReviewedAt ? "reviewed_at = COALESCE(reviewed_at, datetime('now'))" : "reviewed_at = datetime('now')")
+  return clauses.join(", ")
+}
+
+async function clearConsolidatedCacheBestEffort(env: Env, collectionSlug: string): Promise<void> {
+  try {
+    await env.DB!.prepare(`
+      DELETE FROM consolidated_cache
+      WHERE collection_slug = ?
+    `)
+      .bind(collectionSlug)
+      .run()
+  } catch (error) {
+    if (!(error instanceof Error)) {
+      console.warn("[WikiReviews] cache clear skipped:", error)
+      return
+    }
+    if (!error.message.toLowerCase().includes("no such table: consolidated_cache")) {
+      throw error
+    }
+    console.warn("[WikiReviews] cache clear skipped: consolidated_cache missing")
+  }
 }
