@@ -437,7 +437,7 @@ Token exchange required note:
   - `wiki_get_collection_context` available
   - `prompts/list` returns `[]`
 - Authenticated (Discord tier claims in MCP token):
-  - `community|og|genesis`: `wiki_propose_update` (follows app tier rules: `community -> quarantine`, `og/genesis -> published`)
+  - `community|og|genesis`: `wiki_propose_update` (follows app tier rules: `community -> published draft`, `og/genesis -> published`, unsafe content -> `quarantine`)
   - `community|og|genesis`: `contribute_wiki` (+ anonymous query tools remain available)
   - `genesis`: `review_contribution`, `refresh_chronicle`, `reindex_collection`
 

@@ -8,19 +8,39 @@ import { submitWikiContribution } from "../lib/byok/wikiSubmit"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import "../styles/features/wiki/wiki.css"
 
+interface BuilderTargetParams {
+  currentSearch: string
+  currentSlug?: string
+  sampleInscriptionId?: string | null
+}
+
+export function resolveWikiBuilderTarget(params: BuilderTargetParams): string | null {
+  const searchParams = new URLSearchParams(params.currentSearch)
+  const fromId = searchParams.get("from")?.trim()
+  const sampleId = params.sampleInscriptionId?.trim()
+  const currentSlug = params.currentSlug?.trim()
+
+  const referenceId = fromId || sampleId || (currentSlug && /^[a-f0-9]{64}i[0-9]+$/i.test(currentSlug) ? currentSlug : null)
+  if (!referenceId) return null
+
+  return `/chronicle/${encodeURIComponent(referenceId)}`
+}
+
 export function WikiPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>()
   const slug = rawSlug?.startsWith("collection:") ? rawSlug.slice("collection:".length) : rawSlug
   const navigate = useNavigate()
   const location = useLocation()
   const { setHeaderCenter } = useOutletContext<LayoutOutletContext>()
-  const { identity } = useDiscordIdentity()
+  const { identity, connect } = useDiscordIdentity()
   
   const [data, setData] = useState<ConsolidatedCollection | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [prevSlug, setPrevSlug] = useState(slug)
   const [deletingField, setDeletingField] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"drafts" | "gaps">("drafts")
+  const [contributePromptGap, setContributePromptGap] = useState<string | null>(null)
+  const [builderError, setBuilderError] = useState<string | null>(null)
 
   if (slug !== prevSlug) {
     setPrevSlug(slug)
@@ -82,6 +102,36 @@ export function WikiPage() {
       ignore = true
     }
   }, [slug])
+
+  const handleGapContribution = useCallback((gap: string) => {
+    setBuilderError(null)
+
+    if (!identity) {
+      setContributePromptGap(gap)
+      return
+    }
+
+    setContributePromptGap(null)
+    const chronicleTarget = resolveWikiBuilderTarget({
+      currentSearch: location.search,
+      currentSlug: slug,
+      sampleInscriptionId: data?.sample_inscription_id,
+    })
+
+    if (!chronicleTarget) {
+      setBuilderError("We could not find a Chronicle reference for this wiki page yet. Open a related inscription first, then try contributing again.")
+      return
+    }
+
+    const nextSearch = new URLSearchParams()
+    const fromId = new URLSearchParams(location.search).get("from")?.trim()
+    const referenceId = fromId || data?.sample_inscription_id?.trim() || (slug && /^[a-f0-9]{64}i[0-9]+$/i.test(slug) ? slug : "")
+
+    nextSearch.set("builderMode", "true")
+    nextSearch.set("gap", gap)
+    if (referenceId) nextSearch.set("from", referenceId)
+    navigate(`${chronicleTarget}?${nextSearch.toString()}`)
+  }, [identity, location.search, slug, data?.sample_inscription_id, navigate])
 
   useEffect(() => {
     const isGenesis = identity?.tier === "genesis"
@@ -305,7 +355,7 @@ export function WikiPage() {
             <div className="wiki-section wiki-sidebar-section">
               <header className="wiki-section-header" style={{ padding: "var(--space-lg) var(--space-xl) var(--space-md) var(--space-xl)" }}>
                 <h2 className="wiki-section-title" style={{ fontSize: "0.85rem" }}>
-                  {activeTab === "drafts" ? "Draft Proposals" : "Missing Data"}
+                  {activeTab === "drafts" ? "Draft Contributions" : "Missing Data"}
                 </h2>
                 <div className="wiki-toggle-group">
                   <button 
@@ -324,6 +374,33 @@ export function WikiPage() {
               </header>
 
               <div className="wiki-section-content" style={{ padding: "var(--space-md) var(--space-xl) var(--space-xl) var(--space-xl)" }}>
+                {activeTab === "gaps" && contributePromptGap && !identity && (
+                  <div className="wiki-gap-item" style={{ marginBottom: "var(--space-md)", padding: "var(--space-md)", borderColor: "rgba(88, 101, 242, 0.35)" }}>
+                    <div style={{ display: "grid", gap: "0.5rem" }}>
+                      <span className="wiki-gap-name" style={{ fontSize: "0.78rem" }}>Connect Discord to contribute</span>
+                      <p className="wiki-empty-text" style={{ margin: 0, textAlign: "left" }}>
+                        Sign in to contribute to <strong>{formatFieldName(contributePromptGap)}</strong>. Logged-in collectors can publish draft knowledge without blocking the factual Chronicle.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ justifySelf: "flex-start" }}
+                        onClick={connect}
+                      >
+                        Connect Discord
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "gaps" && builderError && (
+                  <div className="wiki-gap-item" style={{ marginBottom: "var(--space-md)", padding: "var(--space-md)", borderColor: "rgba(248, 113, 113, 0.35)" }}>
+                    <p className="wiki-empty-text" style={{ margin: 0, textAlign: "left", color: "var(--text-secondary)" }}>
+                      {builderError}
+                    </p>
+                  </div>
+                )}
+
                 <div className="wiki-fields-list" style={{ gap: "var(--space-md)" }}>
                   {activeTab === "drafts" ? (
                     <>
@@ -352,13 +429,7 @@ export function WikiPage() {
                             <button 
                               className="btn btn-ghost btn-xs" 
                               style={{ padding: "2px 8px", fontSize: "0.65rem", color: "var(--accent-primary)" }}
-                              onClick={() => {
-                                if (data.sample_inscription_id) {
-                                  navigate(`/?id=${data.sample_inscription_id}&builderMode=true&gap=${gap}`)
-                                } else {
-                                  alert("Cannot open builder: No reference found.")
-                                }
-                              }}
+                              onClick={() => handleGapContribution(gap)}
                             >
                               CONTRIBUTE
                             </button>
