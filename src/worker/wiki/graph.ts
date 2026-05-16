@@ -205,6 +205,13 @@ export async function buildCollectionGraph(
 
   const contributionsBySlugField = new Map<string, ContributionRow[]>()
 
+  for (const row of contributionRows.results ?? []) {
+    const key = `${row.collection_slug}:${row.field}`
+    const list = contributionsBySlugField.get(key) ?? []
+    list.push(row)
+    contributionsBySlugField.set(key, list)
+  }
+
   const buildFieldSnapshot = (
     targetSlug: string,
     targetScope: WikiGraphFieldScope,
@@ -356,13 +363,6 @@ export async function buildCollectionGraph(
       label: "field",
       metadata: { field },
     })
-  }
-
-  for (const row of contributionRows.results ?? []) {
-    const key = `${row.collection_slug}:${row.field}`
-    const list = contributionsBySlugField.get(key) ?? []
-    list.push(row)
-    contributionsBySlugField.set(key, list)
   }
 
   const buildFieldClaims = (targetSlug: string, targetConsolidated: ConsolidatedCollection) => {

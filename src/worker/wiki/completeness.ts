@@ -6,7 +6,7 @@
 // Wiki Builder prompt before each chat turn.
 
 import type { Env } from "../index"
-import { CANONICAL_FIELDS, type CanonicalField } from "./contribute"
+import { CANONICAL_FIELDS, isFieldAllowedForSlug, type CanonicalField } from "./contribute"
 import { buildCollectionSlugAliases, normalizeCollectionSlugInput } from "./slugAliases"
 
 export interface CollectionCanonicalFields {
@@ -61,6 +61,8 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
 
   const fields = emptyFields()
 
+  const allowedFields = CANONICAL_FIELDS.filter((field) => isFieldAllowedForSlug(field, normalizedSlug))
+
   try {
     // Fetch all published candidates across historical aliases and choose
     // the highest-tier/most recent row per field in-memory.
@@ -69,7 +71,7 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
       FROM wiki_contributions
       WHERE collection_slug IN (${slugPlaceholders})
         AND status = 'published'
-        AND field IN (${CANONICAL_FIELDS.map(() => "?").join(", ")})
+        AND field IN (${allowedFields.map(() => "?").join(", ")})
       ORDER BY
         CASE og_tier
           WHEN 'genesis'   THEN 4
@@ -80,7 +82,7 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
         datetime(created_at) DESC,
         id DESC
     `)
-      .bind(...aliases, ...CANONICAL_FIELDS)
+      .bind(...aliases, ...allowedFields)
       .all<{ field: string; value: string }>()
 
     const selected = new Set<string>()
@@ -98,10 +100,10 @@ export async function handleCompleteness(slug: string, env: Env): Promise<Respon
   }
 
   const fieldsRecord = fields as unknown as Record<CanonicalField, string | null>
-  const filledFields = CANONICAL_FIELDS.filter((f) => fieldsRecord[f] !== null)
-  const missingFields = CANONICAL_FIELDS.filter((f) => fieldsRecord[f] === null)
+  const filledFields = allowedFields.filter((f) => fieldsRecord[f] !== null)
+  const missingFields = allowedFields.filter((f) => fieldsRecord[f] === null)
   const filled = filledFields.length
-  const total = CANONICAL_FIELDS.length
+  const total = allowedFields.length
 
   const completeness: CompletenessMap = {
     collection_slug: normalizedSlug,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { handleContribute } from "../../src/worker/wiki/contribute"
+import { handleContribute, isFieldAllowedForSlug } from "../../src/worker/wiki/contribute"
 import * as jwtModule from "../../src/worker/auth/jwt"
 import type { Env } from "../../src/worker/index"
 
@@ -61,6 +61,40 @@ describe("wikiContribute handler", () => {
     const data = await res.json() as any
     expect(data.ok).toBe(false)
     expect(data.error).toBe("missing_auth_token")
+  })
+
+  it("enforces inscriber as inscription-only", () => {
+    expect(isFieldAllowedForSlug("inscriber", "test-slug")).toBe(false)
+    expect(isFieldAllowedForSlug("inscriber", `${"a".repeat(64)}i0`)).toBe(true)
+  })
+
+  it("rejects collection-scope inscriber contributions", async () => {
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "community_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "test-slug",
+        field: "inscriber",
+        value: "Inscriber Name",
+        confidence: "stated_by_user",
+        session_id: "s1",
+      },
+    }, {
+      Authorization: "Bearer fake-jwt",
+    })
+
+    const res = await handleContribute(req, mockEnv)
+    expect(res.status).toBe(400)
+    const data = await res.json() as any
+    expect(data.ok).toBe(false)
+    expect(data.error).toBe("field_scope_mismatch")
   })
 
   it("processes valid community contribution as published draft candidate", async () => {

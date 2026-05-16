@@ -196,7 +196,7 @@ Wiki Builder Mode:
 - SLUG RULE (MANDATORY): 
   - Collection Scope: Use the Slug from the [Collection Focus] section if the fact describes the ENTIRE COLLECTION (e.g., "The collection was founded by X", "The collection launched on Y").
   - Inscription Scope: Use the ID from the [Identity] section if the fact describes THIS SPECIFIC INSCRIPTION (e.g., "This 1/1 was inscribed by X", "This specific item has unique technical details Y").
-  - UNIVERSAL FIELDS: All fields (name, founder, artist, inscriber, launch_date, etc.) can be used for BOTH scopes. Choose based on whether the information is general to the collection or unique to this specific asset.
+  - FIELD SCOPE: "inscriber" is inscription-only. The other canonical fields can be used for either scope depending on whether the fact is about the whole collection or this specific inscription.
 - If the user provides multiple facts, you may emit multiple <wiki_contribution> blocks, one for each field.
 - DELETION RULE: If the user requests the deletion or removal of a specific wiki field (e.g., "clear the founder field", "delete the artist"), you can perform this by adding "operation": "delete" to the tag. This is a privileged operation usually reserved for Genesis/Admin users. The "value" field can be empty for deletions.
 - Format for deletion: <wiki_contribution>{"field":"...","operation":"delete","collection_slug":"...","confidence":"correcting_existing","verifiable":true}</wiki_contribution>

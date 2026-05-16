@@ -36,13 +36,11 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "notable_moments",
 ]
 
-/** 
- * No fields are strictly restricted anymore. 
- * All fields can be used at both collection and inscription level.
- */
 export const COLLECTION_ONLY_FIELDS: CanonicalField[] = []
-export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = []
-export const SHARED_FIELDS: CanonicalField[] = CANONICAL_FIELDS
+export const INSCRIPTION_ONLY_FIELDS: CanonicalField[] = ["inscriber"]
+export const SHARED_FIELDS: CanonicalField[] = CANONICAL_FIELDS.filter(
+  (field) => !INSCRIPTION_ONLY_FIELDS.includes(field)
+)
 
 export interface CollectionCanonicalFields {
   name: string | null

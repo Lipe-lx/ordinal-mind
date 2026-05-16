@@ -128,7 +128,7 @@ function buildSeedPrompt(
       ? "Phase focus: collection scope. Extract facts that describe the collection as a whole (history, overall founders, general launch, community context)."
       : "Phase focus: inscription scope. Extract facts that are unique to THIS specific inscription (its specific creator, its unique meaning, its individual provenance)."
 
-  const allowedFields = CANONICAL_FIELDS
+  const allowedFields = CANONICAL_FIELDS.filter((field) => isFieldAllowedInPhase(field, phase))
 
   const excluded =
     excludedScopeFieldKeys.size > 0
