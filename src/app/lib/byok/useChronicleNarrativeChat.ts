@@ -73,6 +73,15 @@ function buildWikiSeedFingerprint(inscriptionId: string, narrative: string): str
   return `${inscriptionId}:${normalized}`
 }
 
+export function shouldCreateFreshAutoNarrativeThread(currentSnapshot: {
+  messages: Array<unknown>
+  skipAutoNarrative?: boolean
+} | null): boolean {
+  if (!currentSnapshot) return false
+  if (currentSnapshot.messages.length > 0) return true
+  return Boolean(currentSnapshot.skipAutoNarrative)
+}
+
 function truncateMessagesByTurns(messages: ChatMessage[]): ChatMessage[] {
   const turnIds = Array.from(new Set(messages.map((message) => message.turnId)))
   if (turnIds.length <= MAX_TURNS) return messages
@@ -254,7 +263,7 @@ export function useChronicleNarrativeChat(chronicle: Chronicle | null, options?:
 
       // Always start fresh if the current active thread already has messages.
       // This fulfills the requirement of starting a "new chat" on each new section.
-      if (currentSnapshot && currentSnapshot.messages.length > 0) {
+      if (shouldCreateFreshAutoNarrativeThread(currentSnapshot)) {
         const newThread = createChatThread(inscriptionId, {
           activate: true,
           skipAutoNarrative: false,
