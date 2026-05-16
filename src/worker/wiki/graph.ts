@@ -1,6 +1,9 @@
 import type {
   ConsolidatedCollection,
   ConsolidatedField,
+  ContributionStatus,
+  WikiGraphAvailableField,
+  WikiGraphFieldScope,
   WikiGraphEdge,
   WikiGraphNode,
   WikiGraphPayload,
@@ -200,14 +203,99 @@ export async function buildCollectionGraph(
     edges.push(edge)
   }
 
+  const contributionsBySlugField = new Map<string, ContributionRow[]>()
+
+  const buildFieldSnapshot = (
+    targetSlug: string,
+    targetScope: WikiGraphFieldScope,
+    sourceConsolidated?: ConsolidatedCollection | null
+  ): ConsolidatedCollection => {
+    if (sourceConsolidated) return sourceConsolidated
+
+    const narrative: ConsolidatedCollection["narrative"] = {}
+    const gaps: string[] = []
+    const fields = CANONICAL_FIELDS.filter((field) => isFieldAllowedForSlug(field, targetSlug))
+    let filledCount = 0
+    let totalConfidence = 0
+
+    for (const field of fields) {
+      const fieldContributions = (contributionsBySlugField.get(`${targetSlug}:${field}`) ?? []).slice().sort(sortContributions)
+      const best = fieldContributions[0]
+      let status: ContributionStatus = "draft"
+      let canonicalValue: string | null = null
+      let resolvedByTier = "none"
+
+      if (best) {
+        canonicalValue = best.value
+        resolvedByTier = best.og_tier
+        status = best.og_tier === "genesis" || best.og_tier === "og" ? "canonical" : "draft"
+        filledCount += 1
+        totalConfidence += (TIER_WEIGHTS[best.og_tier] ?? 1) / 4
+      } else {
+        gaps.push(field)
+      }
+
+      narrative[field] = {
+        field,
+        canonical_value: canonicalValue,
+        status,
+        contributions: [],
+        resolved_by_tier: resolvedByTier,
+      }
+    }
+
+    return {
+      collection_slug: targetSlug,
+      sample_inscription_id: targetScope === "inscription" ? targetSlug : null,
+      completeness: {
+        filled: filledCount,
+        total: fields.length,
+        score: fields.length > 0 ? Math.round((filledCount / fields.length) * 1000) / 1000 : 0,
+      },
+      confidence: filledCount > 0 ? Math.round((totalConfidence / filledCount) * 1000) / 1000 : 0,
+      factual: null,
+      narrative,
+      sources: [],
+      gaps,
+    }
+  }
+
+  const buildAvailableFields = (
+    targetSlug: string,
+    targetConsolidated: ConsolidatedCollection,
+    scope: WikiGraphFieldScope
+  ): WikiGraphAvailableField[] => {
+    const fields = CANONICAL_FIELDS.filter((field) => isFieldAllowedForSlug(field, targetSlug))
+    const availableFields: WikiGraphAvailableField[] = []
+    for (const field of fields) {
+      const fieldState = targetConsolidated.narrative[field]
+      const contributionCount = (contributionsBySlugField.get(`${targetSlug}:${field}`) ?? []).length
+      if (!fieldState || contributionCount === 0) continue
+      availableFields.push({
+        field,
+        status: fieldState.status,
+        canonical_value: fieldState.canonical_value,
+        contribution_count: contributionCount,
+        scope,
+      })
+    }
+    return availableFields
+  }
+
   const rootNodeId = collectionWikiSlug
-  addNode(buildCollectionRootNode(consolidated, collectionPage, rootNodeId))
+  addNode(buildCollectionRootNode(
+    consolidated,
+    collectionPage,
+    rootNodeId,
+    buildAvailableFields(normalizedSlug, consolidated, "collection")
+  ))
 
   // Ensure the focused inscription is represented even if a full wiki page doesn't exist yet
   const focusPageSlug = normalizedFocus ? `inscription:${normalizedFocus}` : null
   const focusPage = collectionPages.find(p => p.slug === focusPageSlug)
   
   if (normalizedFocus && !focusPage) {
+    const virtualFocusConsolidated = buildFieldSnapshot(normalizedFocus, "inscription", focusConsolidated)
     // Add a virtual node entry for the focused inscription if missing
     addNode({
       id: focusPageSlug!,
@@ -218,7 +306,10 @@ export async function buildCollectionGraph(
       metadata: {
         slug: focusPageSlug!,
         entity_type: "inscription",
-        unverified_count: 0
+        unverified_count: 0,
+        sample_inscription_id: normalizedFocus,
+        gaps: virtualFocusConsolidated.gaps,
+        available_fields: buildAvailableFields(normalizedFocus, virtualFocusConsolidated, "inscription"),
       }
     })
     addEdge({
@@ -236,6 +327,7 @@ export async function buildCollectionGraph(
   for (const field of allowedFields) {
     const consolidatedField = consolidated.narrative[field]
     const fieldNodeId = buildFieldNodeId(normalizedSlug, field)
+    const contributionCount = consolidatedField?.contributions.length ?? 0
     addNode({
       id: fieldNodeId,
       kind: "field",
@@ -246,9 +338,13 @@ export async function buildCollectionGraph(
       metadata: {
         field,
         resolved_by_tier: consolidatedField?.resolved_by_tier ?? "none",
-        contribution_count: consolidatedField?.contributions.length ?? 0,
+        contribution_count: contributionCount,
         canonical_value: consolidatedField?.canonical_value,
         scope: "collection",
+        has_contributions: contributionCount > 0,
+        is_gap: contributionCount === 0,
+        owner_slug: normalizedSlug,
+        owner_label: collectionPage?.title ?? consolidated.collection_slug,
       },
     })
     addEdge({
@@ -262,7 +358,6 @@ export async function buildCollectionGraph(
     })
   }
 
-  const contributionsBySlugField = new Map<string, ContributionRow[]>()
   for (const row of contributionRows.results ?? []) {
     const key = `${row.collection_slug}:${row.field}`
     const list = contributionsBySlugField.get(key) ?? []
@@ -319,78 +414,54 @@ export async function buildCollectionGraph(
   }
 
   buildFieldClaims(normalizedSlug, consolidated)
+  const inscriptionSnapshots = new Map<string, ConsolidatedCollection>()
+  const inscriptionAvailableFields = new Map<string, WikiGraphAvailableField[]>()
 
   for (const page of collectionPages) {
     const pageSlug = page.slug.startsWith("inscription:") ? page.slug.slice("inscription:".length) : page.slug
-    
-    const hasData = Array.from(contributionsBySlugField.keys()).some(k => k.startsWith(`${pageSlug}:`))
-    if (!hasData) continue
 
-    let targetConsolidated: ConsolidatedCollection
-    if (normalizedFocus === pageSlug && focusConsolidated) {
-      targetConsolidated = focusConsolidated
-    } else {
-      targetConsolidated = {
-        collection_slug: pageSlug,
-        sample_inscription_id: pageSlug,
-        completeness: { filled: 0, total: 0, score: 0 },
-        confidence: 1,
-        factual: null,
-        narrative: {},
-        sources: [],
-        gaps: [],
-      }
-      
-      const pageFields = new Set(Array.from(contributionsBySlugField.keys())
-        .filter(k => k.startsWith(`${pageSlug}:`))
-        .map(k => k.split(":")[1]))
-        
-      for (const field of pageFields) {
-        const fieldContributions = contributionsBySlugField.get(`${pageSlug}:${field}`) || []
-        if (fieldContributions.length === 0) continue
-        
-        const sorted = [...fieldContributions].sort(sortContributions)
-        const best = sorted[0]
-        targetConsolidated.narrative[field] = {
-          field,
-          canonical_value: best.value,
-          status: best.og_tier === "genesis" || best.og_tier === "og" ? "canonical" : "draft",
-          contributions: [],
-          resolved_by_tier: best.og_tier,
-        }
-      }
-    }
+    const targetConsolidated = buildFieldSnapshot(
+      pageSlug,
+      "inscription",
+      normalizedFocus === pageSlug ? focusConsolidated : null
+    )
+    const pageAvailableFields = buildAvailableFields(pageSlug, targetConsolidated, "inscription")
+    inscriptionSnapshots.set(pageSlug, targetConsolidated)
+    inscriptionAvailableFields.set(pageSlug, pageAvailableFields)
 
     const fields = CANONICAL_FIELDS.filter(f => isFieldAllowedForSlug(f, pageSlug))
     for (const field of fields) {
       const fieldState = targetConsolidated.narrative[field]
-      if (fieldState) {
-        const fieldNodeId = buildFieldNodeId(pageSlug, field)
-        addNode({
-          id: fieldNodeId,
-          kind: "field",
-          label: formatFieldLabel(field),
-          status: resolveFieldStatus(fieldState),
-          parent_id: page.slug,
-          description: fieldState.canonical_value ?? "No published value yet.",
-          metadata: {
-            field,
-            resolved_by_tier: fieldState.resolved_by_tier ?? "none",
-            contribution_count: (contributionsBySlugField.get(`${pageSlug}:${field}`) || []).length,
-            canonical_value: fieldState.canonical_value,
-            scope: "inscription"
-          },
-        })
-        addEdge({
-          id: `${page.slug}->${fieldNodeId}:has_field`,
-          kind: "has_field",
-          source: page.slug,
-          target: fieldNodeId,
-          status: resolveFieldStatus(fieldState),
-          label: "field",
-          metadata: { field },
-        })
-      }
+      const fieldNodeId = buildFieldNodeId(pageSlug, field)
+      const contributionCount = (contributionsBySlugField.get(`${pageSlug}:${field}`) || []).length
+      addNode({
+        id: fieldNodeId,
+        kind: "field",
+        label: formatFieldLabel(field),
+        status: resolveFieldStatus(fieldState),
+        parent_id: page.slug,
+        description: fieldState?.canonical_value ?? "No contribution yet.",
+        metadata: {
+          field,
+          resolved_by_tier: fieldState?.resolved_by_tier ?? "none",
+          contribution_count: contributionCount,
+          canonical_value: fieldState?.canonical_value ?? null,
+          scope: "inscription",
+          has_contributions: contributionCount > 0,
+          is_gap: contributionCount === 0,
+          owner_slug: pageSlug,
+          owner_label: page.title,
+        },
+      })
+      addEdge({
+        id: `${page.slug}->${fieldNodeId}:has_field`,
+        kind: "has_field",
+        source: page.slug,
+        target: fieldNodeId,
+        status: resolveFieldStatus(fieldState),
+        label: "field",
+        metadata: { field },
+      })
     }
 
     buildFieldClaims(pageSlug, targetConsolidated)
@@ -398,6 +469,9 @@ export async function buildCollectionGraph(
 
   const pageEventIds = new Map<string, string[]>()
   for (const page of collectionPages) {
+    const pageSlug = page.slug.startsWith("inscription:") ? page.slug.slice("inscription:".length) : page.slug
+    const pageSnapshot = inscriptionSnapshots.get(pageSlug) ?? buildFieldSnapshot(pageSlug, "inscription")
+    const pageAvailableFields = inscriptionAvailableFields.get(pageSlug) ?? buildAvailableFields(pageSlug, pageSnapshot, "inscription")
     const pageStatus: WikiGraphStatus = page.unverified_count > 0 ? "partial" : "supporting"
     addNode({
       id: page.slug,
@@ -415,6 +489,9 @@ export async function buildCollectionGraph(
         unverified_count: page.unverified_count,
         updated_at: page.updated_at,
         generated_at: page.generated_at,
+        sample_inscription_id: pageSlug,
+        gaps: pageSnapshot.gaps,
+        available_fields: pageAvailableFields,
       },
     })
     addEdge({
@@ -583,7 +660,8 @@ export async function buildCollectionGraph(
 function buildCollectionRootNode(
   consolidated: ConsolidatedCollection,
   collectionPage: ParsedWikiPage | null,
-  id: string
+  id: string,
+  availableFields: WikiGraphAvailableField[]
 ): WikiGraphNode {
   const completenessPct = Math.round(consolidated.completeness.score * 100)
   const confidencePct = Math.round(consolidated.confidence * 100)
@@ -613,6 +691,7 @@ function buildCollectionRootNode(
       last_seen: consolidated.factual?.last_seen ?? null,
       sample_inscription_id: consolidated.sample_inscription_id,
       gaps: consolidated.gaps,
+      available_fields: availableFields,
     },
   }
 }

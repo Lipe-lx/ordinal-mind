@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { createPortal } from "react-dom"
 import { useNavigate } from "react-router"
@@ -12,6 +12,7 @@ import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { submitWikiContribution } from "../lib/byok/wikiSubmit"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import type { WikiGraphNode } from "../lib/types"
+import { WikiContributionModal, buildWikiContributionSessionId, resolveContributionStatusMessage } from "./WikiContributionModal"
 import {
   buildNodeInspector,
   buildTreeNodeLayoutOptions,
@@ -75,6 +76,14 @@ export function WikiGraphModal({
   }
   const [deletingContributionId, setDeletingContributionId] = useState<string | null>(null)
   const [prevOpen, setPrevOpen] = useState(open)
+  const [contributionDraft, setContributionDraft] = useState<{
+    field: CanonicalField
+    targetSlug: string
+    initialValue?: string
+    title?: string
+    description?: string
+    submitLabel?: string
+  } | null>(null)
 
   // Sync state when modal opens
   if (open && !prevOpen) {
@@ -192,7 +201,7 @@ export function WikiGraphModal({
     }
   }
   
-  const { identity } = useDiscordIdentity()
+  const { identity, connect } = useDiscordIdentity()
 
   const handleDeleteContribution = async (node: WikiGraphNode) => {
     if (!collectionSlug || !node.metadata.contribution_id) return
@@ -237,6 +246,72 @@ export function WikiGraphModal({
       setDeletingContributionId(null)
     }
   }
+
+  const openContributionComposer = useCallback((params: {
+    field: CanonicalField
+    targetSlug: string
+    initialValue?: string
+    title?: string
+    description?: string
+    submitLabel?: string
+  }) => {
+    if (!identity) {
+      connect()
+      return
+    }
+
+    setContributionDraft({
+      field: params.field,
+      targetSlug: params.targetSlug,
+      initialValue: params.initialValue,
+      title: params.title,
+      description: params.description,
+      submitLabel: params.submitLabel,
+    })
+  }, [identity, connect])
+
+  const closeContributionComposer = useCallback(() => {
+    setContributionDraft(null)
+  }, [])
+
+  const handleContributionSubmit = useCallback(async (value: string) => {
+    if (!contributionDraft) {
+      return { ok: false, message: "No contribution target selected." }
+    }
+
+    try {
+      const result = await submitWikiContribution({
+        data: {
+          collection_slug: contributionDraft.targetSlug,
+          field: contributionDraft.field,
+          value,
+          operation: "add",
+          confidence: "stated_by_user",
+          verifiable: false,
+        },
+        activeThreadId: buildWikiContributionSessionId(contributionDraft.targetSlug, contributionDraft.field),
+        prompt: value,
+      })
+
+      if (!result.ok) {
+        const message = result.http_status === 401 || result.http_status === 403
+          ? "Your session expired. Connect Discord again to keep contributing."
+          : "We could not record this contribution right now."
+        return { ok: false, message }
+      }
+
+      if (collectionSlug) {
+        const freshPayload = await fetchWikiGraph(collectionSlug, { focus: focusSlug })
+        if (freshPayload) {
+          setPayload(freshPayload)
+        }
+      }
+
+      return { ok: true, message: resolveContributionStatusMessage(result.status) }
+    } catch {
+      return { ok: false, message: "We could not record this contribution right now." }
+    }
+  }, [collectionSlug, contributionDraft, focusSlug])
 
   const handleResetLayout = () => {
     const cy = cyRef.current
@@ -814,6 +889,52 @@ export function WikiGraphModal({
                             </p>
                           )}
 
+                          {inspectorData.sections.length > 0 && (
+                            <div className="wiki-graph-inspector-sections">
+                              {inspectorData.sections.map((section) => (
+                                <div key={section.title} className="wiki-graph-inspector-details-group">
+                                  <label>{section.title}</label>
+                                  <div className="wiki-graph-inspector-list">
+                                    {section.items.map((item) => (
+                                      <button
+                                        key={`${section.title}:${item.label}:${item.action?.field ?? item.value ?? ""}`}
+                                        type="button"
+                                        className={`wiki-graph-inspector-list-item ${item.action ? "is-actionable" : ""} ${item.status ? `status-${item.status}` : ""}`}
+                                        onClick={() => {
+                                          if (!item.action) return
+                                          openContributionComposer({
+                                            field: item.action.field,
+                                            targetSlug: item.action.targetSlug,
+                                            initialValue: item.action.initialValue,
+                                            title: item.action.label,
+                                            description: item.meta,
+                                            submitLabel: item.action.initialValue ? "Submit Update" : "Publish Draft",
+                                          })
+                                        }}
+                                        disabled={!item.action}
+                                      >
+                                        <div className="wiki-graph-inspector-list-copy">
+                                          <span className="wiki-graph-inspector-list-label">{item.label}</span>
+                                          {item.value && (
+                                            <span className="wiki-graph-inspector-list-value">{item.value}</span>
+                                          )}
+                                          {item.meta && (
+                                            <span className="wiki-graph-inspector-list-meta">{item.meta}</span>
+                                          )}
+                                        </div>
+                                        {item.action && (
+                                          <span className="wiki-graph-inspector-list-cta">
+                                            {item.action.initialValue ? "Edit" : "Contribute"}
+                                          </span>
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
                           {inspectorData.details.length > 0 && (
                             <div className="wiki-graph-inspector-details-group">
                               <label>Metadata</label>
@@ -830,6 +951,21 @@ export function WikiGraphModal({
                         </div>
 
                         <footer className="wiki-graph-inspector-footer">
+                          {inspectorData.primary_action && (
+                            <button
+                              type="button"
+                              className="btn-premium btn-block mb-sm"
+                              onClick={() => openContributionComposer({
+                                field: inspectorData.primary_action!.field,
+                                targetSlug: inspectorData.primary_action!.targetSlug,
+                                initialValue: inspectorData.primary_action!.initialValue,
+                                title: inspectorData.primary_action!.label,
+                                submitLabel: inspectorData.primary_action!.initialValue ? "Submit Update" : "Publish Draft",
+                              })}
+                            >
+                              {identity ? inspectorData.primary_action.label : "Connect to Contribute"}
+                            </button>
+                          )}
                           {selectedNode.kind === "claim" && identity?.tier === "genesis" && (
                             <button
                               type="button"
@@ -868,6 +1004,18 @@ export function WikiGraphModal({
 
             </div>
           </motion.div>
+          <WikiContributionModal
+            open={Boolean(contributionDraft)}
+            slug={contributionDraft?.targetSlug ?? collectionSlug ?? ""}
+            field={contributionDraft?.field ?? null}
+            initialValue={contributionDraft?.initialValue}
+            title={contributionDraft?.title}
+            description={contributionDraft?.description}
+            submitLabel={contributionDraft?.submitLabel}
+            identityTier={identity?.tier}
+            onClose={closeContributionComposer}
+            onSubmit={handleContributionSubmit}
+          />
         </motion.div>
       )}
     </AnimatePresence>

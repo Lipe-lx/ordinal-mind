@@ -1,10 +1,13 @@
 import type {
+  WikiGraphAvailableField,
   WikiGraphEdge,
+  WikiGraphFieldScope,
   WikiGraphNode,
   WikiGraphNodeKind,
   WikiGraphPayload,
   WikiGraphStatus,
 } from "./types"
+import type { CanonicalField } from "./byok/wikiCompleteness"
 
 export const WIKI_GRAPH_NODE_KINDS: WikiGraphNodeKind[] = [
   "collection",
@@ -42,11 +45,34 @@ export interface WikiGraphInspectorDetail {
   value: string
 }
 
+export interface WikiGraphInspectorAction {
+  type: "contribute"
+  label: string
+  field: CanonicalField
+  targetSlug: string
+  initialValue?: string
+}
+
+export interface WikiGraphInspectorSectionItem {
+  label: string
+  value?: string
+  meta?: string
+  status?: WikiGraphStatus | string
+  action?: WikiGraphInspectorAction
+}
+
+export interface WikiGraphInspectorSection {
+  title: string
+  items: WikiGraphInspectorSectionItem[]
+}
+
 export interface WikiGraphInspectorData {
   title: string
   subtitle: string
   description: string | null
   href: string | null
+  primary_action?: WikiGraphInspectorAction
+  sections: WikiGraphInspectorSection[]
   details: WikiGraphInspectorDetail[]
 }
 
@@ -174,11 +200,14 @@ export function filterWikiGraphPayload(payload: WikiGraphPayload, filters: WikiG
 }
 
 export function buildNodeInspector(node: WikiGraphNode): WikiGraphInspectorData {
+  const sections = buildInspectorSections(node)
   return {
     title: node.label,
     subtitle: `${formatKindLabel(node.kind)} · ${formatStatusLabel(node.status)}`,
     description: node.description ?? null,
     href: node.href ?? null,
+    primary_action: resolvePrimaryAction(node, sections),
+    sections,
     details: formatInspectorDetails(node.metadata),
   }
 }
@@ -189,6 +218,7 @@ export function buildEdgeInspector(edge: WikiGraphEdge): WikiGraphInspectorData 
     subtitle: `${formatKindLabel(edge.kind)} · ${formatStatusLabel(edge.status)}`,
     description: null,
     href: null,
+    sections: [],
     details: [
       { label: "Source", value: edge.source },
       { label: "Target", value: edge.target },
@@ -271,6 +301,130 @@ function formatInspectorDetails(metadata: Record<string, unknown>): WikiGraphIns
       label: formatKindLabel(key),
       value: stringifyValue(value),
     }))
+}
+
+function buildInspectorSections(node: WikiGraphNode): WikiGraphInspectorSection[] {
+  if (node.kind === "collection" || isInscriptionWikiPage(node)) {
+    const scope: WikiGraphFieldScope = node.kind === "collection" ? "collection" : "inscription"
+    const targetSlug = resolveContributionTargetSlug(node)
+    const gaps = parseGaps(node.metadata)
+    const availableFields = parseAvailableFields(node.metadata)
+    const sections: WikiGraphInspectorSection[] = []
+
+    if (targetSlug && gaps.length > 0) {
+      sections.push({
+        title: "Missing Fields",
+        items: gaps.map((field) => ({
+          label: formatFieldLabel(field),
+          value: "No contribution yet",
+          meta: scope === "collection" ? "Collection gap" : "Inscription gap",
+          status: "draft",
+          action: {
+            type: "contribute",
+            label: `Fill ${formatFieldLabel(field)}`,
+            field,
+            targetSlug,
+          },
+        })),
+      })
+    }
+
+    if (targetSlug && availableFields.length > 0) {
+      sections.push({
+        title: "Editable Fields",
+        items: availableFields.map((item) => ({
+          label: formatFieldLabel(item.field as CanonicalField),
+          value: item.canonical_value ?? "Draft or disputed value",
+          meta: `${formatStatusLabel(item.status as WikiGraphStatus)} · ${item.contribution_count} contribution${item.contribution_count === 1 ? "" : "s"}`,
+          status: item.status,
+          action: {
+            type: "contribute",
+            label: item.canonical_value ? `Edit ${formatFieldLabel(item.field as CanonicalField)}` : `Contribute to ${formatFieldLabel(item.field as CanonicalField)}`,
+            field: item.field as CanonicalField,
+            targetSlug,
+            initialValue: item.canonical_value ?? "",
+          },
+        })),
+      })
+    }
+
+    return sections
+  }
+
+  if (node.kind === "field") {
+    const field = typeof node.metadata.field === "string" ? node.metadata.field as CanonicalField : null
+    const targetSlug = resolveContributionTargetSlug(node)
+    if (!field || !targetSlug) return []
+
+    const hasContributions = Boolean(node.metadata.has_contributions)
+    const canonicalValue = typeof node.metadata.canonical_value === "string" ? node.metadata.canonical_value : ""
+    return [{
+      title: "Contribution Action",
+      items: [{
+        label: hasContributions ? `Edit ${formatFieldLabel(field)}` : `Fill ${formatFieldLabel(field)}`,
+        value: hasContributions ? (canonicalValue || "Draft or disputed value") : "No contribution yet",
+        meta: hasContributions ? "Add a corrective or supporting contribution" : "Start the first draft contribution for this field",
+        status: hasContributions ? node.status : "draft",
+        action: {
+          type: "contribute",
+          label: hasContributions ? `Correct ${formatFieldLabel(field)}` : `Contribute to ${formatFieldLabel(field)}`,
+          field,
+          targetSlug,
+          initialValue: canonicalValue,
+        },
+      }],
+    }]
+  }
+
+  return []
+}
+
+function resolvePrimaryAction(node: WikiGraphNode, sections: WikiGraphInspectorSection[]): WikiGraphInspectorAction | undefined {
+  if (node.kind === "field") {
+    return sections[0]?.items[0]?.action
+  }
+  if (node.kind === "collection" || isInscriptionWikiPage(node)) {
+    return sections.find((section) => section.title === "Missing Fields")?.items[0]?.action
+      ?? sections.find((section) => section.title === "Editable Fields")?.items[0]?.action
+  }
+  return undefined
+}
+
+function resolveContributionTargetSlug(node: WikiGraphNode): string | null {
+  if (typeof node.metadata.owner_slug === "string" && node.metadata.owner_slug) return node.metadata.owner_slug
+  if (typeof node.metadata.collection_slug === "string" && node.metadata.collection_slug) return node.metadata.collection_slug
+  if (typeof node.metadata.sample_inscription_id === "string" && node.metadata.sample_inscription_id) return node.metadata.sample_inscription_id
+  if (typeof node.metadata.slug === "string" && node.metadata.slug.startsWith("inscription:")) {
+    return node.metadata.slug.slice("inscription:".length)
+  }
+  return null
+}
+
+function parseGaps(metadata: Record<string, unknown>): CanonicalField[] {
+  const gaps = metadata.gaps
+  if (!Array.isArray(gaps)) return []
+  return gaps.filter((value): value is CanonicalField => typeof value === "string")
+}
+
+function parseAvailableFields(metadata: Record<string, unknown>): WikiGraphAvailableField[] {
+  const value = metadata.available_fields
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is WikiGraphAvailableField => {
+    if (!item || typeof item !== "object") return false
+    const record = item as Record<string, unknown>
+    return typeof record.field === "string" && typeof record.scope === "string"
+  })
+}
+
+function isInscriptionWikiPage(node: WikiGraphNode): boolean {
+  return node.kind === "wiki_page" && node.metadata.entity_type === "inscription"
+}
+
+function formatFieldLabel(field: CanonicalField): string {
+  return field
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
 }
 
 function stringifyValue(value: unknown): string {

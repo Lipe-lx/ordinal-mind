@@ -1,26 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useNavigate, useLocation, useOutletContext } from "react-router"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ConsolidatedCollection, ConsolidatedField } from "../lib/types"
-import { AnimatePresence, motion } from "motion/react"
+import { motion } from "motion/react"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { submitWikiContribution } from "../lib/byok/wikiSubmit"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
+import { WikiContributionModal, buildWikiContributionSessionId, resolveContributionStatusMessage } from "../components/WikiContributionModal"
 import "../styles/features/wiki/wiki.css"
-
-export function buildWikiContributionSessionId(slug: string, field: CanonicalField): string {
-  return `wiki-page:${slug}:${field}`
-}
-
-export function resolveContributionStatusMessage(status: string | undefined): string {
-  if (status === "duplicate") {
-    return "This draft already matches the latest contribution for this field."
-  }
-  if (status === "quarantine") {
-    return "Your contribution was saved for moderator review."
-  }
-  return "Your contribution was published to Drafts."
-}
 
 export function WikiPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>()
@@ -37,12 +24,6 @@ export function WikiPage() {
   const [activeTab, setActiveTab] = useState<"drafts" | "gaps">("drafts")
   const [contributePromptGap, setContributePromptGap] = useState<string | null>(null)
   const [contributionModalGap, setContributionModalGap] = useState<CanonicalField | null>(null)
-  const [contributionValue, setContributionValue] = useState("")
-  const [contributionError, setContributionError] = useState<string | null>(null)
-  const [contributionSuccess, setContributionSuccess] = useState<string | null>(null)
-  const [isSubmittingContribution, setIsSubmittingContribution] = useState(false)
-  const contributionTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const submitShortcutLabel = typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "Cmd" : "Ctrl"
 
   if (slug !== prevSlug) {
     setPrevSlug(slug)
@@ -124,39 +105,23 @@ export function WikiPage() {
   }, [slug])
 
   const handleGapContribution = useCallback((gap: string) => {
-    setContributionError(null)
-    setContributionSuccess(null)
-
     if (!identity) {
       setContributePromptGap(gap)
       return
     }
 
     setContributePromptGap(null)
-    setContributionValue("")
     setContributionModalGap(gap as CanonicalField)
   }, [identity])
 
   const closeContributionModal = useCallback(() => {
     setContributionModalGap(null)
-    setContributionValue("")
-    setContributionError(null)
-    setContributionSuccess(null)
-    setIsSubmittingContribution(false)
   }, [])
 
-  const handleSubmitContribution = useCallback(async () => {
-    if (!slug || !contributionModalGap) return
-
-    const nextValue = contributionValue.trim()
-    if (!nextValue) {
-      setContributionError("Write a concise contribution before submitting.")
-      return
+  const handleSubmitContribution = useCallback(async (nextValue: string) => {
+    if (!slug || !contributionModalGap) {
+      return { ok: false, message: "No contribution target selected." }
     }
-
-    setIsSubmittingContribution(true)
-    setContributionError(null)
-    setContributionSuccess(null)
 
     try {
       const result = await submitWikiContribution({
@@ -173,42 +138,19 @@ export function WikiPage() {
       })
 
       if (!result.ok) {
-        const nextError = result.http_status === 401 || result.http_status === 403
+        const message = result.http_status === 401 || result.http_status === 403
           ? "Your session expired. Connect Discord again to keep contributing."
           : "We could not record this contribution right now."
-        setContributionError(nextError)
-        return
+        return { ok: false, message }
       }
 
       await refreshWikiData()
       setActiveTab("drafts")
-      setContributionSuccess(resolveContributionStatusMessage(result.status))
-      window.setTimeout(() => {
-        closeContributionModal()
-      }, 900)
-    } finally {
-      setIsSubmittingContribution(false)
+      return { ok: true, message: resolveContributionStatusMessage(result.status) }
+    } catch {
+      return { ok: false, message: "We could not record this contribution right now." }
     }
-  }, [slug, contributionModalGap, contributionValue, refreshWikiData, closeContributionModal])
-
-  useEffect(() => {
-    if (!contributionModalGap) return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        closeContributionModal()
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault()
-        void handleSubmitContribution()
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown)
-    contributionTextareaRef.current?.focus()
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [contributionModalGap, closeContributionModal, handleSubmitContribution])
+  }, [slug, contributionModalGap, refreshWikiData])
 
   useEffect(() => {
     const isGenesis = identity?.tier === "genesis"
@@ -513,102 +455,14 @@ export function WikiPage() {
           </aside>
         </div>
       </div>
-      <AnimatePresence>
-        {contributionModalGap && (
-          <motion.div
-            className="byok-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={(event) => {
-              if (event.target === event.currentTarget && !isSubmittingContribution) {
-                closeContributionModal()
-              }
-            }}
-          >
-            <motion.div
-              className="byok-modal glass-card wiki-contribution-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="wiki-contribution-title"
-              initial={{ opacity: 0, scale: 0.96, y: 18 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 18 }}
-              transition={{ duration: 0.18 }}
-            >
-              <button
-                type="button"
-                className="btn-close-minimal modal-close-btn"
-                onClick={closeContributionModal}
-                aria-label="Close modal"
-                disabled={isSubmittingContribution}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
-              </button>
-
-              <div className="wiki-contribution-modal-copy">
-                <span className="wiki-contribution-kicker">Draft Contribution</span>
-                <h2 id="wiki-contribution-title">Fill {formatFieldName(contributionModalGap)}</h2>
-                <p>
-                  Add factual context for this missing field. Your contribution will appear in <strong>Drafts</strong> first and higher tiers can later confirm it into consensus.
-                </p>
-              </div>
-
-              <div className="wiki-contribution-meta">
-                <span className="wiki-tier-badge tier-community">{identity?.tier ?? "community"}</span>
-                <span className="wiki-contribution-chip">{slug}</span>
-              </div>
-
-              <div className="wiki-contribution-form">
-                <textarea
-                  ref={contributionTextareaRef}
-                  className="input-field wiki-contribution-textarea"
-                  placeholder={`Describe ${formatFieldName(contributionModalGap).toLowerCase()} with concise, source-minded detail...`}
-                  value={contributionValue}
-                  onChange={(event) => setContributionValue(event.target.value)}
-                  disabled={isSubmittingContribution}
-                  maxLength={2000}
-                />
-
-                <div className="wiki-contribution-footer">
-                  <span className="wiki-contribution-hint">
-                    Keep it factual. Press {submitShortcutLabel}+Enter to submit.
-                  </span>
-                  <span className="wiki-contribution-count">{contributionValue.trim().length}/2000</span>
-                </div>
-
-                {contributionError && (
-                  <p className="wiki-contribution-message is-error">{contributionError}</p>
-                )}
-                {contributionSuccess && (
-                  <p className="wiki-contribution-message is-success">{contributionSuccess}</p>
-                )}
-
-                <div className="byok-actions wiki-contribution-actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={closeContributionModal}
-                    disabled={isSubmittingContribution}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => void handleSubmitContribution()}
-                    disabled={isSubmittingContribution || !contributionValue.trim()}
-                  >
-                    {isSubmittingContribution ? "Saving..." : "Publish Draft"}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <WikiContributionModal
+        open={Boolean(contributionModalGap)}
+        slug={slug ?? ""}
+        field={contributionModalGap}
+        identityTier={identity?.tier}
+        onClose={closeContributionModal}
+        onSubmit={handleSubmitContribution}
+      />
     </div>
   )
 }

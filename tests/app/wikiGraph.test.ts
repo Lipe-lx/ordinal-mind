@@ -20,7 +20,20 @@ const payload: WikiGraphPayload = {
       status: "canonical",
       description: "Collector-led frog lineage.",
       href: "/wiki/collection%3Abitcoin-frogs",
-      metadata: { sample_inscription_id: "frog0001i0" },
+      metadata: {
+        sample_inscription_id: "frog0001i0",
+        collection_slug: "bitcoin-frogs",
+        gaps: ["name", "artist"],
+        available_fields: [
+          {
+            field: "founder",
+            status: "canonical",
+            canonical_value: "PepeMint",
+            contribution_count: 1,
+            scope: "collection",
+          },
+        ],
+      },
     },
     {
       id: "field:bitcoin-frogs:founder",
@@ -29,7 +42,13 @@ const payload: WikiGraphPayload = {
       status: "canonical",
       parent_id: "collection:bitcoin-frogs",
       description: "PepeMint",
-      metadata: { field: "founder" },
+      metadata: {
+        field: "founder",
+        owner_slug: "bitcoin-frogs",
+        owner_label: "Bitcoin Frogs",
+        has_contributions: true,
+        canonical_value: "PepeMint",
+      },
     },
     {
       id: "claim:bitcoin-frogs:wc_founder",
@@ -47,7 +66,22 @@ const payload: WikiGraphPayload = {
       status: "supporting",
       href: "/wiki/inscription%3Afrog0001i0",
       description: "Genesis frog page.",
-      metadata: { slug: "inscription:frog0001i0", source_event_ids: ["ev_genesis_1"] },
+      metadata: {
+        slug: "inscription:frog0001i0",
+        entity_type: "inscription",
+        source_event_ids: ["ev_genesis_1"],
+        sample_inscription_id: "frog0001i0",
+        gaps: ["artist"],
+        available_fields: [
+          {
+            field: "name",
+            status: "draft",
+            canonical_value: "Frog #1",
+            contribution_count: 1,
+            scope: "inscription",
+          },
+        ],
+      },
     },
   ],
   edges: [
@@ -124,7 +158,13 @@ describe("wikiGraph client helpers", () => {
     const nodeInspector = buildNodeInspector(payload.nodes[0])
     expect(nodeInspector.title).toBe("Bitcoin Frogs")
     expect(nodeInspector.href).toBe("/wiki/collection%3Abitcoin-frogs")
+    expect(nodeInspector.sections[0]?.title).toBe("Missing Fields")
+    expect(nodeInspector.primary_action?.field).toBe("name")
     expect(nodeInspector.details.some((detail) => detail.label === "Sample Inscription Id")).toBe(true)
+
+    const fieldInspector = buildNodeInspector(payload.nodes[1])
+    expect(fieldInspector.sections[0]?.title).toBe("Contribution Action")
+    expect(fieldInspector.primary_action?.field).toBe("founder")
 
     const edgeInspector = buildEdgeInspector(payload.edges[0])
     expect(edgeInspector.subtitle).toContain("Has Claim")
