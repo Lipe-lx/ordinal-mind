@@ -323,9 +323,10 @@ describe("wikiSeedAgent", () => {
       sessionId: "thread_1",
     })
 
-    expect(submitWikiContribution).toHaveBeenCalledTimes(2)
+    expect(submitWikiContribution).toHaveBeenCalledTimes(3)
     const payloads = vi.mocked(submitWikiContribution).mock.calls.map((call) => call?.[0]?.data)
     expect(payloads.some((data) => data?.field === "founder" && data?.collection_slug === "test-seed")).toBe(true)
+    expect(payloads.some((data) => data?.field === "founder" && data?.collection_slug === "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0")).toBe(true)
     expect(payloads.some((data) => data?.field === "inscriber" && data?.collection_slug === "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0")).toBe(true)
   })
 

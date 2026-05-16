@@ -19,11 +19,6 @@ import { enforceRateLimit, isTrustedWriteRequest } from "../security"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
 import { checkContributionSafety } from "./safety"
 
-/** 
- * Fields that can exist at both collection and inscription level.
- * Inscriptions can have their own specific founders, artists, launch contexts, etc.,
- * separate from the collection they belong to.
- */
 export const CANONICAL_FIELDS = [
   "name",
   "founder",
@@ -47,6 +42,7 @@ export function isCanonicalField(value: unknown): value is CanonicalField {
 
 /** Regex for Bitcoin Inscription IDs: 64 hex chars followed by 'i' and a sequence number. */
 const INSCRIPTION_ID_RE = /^[a-f0-9]{64}i[0-9]+$/i
+const INSCRIPTION_ONLY_FIELDS: readonly CanonicalField[] = ["inscriber"]
 
 export function isInscriptionId(slug: string): boolean {
   return INSCRIPTION_ID_RE.test(slug)
@@ -54,11 +50,15 @@ export function isInscriptionId(slug: string): boolean {
 
 /**
  * Enforce field scope:
- * All canonical fields are now allowed for both collections and inscriptions.
- * This allows high-resolution wiki population for individual assets.
+ * - inscription-only fields can only be written against inscription IDs
+ * - all other canonical fields remain available for collections and inscriptions
  */
-export function isFieldAllowedForSlug(field: CanonicalField, _slug: string): boolean {
-  return isCanonicalField(field)
+export function isFieldAllowedForSlug(field: CanonicalField, slug: string): boolean {
+  if (!isCanonicalField(field)) return false
+  if (INSCRIPTION_ONLY_FIELDS.includes(field)) {
+    return isInscriptionId(slug)
+  }
+  return true
 }
 
 export interface WikiContributionInput {

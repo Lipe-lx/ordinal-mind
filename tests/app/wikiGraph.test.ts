@@ -159,6 +159,8 @@ describe("wikiGraph client helpers", () => {
     expect(nodeInspector.title).toBe("Bitcoin Frogs")
     expect(nodeInspector.href).toBe("/wiki/collection%3Abitcoin-frogs")
     expect(nodeInspector.sections[0]?.title).toBe("Missing Fields")
+    expect(nodeInspector.sections[1]?.title).toBe("Editable Fields")
+    expect(nodeInspector.sections[1]?.items[0]?.label).toBe("Founder")
     expect(nodeInspector.primary_action?.field).toBe("name")
     expect(nodeInspector.details.some((detail) => detail.label === "Sample Inscription Id")).toBe(true)
 

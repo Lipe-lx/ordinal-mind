@@ -327,6 +327,10 @@ describe("buildCollectionGraph", () => {
     const collectionNode = graph.nodes.find((node) => node.id === "collection:bitcoin-frogs")
     expect(Array.isArray(collectionNode?.metadata.gaps)).toBe(true)
     expect(Array.isArray(collectionNode?.metadata.available_fields)).toBe(true)
+    expect((collectionNode?.metadata.available_fields as Array<{ field: string }> | undefined)?.some((item) => item.field === "founder")).toBe(true)
+    expect((collectionNode?.metadata.available_fields as Array<{ field: string }> | undefined)?.some((item) => item.field === "inscriber")).toBe(false)
+    expect((collectionNode?.metadata.gaps as string[] | undefined)?.includes("inscriber")).toBe(false)
+    expect(graph.nodes.some((node) => node.id === "field:bitcoin-frogs:inscriber")).toBe(false)
 
     const inscriptionNode = graph.nodes.find((node) => node.id === "inscription:frog0001i0")
     expect(Array.isArray(inscriptionNode?.metadata.gaps)).toBe(true)
