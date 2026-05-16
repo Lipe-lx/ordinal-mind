@@ -142,7 +142,7 @@ export function NarrativeChatRenderer({
                 ? (isLoading
                     ? "Generating response..."
                     : "Start a new conversation about this inscription or open a previous session.")
-                : "Configure BYOK to unlock Chronicle chat. The factual timeline remains fully available."}
+                : "Configure to unlock Chronicle chat. The factual timeline remains fully available."}
             </p>
             {!hasKey && (
               <button className="btn-premium" onClick={() => onOpenBYOK("llm")}>
@@ -344,7 +344,7 @@ export function NarrativeChatRenderer({
             event.preventDefault()
             void sendCurrentPrompt()
           }}
-          placeholder={hasKey ? "Ask about this inscription's history, provenance, transfers, or collection context..." : "Configure BYOK to start chatting"}
+          placeholder={hasKey ? "Ask about this inscription's history, provenance, transfers, or collection context..." : "Configure to start chatting"}
           disabled={!hasKey || isLoading}
           rows={3}
           aria-invalid={Boolean(inputError)}
