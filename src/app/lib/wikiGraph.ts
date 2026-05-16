@@ -295,6 +295,7 @@ function matchesSearch(node: WikiGraphNode, search: string): boolean {
 
 function formatInspectorDetails(metadata: Record<string, unknown>): WikiGraphInspectorDetail[] {
   return Object.entries(metadata)
+    .filter(([key]) => key !== "public_author")
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .slice(0, 8)
     .map(([key, value]) => ({

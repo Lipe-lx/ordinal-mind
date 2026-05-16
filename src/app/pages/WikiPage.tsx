@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useNavigate, useLocation, useOutletContext } from "react-router"
 import type { LayoutOutletContext } from "../components/Layout"
-import type { ConsolidatedCollection, ConsolidatedField } from "../lib/types"
+import type { ConsolidatedCollection, ConsolidatedField, PublicAuthor } from "../lib/types"
 import { motion } from "motion/react"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { submitWikiContribution } from "../lib/byok/wikiSubmit"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import { WikiContributionModal, buildWikiContributionSessionId, resolveContributionStatusMessage } from "../components/WikiContributionModal"
+import { WikiPublicAuthorAvatar } from "../components/WikiPublicAuthorAvatar"
 import "../styles/features/wiki/wiki.css"
 
 export function WikiPage() {
@@ -118,7 +119,7 @@ export function WikiPage() {
     setContributionModalGap(null)
   }, [])
 
-  const handleSubmitContribution = useCallback(async (nextValue: string) => {
+  const handleSubmitContribution = useCallback(async (nextValue: string, publicAuthorMode: "anonymous" | "public") => {
     if (!slug || !contributionModalGap) {
       return { ok: false, message: "No contribution target selected." }
     }
@@ -132,6 +133,7 @@ export function WikiPage() {
           operation: "add",
           confidence: "stated_by_user",
           verifiable: false,
+          public_author_mode: publicAuthorMode,
         },
         activeThreadId: buildWikiContributionSessionId(slug, contributionModalGap),
         prompt: nextValue,
@@ -460,6 +462,7 @@ export function WikiPage() {
         slug={slug ?? ""}
         field={contributionModalGap}
         identityTier={identity?.tier}
+        identityPreview={identity ? { username: identity.username, avatar: identity.avatar } : null}
         onClose={closeContributionModal}
         onSubmit={handleSubmitContribution}
       />
@@ -478,6 +481,8 @@ function WikiFieldItem({
   isDeleting?: boolean,
   onDelete?: () => void
 }) {
+  const visibleAuthor = resolveVisiblePublicAuthor(field)
+
   return (
     <div className="wiki-field-item">
       <div className="wiki-field-header">
@@ -511,16 +516,29 @@ function WikiFieldItem({
         <div className="wiki-field-dispute">
           {field.contributions.map((c, i) => (
             <div key={i} className="wiki-dispute-option">
+              {c.public_author && (
+                <WikiPublicAuthorAvatar author={c.public_author} size="xs" label="Visible author" />
+              )}
               <span className="wiki-dispute-value">"{c.value}"</span>
               <span className={`wiki-tier-badge tier-${c.og_tier}`}>{c.og_tier}</span>
             </div>
           ))}
         </div>
       ) : (
-        <p className="wiki-field-value">{field.canonical_value}</p>
+        <div className="wiki-field-value-row">
+          {visibleAuthor && (
+            <WikiPublicAuthorAvatar author={visibleAuthor} size="xs" label="Visible author" />
+          )}
+          <p className="wiki-field-value">{field.canonical_value}</p>
+        </div>
       )}
     </div>
   )
+}
+
+function resolveVisiblePublicAuthor(field: ConsolidatedField): PublicAuthor | null {
+  if (field.status === "disputed") return null
+  return field.contributions[0]?.public_author ?? null
 }
 
 function formatFieldName(name: string): string {

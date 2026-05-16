@@ -806,6 +806,35 @@
   font-size: 0.8rem;
 }
 
+.wiki-graph-inspector-author {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.95rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wiki-graph-inspector-author-copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.wiki-graph-inspector-author-label {
+  color: var(--text-tertiary);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.wiki-graph-inspector-author-name {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 .wiki-graph-inspector-details {
   display: flex;
   flex-direction: column;

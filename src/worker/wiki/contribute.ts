@@ -13,11 +13,14 @@
 // - Different value => upsert in-place + audit trail in wiki_log
 
 import type { Env } from "../index"
-import type { OGTier } from "../auth/jwt"
+import type { JWTPayload, OGTier } from "../auth/jwt"
 import { requireSessionUser } from "../auth/session"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
+import type { PublicAuthorMode } from "../../app/lib/types"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
 import { checkContributionSafety } from "./safety"
+import { getContributionColumnCaps, type ContributionColumnCaps } from "./contributionColumns"
+import { resolvePublicAuthorMode } from "./publicAuthor"
 
 export const CANONICAL_FIELDS = [
   "name",
@@ -72,6 +75,7 @@ export interface WikiContributionInput {
   session_id: string
   source_excerpt?: string
   id?: string
+  public_author_mode?: PublicAuthorMode
 }
 
 export interface ContributeRequest {
@@ -98,57 +102,15 @@ interface ActiveContributionRow {
   value: string
   value_norm: string | null
   status: string
+  public_author_mode?: string | null
+  public_author_username?: string | null
+  public_author_avatar_url?: string | null
 }
 
 interface PublishedFieldRow extends ActiveContributionRow {
   og_tier: OGTier | string
   contributor_id: string | null
   contributor_key: string | null
-}
-
-interface TableInfoRow {
-  name: string
-}
-
-interface ContributionColumnCaps {
-  hasValueNorm: boolean
-  hasContributorKey: boolean
-  hasUpdatedAt: boolean
-  hasSafetyStatus: boolean
-  hasSafetyMetadata: boolean
-}
-
-async function getContributionColumnCaps(env: Env): Promise<ContributionColumnCaps> {
-  if (!env.DB) {
-    return {
-      hasValueNorm: false,
-      hasContributorKey: false,
-      hasUpdatedAt: false,
-      hasSafetyStatus: false,
-      hasSafetyMetadata: false,
-    }
-  }
-
-  try {
-    const columns = await env.DB.prepare("PRAGMA table_info('wiki_contributions')")
-      .all<TableInfoRow>()
-    const names = new Set((columns.results ?? []).map((row) => row.name))
-    return {
-      hasValueNorm: names.has("value_norm"),
-      hasContributorKey: names.has("contributor_key"),
-      hasUpdatedAt: names.has("updated_at"),
-      hasSafetyStatus: names.has("safety_status"),
-      hasSafetyMetadata: names.has("safety_metadata"),
-    }
-  } catch {
-    return {
-      hasValueNorm: false,
-      hasContributorKey: false,
-      hasUpdatedAt: false,
-      hasSafetyStatus: false,
-      hasSafetyMetadata: false,
-    }
-  }
 }
 
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
@@ -192,6 +154,7 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
     && c.confidence !== "correcting_existing"
   ) return null
   if (typeof c.session_id !== "string" || !c.session_id) return null
+  if (c.public_author_mode !== undefined && c.public_author_mode !== "anonymous" && c.public_author_mode !== "public") return null
 
   return {
     contribution: {
@@ -205,6 +168,7 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
       session_id: c.session_id as string,
       source_excerpt: typeof c.source_excerpt === "string" ? c.source_excerpt.slice(0, 500) : undefined,
       id: typeof c.id === "string" ? c.id.trim() : undefined,
+      public_author_mode: resolvePublicAuthorMode(c.public_author_mode),
     },
     jwt: typeof b.jwt === "string" ? b.jwt : undefined,
   }
@@ -223,9 +187,12 @@ async function readActiveContribution(
   if (!env.DB) return null
 
   const valueNormExpr = caps.hasValueNorm ? "value_norm" : "NULL AS value_norm"
+  const publicAuthorModeExpr = caps.hasPublicAuthorMode ? "public_author_mode" : "'anonymous' AS public_author_mode"
+  const publicAuthorUsernameExpr = caps.hasPublicAuthorUsername ? "public_author_username" : "NULL AS public_author_username"
+  const publicAuthorAvatarExpr = caps.hasPublicAuthorAvatarUrl ? "public_author_avatar_url" : "NULL AS public_author_avatar_url"
   const row = caps.hasContributorKey
     ? await env.DB.prepare(`
-    SELECT id, value, ${valueNormExpr}, status
+    SELECT id, value, ${valueNormExpr}, status, ${publicAuthorModeExpr}, ${publicAuthorUsernameExpr}, ${publicAuthorAvatarExpr}
     FROM wiki_contributions
     WHERE collection_slug = ?
       AND field = ?
@@ -236,7 +203,7 @@ async function readActiveContribution(
       .bind(slug, field, contributorKey, status)
       .first<ActiveContributionRow>()
     : await env.DB.prepare(`
-    SELECT id, value, ${valueNormExpr}, status
+    SELECT id, value, ${valueNormExpr}, status, ${publicAuthorModeExpr}, ${publicAuthorUsernameExpr}, ${publicAuthorAvatarExpr}
     FROM wiki_contributions
     WHERE collection_slug = ?
       AND field = ?
@@ -251,6 +218,26 @@ async function readActiveContribution(
       .first<ActiveContributionRow>()
 
   return row ?? null
+}
+
+function buildPublicAuthorSnapshot(payload: JWTPayload | null, mode: PublicAuthorMode): {
+  mode: PublicAuthorMode
+  username: string | null
+  avatarUrl: string | null
+} {
+  if (!payload || mode !== "public") {
+    return {
+      mode: "anonymous",
+      username: null,
+      avatarUrl: null,
+    }
+  }
+
+  return {
+    mode: "public",
+    username: payload.username,
+    avatarUrl: payload.avatar,
+  }
 }
 
 async function readPublishedFieldContribution(
@@ -368,6 +355,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   const { contribution } = parsed
   const caps = await getContributionColumnCaps(env)
   const isSeedOrigin = contribution.origin === NARRATIVE_SEED_ORIGIN
+  let authPayload: JWTPayload | null = null
   let contributor_id: string | null = null
   let tier: OGTier = "anon"
 
@@ -376,6 +364,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     if (!auth.ok) {
       return json({ ok: false, error: auth.error }, auth.status)
     }
+    authPayload = auth.payload
     contributor_id = auth.payload.sub
     tier = auth.payload.tier
   }
@@ -455,6 +444,7 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     : buildContributorKey(contributor_id, contribution.session_id)
   const status: "published" | "quarantine" = resolveStatus(resolvedTier)
   const valueNorm = normalizeWikiValue(contribution.value)
+  const publicAuthor = buildPublicAuthorSnapshot(authPayload, isSeedOrigin ? "anonymous" : (contribution.public_author_mode ?? "anonymous"))
 
   const safety = isSeedOrigin
     ? {
@@ -503,8 +493,12 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       (typeof activeRow.value_norm === "string" && activeRow.value_norm)
       || (typeof activeRow.value === "string" ? activeRow.value : contribution.value)
     )
+    const currentPublicAuthorMode = resolvePublicAuthorMode(activeRow.public_author_mode)
+    const samePublicAuthorPreference = currentPublicAuthorMode === publicAuthor.mode
+      && (activeRow.public_author_username ?? null) === publicAuthor.username
+      && (activeRow.public_author_avatar_url ?? null) === publicAuthor.avatarUrl
 
-    if (currentNorm === valueNorm) {
+    if (currentNorm === valueNorm && samePublicAuthorPreference) {
       const duplicateResponse: ContributeResponse = {
         ok: true,
         contribution_id: activeRow.id,
@@ -555,6 +549,18 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         contribution.session_id,
         contribution.source_excerpt ?? null,
       ]
+      if (caps.hasPublicAuthorMode) {
+        updateParts.push("public_author_mode = ?")
+        updateBind.push(publicAuthor.mode)
+      }
+      if (caps.hasPublicAuthorUsername) {
+        updateParts.push("public_author_username = ?")
+        updateBind.push(publicAuthor.username)
+      }
+      if (caps.hasPublicAuthorAvatarUrl) {
+        updateParts.push("public_author_avatar_url = ?")
+        updateBind.push(publicAuthor.avatarUrl)
+      }
       if (caps.hasValueNorm) {
         updateParts.push("value_norm = ?")
         updateBind.push(valueNorm)
@@ -644,6 +650,21 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       contribution.source_excerpt ?? null,
       effectiveStatus,
     ]
+    if (caps.hasPublicAuthorMode) {
+      insertColumns.push("public_author_mode")
+      insertValues.push("?")
+      insertBind.push(publicAuthor.mode)
+    }
+    if (caps.hasPublicAuthorUsername) {
+      insertColumns.push("public_author_username")
+      insertValues.push("?")
+      insertBind.push(publicAuthor.username)
+    }
+    if (caps.hasPublicAuthorAvatarUrl) {
+      insertColumns.push("public_author_avatar_url")
+      insertValues.push("?")
+      insertBind.push(publicAuthor.avatarUrl)
+    }
 
     if (caps.hasValueNorm) {
       insertColumns.push("value_norm")

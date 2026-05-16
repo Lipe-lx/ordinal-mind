@@ -478,12 +478,20 @@ export interface DataValidationResult {
 
 export type ContributionStatus = "canonical" | "draft" | "disputed"
 
+export type PublicAuthorMode = "anonymous" | "public"
+
+export interface PublicAuthor {
+  mode: "public"
+  username: string
+  avatar_url: string | null
+}
+
 export interface ConsensusContribution {
   value: string
-  contributor_id: string | null
   og_tier: string
   weight: number
   created_at: string
+  public_author?: PublicAuthor | null
 }
 
 export interface ConsolidatedField {
@@ -512,7 +520,6 @@ export interface ConsolidatedCollection {
   factual: FactualData | null // Provided by the frontend merging with Chronicle
   narrative: Record<string, ConsolidatedField>
   sources: Array<{
-    contributor_id: string | null
     og_tier: string
     field: string
     created_at: string

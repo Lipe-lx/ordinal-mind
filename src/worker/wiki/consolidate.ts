@@ -13,6 +13,8 @@
 
 import type { Env } from "../index"
 import { CANONICAL_FIELDS, isFieldAllowedForSlug, isInscriptionId, type CanonicalField } from "./contribute"
+import { getContributionColumnCaps } from "./contributionColumns"
+import { buildPublicAuthorSnapshot, sanitizePublicConsolidatedCollection } from "./publicAuthor"
 import { normalizeWikiValue } from "../../app/lib/wikiNormalization"
 import { buildCollectionSlugAliases, normalizeCollectionSlugInput, slugifyCollectionName } from "./slugAliases"
 import type {
@@ -34,9 +36,11 @@ interface DBContributionRow {
   field: CanonicalField
   value: string
   value_norm?: string | null
-  contributor_id: string | null
   og_tier: string
   created_at: string
+  public_author_mode?: string | null
+  public_author_username?: string | null
+  public_author_avatar_url?: string | null
 }
 
 function deduplicateByNormalizedValue(rows: DBContributionRow[]): DBContributionRow[] {
@@ -77,9 +81,14 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     ? [normalizedInputSlug]
     : buildCollectionSlugAliases(normalizedInputSlug)
   const slugPlaceholders = aliasSlugs.map(() => "?").join(", ")
+  const caps = await getContributionColumnCaps(env)
+  const publicAuthorModeExpr = caps.hasPublicAuthorMode ? "public_author_mode" : "'anonymous' AS public_author_mode"
+  const publicAuthorUsernameExpr = caps.hasPublicAuthorUsername ? "public_author_username" : "NULL AS public_author_username"
+  const publicAuthorAvatarExpr = caps.hasPublicAuthorAvatarUrl ? "public_author_avatar_url" : "NULL AS public_author_avatar_url"
 
   const rows = await env.DB.prepare(`
-    SELECT id, field, value, value_norm, contributor_id, og_tier, created_at
+    SELECT id, field, value, value_norm, og_tier, created_at,
+           ${publicAuthorModeExpr}, ${publicAuthorUsernameExpr}, ${publicAuthorAvatarExpr}
     FROM wiki_contributions
     WHERE collection_slug IN (${slugPlaceholders}) AND status = 'published'
   `)
@@ -97,7 +106,6 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     if (list) {
       list.push(row)
       sources.push({
-        contributor_id: row.contributor_id,
         og_tier: row.og_tier,
         field: row.field,
         created_at: row.created_at,
@@ -128,10 +136,14 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
 
     const contributions: ConsensusContribution[] = fieldRows.map(r => ({
       value: r.value,
-      contributor_id: r.contributor_id,
       og_tier: r.og_tier,
       weight: TIER_WEIGHTS[r.og_tier] ?? 1,
       created_at: r.created_at,
+      public_author: buildPublicAuthorSnapshot({
+        mode: r.public_author_mode,
+        username: r.public_author_username,
+        avatarUrl: r.public_author_avatar_url,
+      }),
     }))
 
     // Sort by weight desc, then latest
@@ -218,7 +230,7 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
   const canonicalName = narrative["name"]?.canonical_value
   const canonicalSlug = canonicalName ? slugifyCollectionName(canonicalName) : normalizedInputSlug
 
-  return {
+  return sanitizePublicConsolidatedCollection({
     collection_slug: canonicalSlug,
     sample_inscription_id: stats?.inscription_id ?? null,
     completeness: {
@@ -235,5 +247,5 @@ export async function buildConsolidation(slug: string, env: Env): Promise<Consol
     narrative,
     sources,
     gaps,
-  }
+  })
 }

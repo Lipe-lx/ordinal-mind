@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
+import type { PublicAuthorMode } from "../lib/types"
+import { WikiPublicAuthorAvatar } from "./WikiPublicAuthorAvatar"
 import "../styles/features/wiki/wiki.css"
 
 export function buildWikiContributionSessionId(slug: string, field: CanonicalField): string {
@@ -22,6 +24,11 @@ interface SubmitResult {
   message: string
 }
 
+interface IdentityPreview {
+  username: string
+  avatar: string | null
+}
+
 interface Props {
   open: boolean
   slug: string
@@ -31,8 +38,9 @@ interface Props {
   description?: string
   submitLabel?: string
   identityTier?: string | null
+  identityPreview?: IdentityPreview | null
   onClose: () => void
-  onSubmit: (value: string) => Promise<SubmitResult>
+  onSubmit: (value: string, publicAuthorMode: PublicAuthorMode) => Promise<SubmitResult>
 }
 
 export function WikiContributionModal({
@@ -44,10 +52,12 @@ export function WikiContributionModal({
   description,
   submitLabel = "Publish Draft",
   identityTier,
+  identityPreview,
   onClose,
   onSubmit,
 }: Props) {
   const [value, setValue] = useState(initialValue)
+  const [publicAuthorMode, setPublicAuthorMode] = useState<PublicAuthorMode>("anonymous")
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -57,6 +67,7 @@ export function WikiContributionModal({
   useEffect(() => {
     if (!open) return
     setValue(initialValue)
+    setPublicAuthorMode("anonymous")
     setError(null)
     setSuccess(null)
     setIsSubmitting(false)
@@ -93,7 +104,7 @@ export function WikiContributionModal({
     setError(null)
     setSuccess(null)
     try {
-      const result = await onSubmit(nextValue)
+      const result = await onSubmit(nextValue, publicAuthorMode)
       if (!result.ok) {
         setError(result.message)
         return
@@ -161,6 +172,41 @@ export function WikiContributionModal({
             </div>
 
             <div className="wiki-contribution-form">
+              <div className="wiki-contribution-visibility" role="group" aria-label="Contribution author visibility">
+                <span className="wiki-contribution-visibility-label">Public attribution</span>
+                <div className="wiki-contribution-visibility-options">
+                  <button
+                    type="button"
+                    className={`wiki-contribution-visibility-option ${publicAuthorMode === "anonymous" ? "is-active" : ""}`}
+                    onClick={() => setPublicAuthorMode("anonymous")}
+                    disabled={isSubmitting}
+                  >
+                    <span className="wiki-contribution-visibility-title">Anonymous</span>
+                    <span className="wiki-contribution-visibility-copy">The public draft stays anonymous. Reviewers can still verify who wrote it internally.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`wiki-contribution-visibility-option ${publicAuthorMode === "public" ? "is-active" : ""}`}
+                    onClick={() => setPublicAuthorMode("public")}
+                    disabled={isSubmitting}
+                  >
+                    <span className="wiki-contribution-visibility-title">Show me as author</span>
+                    <span className="wiki-contribution-visibility-copy">Attach your current Discord profile to this public contribution.</span>
+                    {publicAuthorMode === "public" && identityPreview && (
+                      <span className="wiki-contribution-visibility-preview">
+                        <WikiPublicAuthorAvatar
+                          author={{ mode: "public", username: identityPreview.username, avatar_url: identityPreview.avatar }}
+                          size="sm"
+                          label="Visible author"
+                        />
+                        <span className="wiki-contribution-visibility-username">{identityPreview.username}</span>
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
               <textarea
                 ref={textareaRef}
                 className="input-field wiki-contribution-textarea"

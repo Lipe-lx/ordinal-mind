@@ -6,6 +6,7 @@
 // All calls go to the public POST /api/wiki/contribute endpoint.
 
 import type { CanonicalField } from "./wikiCompleteness"
+import type { PublicAuthorMode } from "../types"
 
 export interface WikiContributionPayload {
   collection_slug: string
@@ -18,6 +19,7 @@ export interface WikiContributionPayload {
   session_id?: string | null
   source_excerpt?: string
   id?: string
+  public_author_mode?: PublicAuthorMode
   /** Forward-compat: WikiExtractData uses source_chat_excerpt; accepted and forwarded as-is. */
   source_chat_excerpt?: string
 }

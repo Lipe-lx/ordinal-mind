@@ -2,6 +2,7 @@ import type {
   ConsolidatedCollection,
   ConsolidatedField,
   ContributionStatus,
+  PublicAuthor,
   WikiGraphAvailableField,
   WikiGraphFieldScope,
   WikiGraphEdge,
@@ -11,7 +12,9 @@ import type {
 } from "../../app/lib/types"
 import type { Env } from "../index"
 import { buildConsolidation } from "./consolidate"
+import { getContributionColumnCaps } from "./contributionColumns"
 import { CANONICAL_FIELDS, isFieldAllowedForSlug, isInscriptionId } from "./contribute"
+import { buildPublicAuthorSnapshot } from "./publicAuthor"
 import { buildCollectionSlugAliases, normalizeCollectionSlugInput, toCollectionWikiPageSlug } from "./slugAliases"
 
 const MAX_SOURCE_EVENT_NODES = 24
@@ -49,10 +52,12 @@ interface ContributionRow {
   value: string
   confidence: string
   verifiable: number
-  contributor_id: string | null
   og_tier: string
   status: string
   created_at: string
+  public_author_mode?: string | null
+  public_author_username?: string | null
+  public_author_avatar_url?: string | null
 }
 
 interface RawEventRow {
@@ -123,6 +128,7 @@ export async function buildCollectionGraph(
 
   const normalizedSlug = normalizeCollectionSlugInput(slug)
   const aliasSlugs = buildCollectionSlugAliases(normalizedSlug)
+  const contributionCaps = await getContributionColumnCaps(env)
   const normalizedFocus = options.focus?.startsWith("inscription:") 
     ? options.focus.slice("inscription:".length) 
     : options.focus
@@ -148,12 +154,16 @@ export async function buildCollectionGraph(
     contributionSlugs.push(normalizedFocus)
   }
   const contribPlaceholders = contributionSlugs.map(() => "?").join(", ")
+  const publicAuthorModeExpr = contributionCaps.hasPublicAuthorMode ? "public_author_mode" : "'anonymous' AS public_author_mode"
+  const publicAuthorUsernameExpr = contributionCaps.hasPublicAuthorUsername ? "public_author_username" : "NULL AS public_author_username"
+  const publicAuthorAvatarExpr = contributionCaps.hasPublicAuthorAvatarUrl ? "public_author_avatar_url" : "NULL AS public_author_avatar_url"
 
   const [focusConsolidated, contributionRows] = await Promise.all([
     normalizedFocus ? buildConsolidation(normalizedFocus, env) : Promise.resolve(null),
     env.DB.prepare(`
       SELECT id, collection_slug, field, value, confidence, verifiable,
-             contributor_id, og_tier, status, created_at
+             og_tier, status, created_at,
+             ${publicAuthorModeExpr}, ${publicAuthorUsernameExpr}, ${publicAuthorAvatarExpr}
       FROM wiki_contributions
       WHERE collection_slug IN (${contribPlaceholders})
         AND status IN ('published', 'quarantine')
@@ -378,6 +388,7 @@ export async function buildCollectionGraph(
       for (const row of fieldContributions) {
         const claimNodeId = buildClaimNodeId(targetSlug, row)
         const claimStatus = resolveClaimStatus(fieldState, row)
+        const publicAuthor = resolvePublicAuthor(row)
         addNode({
           id: claimNodeId,
           kind: "claim",
@@ -391,10 +402,10 @@ export async function buildCollectionGraph(
             og_tier: row.og_tier,
             confidence: row.confidence,
             verifiable: Boolean(row.verifiable),
-            contributor_id: row.contributor_id,
             created_at: row.created_at,
             moderation_status: row.status,
             scope: isInscriptionId(targetSlug) ? "inscription" : "collection",
+            public_author: publicAuthor,
           },
         })
         addEdge({
@@ -694,6 +705,14 @@ function buildCollectionRootNode(
       available_fields: availableFields,
     },
   }
+}
+
+function resolvePublicAuthor(row: ContributionRow): PublicAuthor | null {
+  return buildPublicAuthorSnapshot({
+    mode: row.public_author_mode,
+    username: row.public_author_username,
+    avatarUrl: row.public_author_avatar_url,
+  })
 }
 
 function buildBundledEventNodes(params: {
