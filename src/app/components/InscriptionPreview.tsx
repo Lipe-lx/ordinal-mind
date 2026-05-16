@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { getMediaPreviewMode } from "../lib/media"
+import { UNTRUSTED_IFRAME_SANDBOX } from "../lib/previewFit"
 import { SatRarityBadge, CharmBadge } from "./SatBadge"
 import type { ChronicleResponse } from "../lib/types"
 import { NonImageFitPreview } from "./NonImageFitPreview"
@@ -22,9 +23,7 @@ export function InscriptionPreview({
 }: Props) {
   const { meta, media_context } = activeChronicle
   const previewMode = getMediaPreviewMode(media_context)
-  const previewSandbox = media_context.preview_url.startsWith("https://ordinals.com/preview/")
-    ? "allow-scripts allow-same-origin"
-    : "allow-scripts"
+  const previewSandbox = UNTRUSTED_IFRAME_SANDBOX
   const [renderFallback, setRenderFallback] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)

@@ -1,5 +1,7 @@
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"])
+const API_CORS_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+const API_CORS_HEADERS = "Content-Type, Authorization, Mcp-Session-Id"
 
 export function isWriteMethod(method: string): boolean {
   return WRITE_METHODS.has(method.toUpperCase())
@@ -41,6 +43,103 @@ export function isTrustedWriteRequest(
   if (!origin && !secFetchSite) return true
 
   return false
+}
+
+function appendVaryValue(headers: Headers, value: string): void {
+  const current = headers.get("Vary")
+  if (!current) {
+    headers.set("Vary", value)
+    return
+  }
+
+  const values = new Set(
+    current.split(",")
+      .map((token) => token.trim())
+      .filter(Boolean)
+  )
+  values.add(value)
+  headers.set("Vary", [...values].join(", "))
+}
+
+function isSensitiveApiPath(pathname: string, method: string): boolean {
+  if (!pathname.startsWith("/api/")) return false
+  if (isWriteMethod(method)) return true
+
+  return pathname.startsWith("/api/auth")
+    || pathname === "/api/wiki/export"
+    || pathname.startsWith("/api/wiki/reviews")
+}
+
+function resolveAllowedCorsOrigin(
+  request: Request,
+  requestUrl: URL,
+  extraAllowedOrigins?: string
+): string | null {
+  const origin = request.headers.get("Origin")
+  if (!origin) return null
+  const allowed = buildAllowedOrigins(requestUrl, extraAllowedOrigins)
+  return allowed.has(origin) ? origin : null
+}
+
+export function applyApiCorsHeaders(
+  request: Request,
+  headers: Headers,
+  extraAllowedOrigins?: string
+): void {
+  const requestUrl = new URL(request.url)
+  if (!requestUrl.pathname.startsWith("/api/")) return
+
+  headers.set("Access-Control-Allow-Methods", API_CORS_METHODS)
+  headers.set("Access-Control-Allow-Headers", API_CORS_HEADERS)
+
+  if (!isSensitiveApiPath(requestUrl.pathname, request.method)) {
+    if (!headers.has("Access-Control-Allow-Origin")) {
+      headers.set("Access-Control-Allow-Origin", "*")
+    }
+    return
+  }
+
+  appendVaryValue(headers, "Origin")
+  const allowedOrigin = resolveAllowedCorsOrigin(request, requestUrl, extraAllowedOrigins)
+  if (allowedOrigin) {
+    headers.set("Access-Control-Allow-Origin", allowedOrigin)
+    headers.set("Access-Control-Allow-Credentials", "true")
+    return
+  }
+
+  headers.delete("Access-Control-Allow-Origin")
+  headers.delete("Access-Control-Allow-Credentials")
+}
+
+export function buildApiPreflightResponse(
+  request: Request,
+  extraAllowedOrigins?: string
+): Response {
+  const requestUrl = new URL(request.url)
+  const requestedMethod = request.headers.get("Access-Control-Request-Method") ?? request.method
+  const headers = new Headers()
+  headers.set("Access-Control-Allow-Methods", API_CORS_METHODS)
+  headers.set("Access-Control-Allow-Headers", API_CORS_HEADERS)
+
+  if (!requestUrl.pathname.startsWith("/api/")) {
+    headers.set("Access-Control-Allow-Origin", "*")
+    return new Response(null, { status: 204, headers })
+  }
+
+  if (!isSensitiveApiPath(requestUrl.pathname, requestedMethod)) {
+    headers.set("Access-Control-Allow-Origin", "*")
+    return new Response(null, { status: 204, headers })
+  }
+
+  appendVaryValue(headers, "Origin")
+  const allowedOrigin = resolveAllowedCorsOrigin(request, requestUrl, extraAllowedOrigins)
+  if (!allowedOrigin) {
+    return new Response(null, { status: 403, headers })
+  }
+
+  headers.set("Access-Control-Allow-Origin", allowedOrigin)
+  headers.set("Access-Control-Allow-Credentials", "true")
+  return new Response(null, { status: 204, headers })
 }
 
 export interface RateLimitConfig {
@@ -144,7 +243,8 @@ export async function enforceRateLimit(
 export function attachSecurityHeaders(
   request: Request,
   response: Response,
-  isDev = false
+  isDev = false,
+  extraAllowedOrigins?: string
 ): Response {
   const headers = new Headers(response.headers)
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -178,17 +278,7 @@ export function attachSecurityHeaders(
     headers.set("Content-Security-Policy", csp)
   }
 
-  // CORS hardening: write routes should not be wildcard.
-  if (request.url.includes("/api/")) {
-    const reqUrl = new URL(request.url)
-    if (isWriteMethod(request.method)) {
-      const origin = request.headers.get("Origin")
-      const allowed = origin && origin === reqUrl.origin ? origin : reqUrl.origin
-      headers.set("Access-Control-Allow-Origin", allowed)
-    } else if (!headers.has("Access-Control-Allow-Origin")) {
-      headers.set("Access-Control-Allow-Origin", "*")
-    }
-  }
+  applyApiCorsHeaders(request, headers, extraAllowedOrigins)
 
   return new Response(response.body, {
     status: response.status,

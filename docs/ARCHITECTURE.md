@@ -67,6 +67,7 @@ graph TD
 - Issue and verify JWTs signed with `JWT_SECRET`.
 - Map Discord server roles to Collector Tiers (`Genesis`, `OG`, `Community`).
 - Secure client-side LLM key storage using AES-256-GCM derived from JWT.
+- Keep browser-authenticated routes cookie-first while still allowing legacy bearer tokens for originless server-to-server and MCP/internal callers.
 
 ## Layer 2: Client BYOK Plane (Narrative Chat)
 
@@ -77,6 +78,7 @@ graph TD
 - Stream model output directly from provider (no server proxy for user key).
 - Execute optional research tools client-side via `toolExecutor`.
 - **Activity Monitoring**: Integrated dropdown for real-time research and status tracking.
+- Run the Wiki Seed extractor client-side, but persist to the public wiki only when a Discord identity is present.
 
 ## Layer 3: Chronicle Wiki & Consensus Plane
 
@@ -94,10 +96,10 @@ graph TD
 - **Strict Scoping**: Fields are scoped to `inscription` or `collection` levels (e.g., `artist` vs `founder`) to prevent data bleed.
 - **Review Loop**: Anonymous or low-tier contributions enter a quarantine state for community/OG review.
 - **Wiki Atlas**: A neural, force-directed graph (via `cytoscape-fcose`) visualizes the relationships between entities.
-- **Parallel Wiki Seed Agent**: A client-side background agent that extracts facts from the initial narrative to proactively populate the wiki database.
-    - **Human-First Protection**: Seed writes are allowed only when a field has no active human contribution.
-    - **No Overwrite Rule**: Once a human contribution exists for the same `slug + field`, even as a community draft or quarantine item, the seed agent must not overwrite or supersede it.
-    - **Seed Ownership**: The seed agent may refresh only its own prior system-seeded contribution when no human contribution blocks that field.
+- **Parallel Wiki Seed Agent**: A client-side background agent that extracts facts from the initial narrative to proactively prepare wiki updates.
+    - **Authenticated Persistence Only**: BYOK-only guests may extract fields locally, but public wiki persistence requires an active Discord identity.
+    - **No Client-Side Privilege Escalation**: `origin: narrative_seed_agent` is compatibility metadata only; it does not bypass auth, moderation, rate limits, or tier rules.
+    - **Normal Governance Path**: Seed writes now enter the same authenticated contribution pipeline as any other client contribution.
 - **Discovery-First Indexing**: Collections with any consensus data (completeness > 0) are automatically seeded into the search index (`wiki_pages`), enabling immediate discovery via MCP and UI even before full narrative generation.
 - **Fiscal Agent (Automated Moderation)**: All contributions are asynchronously scanned by a **Fiscal Agent** powered by **Llama Guard 3**.
     - **Nuanced Policy**: Specifically tuned to allow community slang and profanity while strictly blocking illegal content and explicit sexual descriptions.
@@ -170,8 +172,10 @@ graph TD
 - **No Server Secrets**: LLM keys are never seen by the server.
 - **Sealed Storage**: Authenticated users have their LLM keys encrypted with AES-256-GCM in `localStorage`.
 - **Content Security Policy (CSP)**: Strict `script-src 'self'` in production. Automatically relaxes to include `'unsafe-inline'` and `ws:`/`wss:` in local development to support Vite Fast Refresh and HMR.
+- **Opaque-Origin Preview Sandbox**: HTML/SVG inscription previews run with `allow-scripts` but without `allow-same-origin`; sizing data is passed back through a constrained `postMessage` bridge.
 - **Public Data Only**: The Worker only scrapes public, cacheable data.
 - **Stateless Identity**: Session state is carried by signed JWTs.
+- **Sensitive Route CORS Hardening**: Authenticated/private `/api/*` routes no longer expose wildcard CORS; allowed origins are reflected explicitly, while originless bearer clients remain supported for non-browser automation.
 - **MCP Origin Hardening**: MCP requests validate `Origin` against trusted origins to mitigate DNS rebinding classes.
 - **Open Source & Trademark**: Licensed under **Apache 2.0**. The "OrdinalMind" brand and associated identity are preserved for the official project deployment to prevent confusion.
 

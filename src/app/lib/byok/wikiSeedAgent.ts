@@ -16,6 +16,7 @@ import { chooseCanonicalWikiValue, normalizeWikiValue } from "../wikiNormalizati
 import type { ByokConfig } from "./index"
 import { runByokPrompt, parseFirstJsonObject } from "./wikiAdapter"
 import { submitWikiContribution, type WikiSubmitError, type WikiSubmitResult } from "./wikiSubmit"
+import { hasStoredDiscordConnection } from "../useDiscordIdentity"
 import {
   CANONICAL_FIELDS,
   COLLECTION_ONLY_FIELDS,
@@ -588,6 +589,21 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
       fields: fields.map((f) => f.field),
     })
 
+    if (!hasStoredDiscordConnection()) {
+      console.info("[OrdinalMind][WikiSeedAgent] Skipping public seed persistence without Discord identity", {
+        at: new Date().toISOString(),
+        inscription_id: chronicle.meta.inscription_id,
+        ready_to_submit_count: fields.length,
+      })
+      onProgress?.({
+        state: "done",
+        fieldsExtracted: fields.length,
+        fieldsSubmitted: 0,
+        label: "Connect Discord to publish extracted facts to the public wiki.",
+      })
+      return
+    }
+
     // Phase 2: Submit extracted fields
     onProgress?.({
       state: "submitting",
@@ -635,7 +651,7 @@ export async function runWikiSeedAgent(params: WikiSeedAgentParams): Promise<voi
             : duplicates > 0
               ? "Wiki seed complete (fields already synchronized)."
               : "Wiki seed complete (no deterministic updates needed).")
-        : `Wiki seed synced ${submitted} field${submitted !== 1 ? "s" : ""} with system Genesis authority.`
+        : `Wiki seed synced ${submitted} field${submitted !== 1 ? "s" : ""} to the public wiki.`
 
     onProgress?.({
       state: "done",

@@ -93,6 +93,18 @@ describe("wikiSeedAgent", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    const storage = new Map<string, string>([
+      ["ordinalmind_discord_connected", "discord-user-1"],
+    ])
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) => storage.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        storage.set(key, value)
+      }),
+      removeItem: vi.fn((key: string) => {
+        storage.delete(key)
+      }),
+    })
   })
 
   it("skips submission when canonical value already matches", async () => {
@@ -140,6 +152,42 @@ describe("wikiSeedAgent", () => {
 
     expect(submitWikiContribution).toHaveBeenCalledTimes(1)
     expect(vi.mocked(submitWikiContribution).mock.calls[0]?.[0]?.data?.origin).toBe("narrative_seed_agent")
+  })
+
+  it("skips public seed persistence without a Discord connection marker", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => "0"),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    })
+    mockConsolidatedResponse("Old Founder")
+    vi.mocked(runByokPrompt).mockResolvedValue("[{}]")
+    vi.mocked(parseFirstJsonObject).mockReturnValue([
+      {
+        field: "founder",
+        value: "New Founder",
+        verifiable: true,
+        scope: "collection",
+      },
+    ])
+
+    const statuses: Array<{ state: string; label: string }> = []
+
+    await runWikiSeedAgent({
+      narrative: "Founder updated: New Founder.",
+      chronicle: buildChronicle(),
+      config: { provider: "openai", model: "gpt-4.1", key: "sk-test" } as any,
+      sessionId: "thread_1",
+      onProgress: (status) => {
+        statuses.push({ state: status.state, label: status.label })
+      },
+    })
+
+    expect(submitWikiContribution).not.toHaveBeenCalled()
+    expect(statuses.at(-1)).toEqual({
+      state: "done",
+      label: "Connect Discord to publish extracted facts to the public wiki.",
+    })
   })
 
   it("submits both collection and inscription fields when both are present", async () => {

@@ -222,6 +222,37 @@ describe("wiki review routes", () => {
     expect(items[0].current_value).toBe("Old canonical founder")
   })
 
+  it("reflects allowed origin for sensitive review responses instead of wildcard", async () => {
+    const db = seedDb()
+    const env = createEnv(db)
+    env.ALLOWED_ORIGINS = "https://app.ordinalmind.test"
+
+    const res = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/reviews/pending", {
+      headers: {
+        ...(await authHeader("genesis")),
+        Origin: "https://app.ordinalmind.test",
+      },
+    }), env)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://app.ordinalmind.test")
+    expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true")
+  })
+
+  it("does not expose wildcard CORS on sensitive review responses for untrusted origins", async () => {
+    const db = seedDb()
+    const env = createEnv(db)
+    const res = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/reviews/pending", {
+      headers: {
+        ...(await authHeader("genesis")),
+        Origin: "https://evil.example",
+      },
+    }), env)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull()
+  })
+
   it("rejects non-genesis reviewers", async () => {
     const db = seedDb()
     const env = createEnv(db)

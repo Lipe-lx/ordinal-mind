@@ -93,9 +93,6 @@ export interface ContributeResponse {
 }
 
 const NARRATIVE_SEED_ORIGIN = "narrative_seed_agent"
-const SYSTEM_SEED_CONTRIBUTOR_ID = "system:narrative-seed-agent"
-const SYSTEM_SEED_CONTRIBUTOR_KEY = "system:narrative-seed-agent"
-
 
 interface ActiveContributionRow {
   id: string
@@ -105,20 +102,6 @@ interface ActiveContributionRow {
   public_author_mode?: string | null
   public_author_username?: string | null
   public_author_avatar_url?: string | null
-}
-
-interface PublishedFieldRow extends ActiveContributionRow {
-  og_tier: OGTier | string
-  contributor_id: string | null
-  contributor_key: string | null
-}
-
-interface BlockingHumanContributionRow {
-  id: string
-  status: string
-  og_tier: OGTier | string
-  contributor_id: string | null
-  contributor_key: string | null
 }
 
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
@@ -248,74 +231,6 @@ function buildPublicAuthorSnapshot(payload: JWTPayload | null, mode: PublicAutho
   }
 }
 
-async function readSeedOwnedContribution(
-  env: Env,
-  slug: string,
-  field: CanonicalField,
-  caps: ContributionColumnCaps
-): Promise<PublishedFieldRow | null> {
-  if (!env.DB) return null
-  const valueNormExpr = caps.hasValueNorm ? "value_norm" : "NULL AS value_norm"
-  const contributorKeyExpr = caps.hasContributorKey ? "contributor_key" : "NULL AS contributor_key"
-  const row = await env.DB.prepare(`
-    SELECT id, value, ${valueNormExpr}, status, og_tier, contributor_id, ${contributorKeyExpr}
-    FROM wiki_contributions
-    WHERE collection_slug = ?
-      AND field = ?
-      AND status = 'published'
-      AND (
-        contributor_key = ?
-        OR contributor_id = ?
-      )
-    ORDER BY datetime(created_at) DESC, id DESC
-    LIMIT 1
-  `)
-    .bind(slug, field, SYSTEM_SEED_CONTRIBUTOR_KEY, SYSTEM_SEED_CONTRIBUTOR_ID)
-    .first<PublishedFieldRow>()
-
-  return row ?? null
-}
-
-async function readBlockingHumanContribution(
-  env: Env,
-  slug: string,
-  field: CanonicalField,
-  caps: ContributionColumnCaps
-): Promise<BlockingHumanContributionRow | null> {
-  if (!env.DB) return null
-  const contributorKeyExpr = caps.hasContributorKey ? "contributor_key" : "NULL AS contributor_key"
-  const row = await env.DB.prepare(`
-    SELECT id, status, og_tier, contributor_id, ${contributorKeyExpr}
-    FROM wiki_contributions
-    WHERE collection_slug = ?
-      AND field = ?
-      AND status IN ('published', 'quarantine')
-      AND NOT (
-        contributor_key = ?
-        OR contributor_id = ?
-      )
-    ORDER BY
-      CASE og_tier
-        WHEN 'genesis' THEN 4
-        WHEN 'og' THEN 3
-        WHEN 'community' THEN 2
-        ELSE 1
-      END DESC,
-      CASE status
-        WHEN 'published' THEN 2
-        WHEN 'quarantine' THEN 1
-        ELSE 0
-      END DESC,
-      datetime(created_at) DESC,
-      id DESC
-    LIMIT 1
-  `)
-    .bind(slug, field, SYSTEM_SEED_CONTRIBUTOR_KEY, SYSTEM_SEED_CONTRIBUTOR_ID)
-    .first<BlockingHumanContributionRow>()
-
-  return row ?? null
-}
-
 async function writeConsolidationAudit(
   env: Env,
   payload: {
@@ -398,31 +313,23 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
 
   const { contribution } = parsed
   const caps = await getContributionColumnCaps(env)
-  const isSeedOrigin = contribution.origin === NARRATIVE_SEED_ORIGIN
-  let authPayload: JWTPayload | null = null
-  let contributor_id: string | null = null
-  let tier: OGTier = "anon"
-
-  if (!isSeedOrigin) {
-    const auth = await requireSessionUser(request, env)
-    if (!auth.ok) {
-      return json({ ok: false, error: auth.error }, auth.status)
-    }
-    authPayload = auth.payload
-    contributor_id = auth.payload.sub
-    tier = auth.payload.tier
+  const auth = await requireSessionUser(request, env)
+  if (!auth.ok) {
+    return json({ ok: false, error: auth.error }, auth.status)
   }
 
-  if (!isSeedOrigin) {
-    const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
-      keyPrefix: "wiki_contribute",
-      limit: 40,
-      windowSeconds: 60,
-      alertThreshold: 30,
-    })
-    if (!rate.ok) {
-      return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
-    }
+  const authPayload: JWTPayload = auth.payload
+  const contributor_id = auth.payload.sub
+  const tier: OGTier = auth.payload.tier
+
+  const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
+    keyPrefix: "wiki_contribute",
+    limit: 40,
+    windowSeconds: 60,
+    alertThreshold: 30,
+  })
+  if (!rate.ok) {
+    return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
   }
 
   if (contribution.collection_slug.length > 140 || contribution.value.length > 2000 || contribution.session_id.length > 120) {
@@ -481,59 +388,29 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     }
   }
 
-  const resolvedContributorId = isSeedOrigin ? SYSTEM_SEED_CONTRIBUTOR_ID : contributor_id
-  const resolvedTier: OGTier = isSeedOrigin ? "genesis" : tier
-  const contributorKey = isSeedOrigin
-    ? SYSTEM_SEED_CONTRIBUTOR_KEY
-    : buildContributorKey(contributor_id, contribution.session_id)
+  const resolvedContributorId = contributor_id
+  const resolvedTier: OGTier = tier
+  const contributorKey = buildContributorKey(contributor_id, contribution.session_id)
   const status: "published" | "quarantine" = resolveStatus(resolvedTier)
   const valueNorm = normalizeWikiValue(contribution.value)
-  const publicAuthor = buildPublicAuthorSnapshot(authPayload, isSeedOrigin ? "anonymous" : (contribution.public_author_mode ?? "anonymous"))
-
-  const safety = isSeedOrigin
-    ? {
-        safe: true,
-        confidence: 1,
-        reason: "trusted_narrative_seed_agent",
-        metadata: { origin: NARRATIVE_SEED_ORIGIN, mode: "system_genesis_autopublish" },
-      }
-    : await checkContributionSafety(contribution.value, env)
+  const publicAuthor = buildPublicAuthorSnapshot(authPayload, contribution.public_author_mode ?? "anonymous")
+  const safety = await checkContributionSafety(contribution.value, env)
   
   // If flagged as unsafe, force quarantine even for Genesis/OG
-  const effectiveStatus: "published" | "quarantine" = isSeedOrigin
-    ? "published"
-    : (safety.safe ? status : "quarantine")
+  const effectiveStatus: "published" | "quarantine" = safety.safe ? status : "quarantine"
 
   let activeRow: ActiveContributionRow | null
-  let publishedFieldRow: PublishedFieldRow | null = null
-  let blockingHumanRow: BlockingHumanContributionRow | null = null
   try {
-    if (isSeedOrigin) {
-      blockingHumanRow = await readBlockingHumanContribution(
-        env,
-        contribution.collection_slug,
-        contribution.field,
-        caps
-      )
-      publishedFieldRow = await readSeedOwnedContribution(
-        env,
-        contribution.collection_slug,
-        contribution.field,
-        caps
-      )
-      activeRow = publishedFieldRow
-    } else {
-      activeRow = await readActiveContribution(
-        env,
-        contribution.collection_slug,
-        contribution.field,
-        contributorKey,
-        effectiveStatus,
-        caps,
-        contributor_id,
-        contribution.session_id
-      )
-    }
+    activeRow = await readActiveContribution(
+      env,
+      contribution.collection_slug,
+      contribution.field,
+      contributorKey,
+      effectiveStatus,
+      caps,
+      contributor_id,
+      contribution.session_id
+    )
   } catch (err) {
     console.error("[WikiContribute] Failed to read active contribution:", err)
     return json({ ok: false, error: "db_read_failed" }, 500)
@@ -557,25 +434,6 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
         tier_applied: resolvedTier,
       }
       return json(duplicateResponse)
-    }
-
-    if (isSeedOrigin && blockingHumanRow) {
-      console.info("[WikiContribute] Seed write skipped due to active human contribution", {
-        at: new Date().toISOString(),
-        slug: contribution.collection_slug,
-        field: contribution.field,
-        contribution_id: blockingHumanRow.id,
-        blocking_status: blockingHumanRow.status,
-        blocking_tier: blockingHumanRow.og_tier,
-      })
-      const protectedResponse: ContributeResponse = {
-        ok: true,
-        contribution_id: blockingHumanRow.id,
-        status: "duplicate",
-        tier_applied: resolvedTier,
-        detail: "protected_human_contribution",
-      }
-      return json(protectedResponse)
     }
 
     try {
@@ -669,26 +527,6 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
   }
 
   const id = generateId()
-
-  if (isSeedOrigin && blockingHumanRow) {
-    console.info("[WikiContribute] Seed insert skipped due to active human contribution", {
-      at: new Date().toISOString(),
-      slug: contribution.collection_slug,
-      field: contribution.field,
-      contribution_id: blockingHumanRow.id,
-      blocking_status: blockingHumanRow.status,
-      blocking_tier: blockingHumanRow.og_tier,
-    })
-
-    const protectedResponse: ContributeResponse = {
-      ok: true,
-      contribution_id: blockingHumanRow.id,
-      status: "duplicate",
-      tier_applied: resolvedTier,
-      detail: "protected_human_contribution",
-    }
-    return json(protectedResponse)
-  }
 
   try {
     const insertColumns = [

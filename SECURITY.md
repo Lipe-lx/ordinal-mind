@@ -18,5 +18,6 @@ Please include:
 - A detailed description of the vulnerability.
 - Steps to reproduce the issue.
 - Any potential impact you have identified.
+- Whether the issue affects browser preview isolation, Discord-authenticated wiki writes, or authenticated API/CORS behavior.
 
 We will endeavor to respond to your report as quickly as possible.
