@@ -16,6 +16,8 @@ type ContributionRow = {
   status: string
   created_at: string
   reviewed_at: string | null
+  contributor_key: string | null
+  updated_at: string | null
 }
 
 type UserRow = {
@@ -27,6 +29,7 @@ class ReviewDb {
   wikiContributions: ContributionRow[] = []
   users: UserRow[] = []
   deletedCacheSlugs: string[] = []
+  hasConsolidatedCache = true
 
   prepare(sql: string): ReviewStatement {
     return new ReviewStatement(this, sql)
@@ -67,6 +70,26 @@ class ReviewStatement {
   private execSelect(): Record<string, unknown>[] {
     const sql = this.norm()
 
+    if (sql.includes("pragma table_info('wiki_contributions')")) {
+      return [
+        { name: "id" },
+        { name: "collection_slug" },
+        { name: "field" },
+        { name: "value" },
+        { name: "confidence" },
+        { name: "verifiable" },
+        { name: "contributor_id" },
+        { name: "og_tier" },
+        { name: "session_id" },
+        { name: "source_excerpt" },
+        { name: "status" },
+        { name: "created_at" },
+        { name: "reviewed_at" },
+        { name: "contributor_key" },
+        { name: "updated_at" },
+      ]
+    }
+
     if (sql.includes("select count(*) as count from wiki_contributions where status = 'quarantine'")) {
       return [{
         count: this.db.wikiContributions.filter((item) => item.status === "quarantine").length,
@@ -106,18 +129,45 @@ class ReviewStatement {
   private execMutate(): void {
     const sql = this.norm()
 
-    if (sql.includes("update wiki_contributions") && sql.includes("set status = ?, reviewed_at = datetime('now')")) {
+    if (sql.includes("update wiki_contributions") && sql.includes("set status = 'duplicate'")) {
+      const slug = String(this.params[0] ?? "")
+      const field = String(this.params[1] ?? "")
+      const identity = String(this.params[2] ?? "")
+      const reviewId = String(this.params[3] ?? "")
+      for (const row of this.db.wikiContributions) {
+        if (row.id === reviewId || row.collection_slug !== slug || row.field !== field || row.status !== "published") {
+          continue
+        }
+        const matches = sql.includes("contributor_key = ?")
+          ? row.contributor_key === identity
+          : sql.includes("contributor_id = ?")
+            ? row.contributor_id === identity
+            : row.contributor_id === null && row.session_id === identity
+        if (matches) {
+          row.status = "duplicate"
+          row.reviewed_at = row.reviewed_at ?? "now"
+          row.updated_at = "now"
+        }
+      }
+      return
+    }
+
+    if (sql.includes("update wiki_contributions") && sql.includes("set status = ?") && sql.includes("where id = ?")) {
       const nextStatus = String(this.params[0] ?? "")
       const reviewId = String(this.params[1] ?? "")
       const row = this.db.wikiContributions.find((item) => item.id === reviewId)
       if (row) {
         row.status = nextStatus
         row.reviewed_at = "now"
+        row.updated_at = "now"
       }
       return
     }
 
     if (sql.includes("delete from consolidated_cache")) {
+      if (!this.db.hasConsolidatedCache) {
+        throw new Error("no such table: consolidated_cache")
+      }
       const slug = String(this.params[0] ?? "")
       this.db.deletedCacheSlugs.push(slug)
     }
@@ -185,6 +235,8 @@ function seedDb(): ReviewDb {
       status: "published",
       created_at: "2026-05-02T10:00:00.000Z",
       reviewed_at: "2026-05-02T10:05:00.000Z",
+      contributor_key: "discord:og-1",
+      updated_at: "2026-05-02T10:05:00.000Z",
     },
     {
       id: "wc_pending",
@@ -200,6 +252,8 @@ function seedDb(): ReviewDb {
       status: "quarantine",
       created_at: "2026-05-03T10:00:00.000Z",
       reviewed_at: null,
+      contributor_key: "discord:community-1",
+      updated_at: null,
     }
   )
   return db
@@ -283,6 +337,79 @@ describe("wiki review routes", () => {
     expect(body.status).toBe("published")
     expect(db.wikiContributions.find((item) => item.id === "wc_pending")?.status).toBe("published")
     expect(db.deletedCacheSlugs).toContain("collection:bitcoin-frogs")
+  })
+
+  it("replaces an existing published contribution from the same contributor without returning 500", async () => {
+    const db = new ReviewDb()
+    db.users.push({ discord_id: "community-1", username: "collector.ana" })
+    db.wikiContributions.push(
+      {
+        id: "wc_old_published",
+        collection_slug: "collection:bitcoin-frogs",
+        field: "founder",
+        value: "Old community value",
+        confidence: "stated_by_user",
+        verifiable: 1,
+        contributor_id: "community-1",
+        og_tier: "community",
+        session_id: "session-2",
+        source_excerpt: null,
+        status: "published",
+        created_at: "2026-05-02T10:00:00.000Z",
+        reviewed_at: "2026-05-02T10:05:00.000Z",
+        contributor_key: "discord:community-1",
+        updated_at: "2026-05-02T10:05:00.000Z",
+      },
+      {
+        id: "wc_pending_replacement",
+        collection_slug: "collection:bitcoin-frogs",
+        field: "founder",
+        value: "New community value",
+        confidence: "stated_by_user",
+        verifiable: 1,
+        contributor_id: "community-1",
+        og_tier: "community",
+        session_id: "session-2",
+        source_excerpt: "founder corrigido",
+        status: "quarantine",
+        created_at: "2026-05-03T10:00:00.000Z",
+        reviewed_at: null,
+        contributor_key: "discord:community-1",
+        updated_at: null,
+      }
+    )
+
+    const env = createEnv(db)
+    const res = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/reviews/wc_pending_replacement", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await authHeader("genesis")),
+      },
+      body: JSON.stringify({ action: "approve" }),
+    }), env)
+
+    expect(res.status).toBe(200)
+    expect(db.wikiContributions.find((item) => item.id === "wc_old_published")?.status).toBe("duplicate")
+    expect(db.wikiContributions.find((item) => item.id === "wc_pending_replacement")?.status).toBe("published")
+  })
+
+  it("approves reviews even when consolidated cache is unavailable", async () => {
+    const db = seedDb()
+    db.hasConsolidatedCache = false
+    const env = createEnv(db)
+    const res = await worker.fetch(new Request("https://ordinalmind.local/api/wiki/reviews/wc_pending", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await authHeader("genesis")),
+      },
+      body: JSON.stringify({ action: "approve" }),
+    }), env)
+
+    expect(res.status).toBe(200)
+    expect(db.wikiContributions.find((item) => item.id === "wc_pending")?.status).toBe("published")
+    expect(db.deletedCacheSlugs).toHaveLength(0)
   })
 
   it("rejects pending reviews without publishing them", async () => {
