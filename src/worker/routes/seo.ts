@@ -180,7 +180,7 @@ function buildStaticPageHtml(title: string, description: string, canonicalPath: 
 
 function buildHomeHtml(): string {
   const title = "OrdinalMind — Chronicle Memory Engine for Bitcoin Ordinals"
-  const description = "Every inscription carries a story. OrdinalMind traces its journey — from inscription to current holder — through verifiable public data."
+  const description = "Every inscription has a story. OrdinalMind traces its journey — from inscription to current holder — through verifiable public data."
 
   const jsonLd = {
     "@context": "https://schema.org",
