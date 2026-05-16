@@ -543,6 +543,16 @@ export type WikiGraphStatus =
   | "partial"
   | "neutral"
 
+export type WikiGraphFieldScope = "collection" | "inscription"
+
+export interface WikiGraphAvailableField {
+  field: string
+  status: ContributionStatus
+  canonical_value: string | null
+  contribution_count: number
+  scope: WikiGraphFieldScope
+}
+
 export interface WikiGraphNode {
   id: string
   kind: WikiGraphNodeKind

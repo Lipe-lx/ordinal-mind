@@ -642,6 +642,12 @@
   border-radius: 4px;
 }
 
+.wiki-graph-inspector-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .wiki-graph-inspector-details-group label {
   display: block;
   font-size: 0.62rem;
@@ -650,6 +656,90 @@
   letter-spacing: 0.1em;
   margin-bottom: 0.6rem;
   font-weight: 800;
+}
+
+.wiki-graph-inspector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.wiki-graph-inspector-list-item {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.72rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  text-align: left;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.wiki-graph-inspector-list-item:disabled {
+  cursor: default;
+}
+
+.wiki-graph-inspector-list-item.is-actionable {
+  cursor: pointer;
+}
+
+.wiki-graph-inspector-list-item.is-actionable:hover {
+  border-color: rgba(247, 147, 26, 0.32);
+  background: rgba(247, 147, 26, 0.08);
+  transform: translateY(-1px);
+}
+
+.wiki-graph-inspector-list-item.status-draft {
+  border-color: rgba(96, 165, 250, 0.18);
+}
+
+.wiki-graph-inspector-list-item.status-disputed {
+  border-color: rgba(251, 191, 36, 0.18);
+}
+
+.wiki-graph-inspector-list-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+}
+
+.wiki-graph-inspector-list-label {
+  font-size: 0.77rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.wiki-graph-inspector-list-value {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.wiki-graph-inspector-list-meta {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wiki-graph-inspector-list-cta {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0.32rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(247, 147, 26, 0.12);
+  border: 1px solid rgba(247, 147, 26, 0.24);
+  color: var(--accent-primary);
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .wiki-graph-inspector-footer {

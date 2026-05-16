@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildWikiContributionSessionId, resolveContributionStatusMessage } from "../../src/app/pages/WikiPage"
+import { buildWikiContributionSessionId, resolveContributionStatusMessage } from "../../src/app/components/WikiContributionModal"
 
 describe("WikiPage contribution helpers", () => {
   it("builds a stable session id for direct wiki submissions", () => {

@@ -61,9 +61,9 @@ class GraphTestStatement {
     }
 
     if (sql.includes("select id, field, value") && sql.includes("value_norm") && sql.includes("from wiki_contributions")) {
-      const slug = String(this.params[0] ?? "")
+      const slugs = this.params.map((param) => String(param))
       return this.db.wikiContributions
-        .filter((row) => String(row.collection_slug) === slug)
+        .filter((row) => slugs.includes(String(row.collection_slug)))
         .filter((row) => String(row.status) === "published")
         .map((row) => ({
           id: row.id,
@@ -77,9 +77,9 @@ class GraphTestStatement {
     }
 
     if (sql.includes("select id, collection_slug, field, value, confidence, verifiable") && sql.includes("from wiki_contributions")) {
-      const slug = String(this.params[0] ?? "")
+      const slugs = this.params.map((param) => String(param))
       return this.db.wikiContributions
-        .filter((row) => String(row.collection_slug) === slug)
+        .filter((row) => slugs.includes(String(row.collection_slug)))
         .filter((row) => {
           const status = String(row.status)
           return status === "published" || status === "quarantine"
@@ -264,6 +264,18 @@ function seedDb(): GraphTestDatabase {
       og_tier: "og",
       status: "published",
       created_at: "2026-04-13T00:00:00.000Z",
+    },
+    {
+      id: "wc_inscription_name",
+      collection_slug: "frog0001i0",
+      field: "name",
+      value: "Frog #1",
+      confidence: "stated_by_user",
+      verifiable: 1,
+      contributor_id: "u5",
+      og_tier: "community",
+      status: "published",
+      created_at: "2026-04-14T00:00:00.000Z",
     }
   )
 
@@ -291,6 +303,7 @@ describe("buildCollectionGraph", () => {
 
     expect(graph.nodes.some((node) => node.id === "inscription:frog0001i0" && node.kind === "wiki_page")).toBe(true)
     expect(graph.nodes.some((node) => node.id === "inscription:frog0002i0" && node.kind === "wiki_page")).toBe(true)
+    expect(graph.nodes.some((node) => node.id === "field:frog0001i0:artist" && node.kind === "field")).toBe(true)
     expect(graph.nodes.some((node) => node.id === "external:artist:ghost-frog" && node.kind === "external_ref")).toBe(true)
     expect(
       graph.edges.some((edge) =>
@@ -304,6 +317,24 @@ describe("buildCollectionGraph", () => {
     expect(sourceEventNodes.map((node) => node.id)).toEqual(["ev_genesis_1", "ev_transfer_1"])
     expect(graph.edges.filter((edge) => edge.kind === "cites_event")).toHaveLength(3)
     expect(graph.warnings.some((warning) => warning.includes("could not be resolved"))).toBe(true)
+  })
+
+  it("embeds editorial metadata for collection, inscription, and empty field nodes", async () => {
+    const graph = await buildCollectionGraph("bitcoin-frogs", createEnv(seedDb()), {
+      focus: "inscription:frog0001i0",
+    })
+
+    const collectionNode = graph.nodes.find((node) => node.id === "collection:bitcoin-frogs")
+    expect(Array.isArray(collectionNode?.metadata.gaps)).toBe(true)
+    expect(Array.isArray(collectionNode?.metadata.available_fields)).toBe(true)
+
+    const inscriptionNode = graph.nodes.find((node) => node.id === "inscription:frog0001i0")
+    expect(Array.isArray(inscriptionNode?.metadata.gaps)).toBe(true)
+    expect(Array.isArray(inscriptionNode?.metadata.available_fields)).toBe(true)
+
+    const emptyFieldNode = graph.nodes.find((node) => node.id === "field:frog0001i0:artist")
+    expect(emptyFieldNode?.metadata.is_gap).toBe(true)
+    expect(emptyFieldNode?.metadata.has_contributions).toBe(false)
   })
 
   it("builds the same deterministic order across repeated runs", async () => {
