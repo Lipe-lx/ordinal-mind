@@ -515,7 +515,7 @@ export function registerTools(options: {
           },
         },
         governance: {
-          wiki_propose_update: "Follows app tier rules: community -> quarantine, og/genesis -> published.",
+          wiki_propose_update: "Follows app tier rules: community -> published draft, og/genesis -> published canonical candidates, unsafe content -> quarantine.",
           review_contribution: "Genesis-only moderation action.",
         },
         oauth_mcp: {

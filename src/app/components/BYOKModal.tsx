@@ -376,7 +376,7 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                         </svg>
                       </div>
                       <p className="identity-description">
-                        Connect your Discord to unlock OG tier contributions to the Wiki. Your identity is verified but optional — Chronicle and Timeline always work anonymously.
+                        Connect your Discord to unlock collector-tier wiki contributions. Your identity is verified but optional — Chronicle and Timeline always work anonymously.
                       </p>
                       <button
                         className="btn identity-connect-btn"
@@ -386,7 +386,7 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                         Connect Discord
                       </button>
                       <p className="identity-anon-note">
-                        Without Discord, contributions enter quarantine for manual review.
+                        Without Discord, wiki contributions stay disabled. Connect to publish draft contributions under your collector tier.
                       </p>
                     </div>
                   )}

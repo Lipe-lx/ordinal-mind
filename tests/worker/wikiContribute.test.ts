@@ -19,9 +19,10 @@ describe("wikiContribute handler", () => {
     JWT_SECRET: "test-secret",
   } as unknown as Env
 
-  const createRequest = (body: any) =>
+  const createRequest = (body: any, headers?: Record<string, string>) =>
     new Request("http://localhost/api/wiki/contribute", {
       method: "POST",
+      headers,
       body: JSON.stringify(body),
     })
 
@@ -45,7 +46,7 @@ describe("wikiContribute handler", () => {
     expect(res.status).toBe(400)
   })
 
-  it("processes valid anon contribution (quarantine)", async () => {
+  it("rejects human contribution without authenticated session", async () => {
     const req = createRequest({
       contribution: {
         collection_slug: "test-slug",
@@ -56,11 +57,40 @@ describe("wikiContribute handler", () => {
       }
     })
     const res = await handleContribute(req, mockEnv)
+    expect(res.status).toBe(401)
+    const data = await res.json() as any
+    expect(data.ok).toBe(false)
+    expect(data.error).toBe("missing_auth_token")
+  })
+
+  it("processes valid community contribution as published draft candidate", async () => {
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "community_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
+
+    const req = createRequest({
+      contribution: {
+        collection_slug: "test-slug",
+        field: "founder",
+        value: "Satoshi",
+        confidence: "stated_by_user",
+        session_id: "s1",
+      },
+    }, {
+      Authorization: "Bearer fake-jwt",
+    })
+    
+    const res = await handleContribute(req, mockEnv)
     expect(res.status).toBe(200)
     const data = await res.json() as any
     expect(data.ok).toBe(true)
-    expect(data.status).toBe("quarantine")
-    expect(data.tier_applied).toBe("anon")
+    expect(data.status).toBe("published")
+    expect(data.tier_applied).toBe("community")
   })
 
   it("processes valid OG contribution (published)", async () => {
@@ -81,7 +111,8 @@ describe("wikiContribute handler", () => {
         confidence: "stated_by_user",
         session_id: "s1",
       },
-      jwt: "fake-jwt",
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
     
     const res = await handleContribute(req, mockEnv)
@@ -98,10 +129,22 @@ describe("wikiContribute handler", () => {
       DB: {
         prepare: vi.fn().mockReturnThis(),
         bind: vi.fn().mockReturnThis(),
-        first: vi.fn().mockResolvedValue({ id: "existing", value: "Satoshi!", value_norm: "satoshi", status: "quarantine" }),
+        first: vi.fn().mockResolvedValue({ id: "existing", value: "Satoshi!", value_norm: "satoshi", status: "published" }),
+      },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
       },
       JWT_SECRET: "test-secret",
     } as unknown as Env
+
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "community_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
 
     const req = createRequest({
       contribution: {
@@ -111,6 +154,8 @@ describe("wikiContribute handler", () => {
         confidence: "stated_by_user",
         session_id: "s1",
       }
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
 
     const res = await handleContribute(req, localMockEnv)
@@ -129,11 +174,23 @@ describe("wikiContribute handler", () => {
           id: "existing_semantic",
           value: "Sátoshi!!",
           value_norm: "satoshi",
-          status: "quarantine",
+          status: "published",
         }),
+      },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
       },
       JWT_SECRET: "test-secret",
     } as unknown as Env
+
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "community_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
 
     const req = createRequest({
       contribution: {
@@ -143,6 +200,8 @@ describe("wikiContribute handler", () => {
         confidence: "stated_by_user",
         session_id: "s1",
       },
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
 
     const res = await handleContribute(req, localMockEnv)
@@ -158,7 +217,7 @@ describe("wikiContribute handler", () => {
       id: "existing_update",
       value: "Old founder",
       value_norm: "old founder",
-      status: "quarantine",
+      status: "published",
     })
     const run = vi.fn().mockResolvedValue({ success: true })
     const localMockEnv = {
@@ -168,8 +227,20 @@ describe("wikiContribute handler", () => {
         first,
         run,
       },
+      AI: {
+        run: vi.fn().mockResolvedValue({ response: "safe" }),
+      },
       JWT_SECRET: "test-secret",
     } as unknown as Env
+
+    vi.mocked(jwtModule.verifyJWT).mockResolvedValueOnce({
+      sub: "123",
+      tier: "community",
+      username: "community_user",
+      avatar: null,
+      iat: 0,
+      exp: 0,
+    })
 
     const req = createRequest({
       contribution: {
@@ -179,13 +250,15 @@ describe("wikiContribute handler", () => {
         confidence: "correcting_existing",
         session_id: "s1",
       },
+    }, {
+      Authorization: "Bearer fake-jwt",
     })
 
     const res = await handleContribute(req, localMockEnv)
     expect(res.status).toBe(200)
     const data = await res.json() as any
     expect(data.ok).toBe(true)
-    expect(data.status).toBe("quarantine")
+    expect(data.status).toBe("published")
     expect(data.contribution_id).toBe("existing_update")
     expect(run).toHaveBeenCalled()
   })
@@ -401,8 +474,8 @@ describe("wikiContribute handler", () => {
 
     const res = await handleContribute(req, localMockEnv)
     const data = await res.json() as any
-    expect(res.status).toBe(429)
+    expect(res.status).toBe(401)
     expect(data.ok).toBe(false)
-    expect(data.error).toBe("rate_limited")
+    expect(data.error).toBe("missing_auth_token")
   })
 })

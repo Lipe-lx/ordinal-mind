@@ -151,7 +151,7 @@ graph TD
   - `wiki_list_fields`: `anon|community|og|genesis`
   - `wiki_get_field_status`: `anon|community|og|genesis`
   - `wiki_get_collection_context`: `anon|community|og|genesis`
-  - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> quarantine`, `og/genesis -> published`)
+  - `wiki_propose_update`: `community|og|genesis` (follows app governance: `community -> published draft`, `og/genesis -> published`, unsafe content -> `quarantine`)
   - `contribute_wiki`: `community|og|genesis`
   - `review_contribution`: `genesis`
   - `refresh_chronicle`: `genesis`

@@ -3,8 +3,9 @@
 //
 // Receives a WikiContribution extracted from a chat session and persists it to D1.
 // Status is auto-assigned based on og_tier:
-//   genesis / og  → published immediately
-//   community / anon → quarantine (awaiting review)
+//   genesis / og / community → published immediately
+//   anon human writes        → rejected (auth required)
+//   unsafe content           → quarantine (awaiting review)
 //
 // Consolidation:
 // - One active contribution per (slug + field + contributor_key + active status)
@@ -12,7 +13,6 @@
 // - Different value => upsert in-place + audit trail in wiki_log
 
 import type { Env } from "../index"
-import { verifyJWT } from "../auth/jwt"
 import type { OGTier } from "../auth/jwt"
 import { requireSessionUser } from "../auth/session"
 import { enforceRateLimit, isTrustedWriteRequest } from "../security"
@@ -76,6 +76,7 @@ export interface WikiContributionInput {
 
 export interface ContributeRequest {
   contribution: WikiContributionInput
+  /** Legacy no-op field kept for backward-compatible request parsing. */
   jwt?: string
 }
 
@@ -151,7 +152,7 @@ async function getContributionColumnCaps(env: Env): Promise<ContributionColumnCa
 }
 
 function resolveStatus(tier: OGTier): "published" | "quarantine" {
-  return tier === "og" || tier === "genesis" ? "published" : "quarantine"
+  return tier === "community" || tier === "og" || tier === "genesis" ? "published" : "quarantine"
 }
 
 function buildContributorKey(contributorId: string | null, sessionId: string): string {
@@ -207,27 +208,6 @@ function validateContributionInput(body: unknown): ContributeRequest | null {
     },
     jwt: typeof b.jwt === "string" ? b.jwt : undefined,
   }
-}
-
-async function resolveContributor(
-  request: Request,
-  jwt: string | undefined,
-  env: Env
-): Promise<{ contributor_id: string | null; tier: OGTier }> {
-  const auth = await requireSessionUser(request, env)
-  if (auth.ok) {
-    return { contributor_id: auth.payload.sub, tier: auth.payload.tier }
-  }
-
-  // Backward-compatible fallback for legacy clients/tests that still send jwt in body.
-  if (jwt && env.JWT_SECRET) {
-    const payload = await verifyJWT(jwt, env.JWT_SECRET)
-    if (payload) {
-      return { contributor_id: payload.sub, tier: payload.tier }
-    }
-  }
-
-  return { contributor_id: null, tier: "anon" }
 }
 
 async function readActiveContribution(
@@ -385,9 +365,21 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
     return json({ ok: false, error: "invalid_contribution_schema" }, 400)
   }
 
-  const { contribution, jwt } = parsed
+  const { contribution } = parsed
   const caps = await getContributionColumnCaps(env)
   const isSeedOrigin = contribution.origin === NARRATIVE_SEED_ORIGIN
+  let contributor_id: string | null = null
+  let tier: OGTier = "anon"
+
+  if (!isSeedOrigin) {
+    const auth = await requireSessionUser(request, env)
+    if (!auth.ok) {
+      return json({ ok: false, error: auth.error }, auth.status)
+    }
+    contributor_id = auth.payload.sub
+    tier = auth.payload.tier
+  }
+
   if (!isSeedOrigin) {
     const rate = await enforceRateLimit(env.CHRONICLES_KV, request, {
       keyPrefix: "wiki_contribute",
@@ -399,8 +391,6 @@ export async function handleContribute(request: Request, env: Env): Promise<Resp
       return json({ ok: false, error: "rate_limited", retry_after: rate.retryAfterSeconds }, 429)
     }
   }
-
-  const { contributor_id, tier } = await resolveContributor(request, jwt, env)
 
   if (contribution.collection_slug.length > 140 || contribution.value.length > 2000 || contribution.session_id.length > 120) {
     return json({ ok: false, error: "payload_too_large" }, 413)
