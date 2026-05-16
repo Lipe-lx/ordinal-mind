@@ -1,34 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { resolveWikiBuilderTarget } from "../../src/app/pages/WikiPage"
+import { buildWikiContributionSessionId, resolveContributionStatusMessage } from "../../src/app/pages/WikiPage"
 
-describe("WikiPage builder routing", () => {
-  it("prefers the explicit from context when opening the builder", () => {
-    const target = resolveWikiBuilderTarget({
-      currentSearch: "?from=inscription-ref-1",
-      currentSlug: "collection:runestone",
-      sampleInscriptionId: "sample-ref-2",
-    })
-
-    expect(target).toBe("/chronicle/inscription-ref-1")
+describe("WikiPage contribution helpers", () => {
+  it("builds a stable session id for direct wiki submissions", () => {
+    expect(buildWikiContributionSessionId("runestone", "founder")).toBe("wiki-page:runestone:founder")
   })
 
-  it("falls back to sample inscription id when no from context exists", () => {
-    const target = resolveWikiBuilderTarget({
-      currentSearch: "",
-      currentSlug: "runestone",
-      sampleInscriptionId: "sample-ref-2",
-    })
-
-    expect(target).toBe("/chronicle/sample-ref-2")
-  })
-
-  it("returns null when no chronicle reference can be resolved", () => {
-    const target = resolveWikiBuilderTarget({
-      currentSearch: "",
-      currentSlug: "runestone",
-      sampleInscriptionId: null,
-    })
-
-    expect(target).toBeNull()
+  it("maps contribution statuses into user-facing modal feedback", () => {
+    expect(resolveContributionStatusMessage("published")).toBe("Your contribution was published to Drafts.")
+    expect(resolveContributionStatusMessage("duplicate")).toBe("This draft already matches the latest contribution for this field.")
+    expect(resolveContributionStatusMessage("quarantine")).toBe("Your contribution was saved for moderator review.")
   })
 })

@@ -1,29 +1,25 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useNavigate, useLocation, useOutletContext } from "react-router"
 import type { LayoutOutletContext } from "../components/Layout"
 import type { ConsolidatedCollection, ConsolidatedField } from "../lib/types"
-import { motion } from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 import { useDiscordIdentity } from "../lib/useDiscordIdentity"
 import { submitWikiContribution } from "../lib/byok/wikiSubmit"
 import type { CanonicalField } from "../lib/byok/wikiCompleteness"
 import "../styles/features/wiki/wiki.css"
 
-interface BuilderTargetParams {
-  currentSearch: string
-  currentSlug?: string
-  sampleInscriptionId?: string | null
+export function buildWikiContributionSessionId(slug: string, field: CanonicalField): string {
+  return `wiki-page:${slug}:${field}`
 }
 
-export function resolveWikiBuilderTarget(params: BuilderTargetParams): string | null {
-  const searchParams = new URLSearchParams(params.currentSearch)
-  const fromId = searchParams.get("from")?.trim()
-  const sampleId = params.sampleInscriptionId?.trim()
-  const currentSlug = params.currentSlug?.trim()
-
-  const referenceId = fromId || sampleId || (currentSlug && /^[a-f0-9]{64}i[0-9]+$/i.test(currentSlug) ? currentSlug : null)
-  if (!referenceId) return null
-
-  return `/chronicle/${encodeURIComponent(referenceId)}`
+export function resolveContributionStatusMessage(status: string | undefined): string {
+  if (status === "duplicate") {
+    return "This draft already matches the latest contribution for this field."
+  }
+  if (status === "quarantine") {
+    return "Your contribution was saved for moderator review."
+  }
+  return "Your contribution was published to Drafts."
 }
 
 export function WikiPage() {
@@ -40,7 +36,13 @@ export function WikiPage() {
   const [deletingField, setDeletingField] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"drafts" | "gaps">("drafts")
   const [contributePromptGap, setContributePromptGap] = useState<string | null>(null)
-  const [builderError, setBuilderError] = useState<string | null>(null)
+  const [contributionModalGap, setContributionModalGap] = useState<CanonicalField | null>(null)
+  const [contributionValue, setContributionValue] = useState("")
+  const [contributionError, setContributionError] = useState<string | null>(null)
+  const [contributionSuccess, setContributionSuccess] = useState<string | null>(null)
+  const [isSubmittingContribution, setIsSubmittingContribution] = useState(false)
+  const contributionTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const submitShortcutLabel = typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "Cmd" : "Ctrl"
 
   if (slug !== prevSlug) {
     setPrevSlug(slug)
@@ -80,23 +82,41 @@ export function WikiPage() {
     }
   }, [slug])
 
+  const refreshWikiData = useCallback(async () => {
+    if (!slug) return false
+
+    try {
+      const res = await fetch(`/api/wiki/collection/${slug}/consolidated`)
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || "Failed to load wiki")
+      setData(json.data)
+      setError(null)
+      return true
+    } catch (err) {
+      console.error(err)
+      setError("Could not load collection wiki.")
+      return false
+    }
+  }, [slug])
+
   useEffect(() => {
     if (!slug) return
     
     let ignore = false
 
-    fetch(`/api/wiki/collection/${slug}/consolidated`)
-      .then(res => res.json())
-      .then(json => {
+    void (async () => {
+      try {
+        const res = await fetch(`/api/wiki/collection/${slug}/consolidated`)
+        const json = await res.json()
         if (ignore) return
         if (!json.ok) throw new Error(json.error || "Failed to load wiki")
         setData(json.data)
-      })
-      .catch(err => {
+      } catch (err) {
         if (ignore) return
         console.error(err)
         setError("Could not load collection wiki.")
-      })
+      }
+    })()
 
     return () => {
       ignore = true
@@ -104,7 +124,8 @@ export function WikiPage() {
   }, [slug])
 
   const handleGapContribution = useCallback((gap: string) => {
-    setBuilderError(null)
+    setContributionError(null)
+    setContributionSuccess(null)
 
     if (!identity) {
       setContributePromptGap(gap)
@@ -112,26 +133,82 @@ export function WikiPage() {
     }
 
     setContributePromptGap(null)
-    const chronicleTarget = resolveWikiBuilderTarget({
-      currentSearch: location.search,
-      currentSlug: slug,
-      sampleInscriptionId: data?.sample_inscription_id,
-    })
+    setContributionValue("")
+    setContributionModalGap(gap as CanonicalField)
+  }, [identity])
 
-    if (!chronicleTarget) {
-      setBuilderError("We could not find a Chronicle reference for this wiki page yet. Open a related inscription first, then try contributing again.")
+  const closeContributionModal = useCallback(() => {
+    setContributionModalGap(null)
+    setContributionValue("")
+    setContributionError(null)
+    setContributionSuccess(null)
+    setIsSubmittingContribution(false)
+  }, [])
+
+  const handleSubmitContribution = useCallback(async () => {
+    if (!slug || !contributionModalGap) return
+
+    const nextValue = contributionValue.trim()
+    if (!nextValue) {
+      setContributionError("Write a concise contribution before submitting.")
       return
     }
 
-    const nextSearch = new URLSearchParams()
-    const fromId = new URLSearchParams(location.search).get("from")?.trim()
-    const referenceId = fromId || data?.sample_inscription_id?.trim() || (slug && /^[a-f0-9]{64}i[0-9]+$/i.test(slug) ? slug : "")
+    setIsSubmittingContribution(true)
+    setContributionError(null)
+    setContributionSuccess(null)
 
-    nextSearch.set("builderMode", "true")
-    nextSearch.set("gap", gap)
-    if (referenceId) nextSearch.set("from", referenceId)
-    navigate(`${chronicleTarget}?${nextSearch.toString()}`)
-  }, [identity, location.search, slug, data?.sample_inscription_id, navigate])
+    try {
+      const result = await submitWikiContribution({
+        data: {
+          collection_slug: slug,
+          field: contributionModalGap,
+          value: nextValue,
+          operation: "add",
+          confidence: "stated_by_user",
+          verifiable: false,
+        },
+        activeThreadId: buildWikiContributionSessionId(slug, contributionModalGap),
+        prompt: nextValue,
+      })
+
+      if (!result.ok) {
+        const nextError = result.http_status === 401 || result.http_status === 403
+          ? "Your session expired. Connect Discord again to keep contributing."
+          : "We could not record this contribution right now."
+        setContributionError(nextError)
+        return
+      }
+
+      await refreshWikiData()
+      setActiveTab("drafts")
+      setContributionSuccess(resolveContributionStatusMessage(result.status))
+      window.setTimeout(() => {
+        closeContributionModal()
+      }, 900)
+    } finally {
+      setIsSubmittingContribution(false)
+    }
+  }, [slug, contributionModalGap, contributionValue, refreshWikiData, closeContributionModal])
+
+  useEffect(() => {
+    if (!contributionModalGap) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        closeContributionModal()
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault()
+        void handleSubmitContribution()
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    contributionTextareaRef.current?.focus()
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [contributionModalGap, closeContributionModal, handleSubmitContribution])
 
   useEffect(() => {
     const isGenesis = identity?.tier === "genesis"
@@ -393,14 +470,6 @@ export function WikiPage() {
                   </div>
                 )}
 
-                {activeTab === "gaps" && builderError && (
-                  <div className="wiki-gap-item" style={{ marginBottom: "var(--space-md)", padding: "var(--space-md)", borderColor: "rgba(248, 113, 113, 0.35)" }}>
-                    <p className="wiki-empty-text" style={{ margin: 0, textAlign: "left", color: "var(--text-secondary)" }}>
-                      {builderError}
-                    </p>
-                  </div>
-                )}
-
                 <div className="wiki-fields-list" style={{ gap: "var(--space-md)" }}>
                   {activeTab === "drafts" ? (
                     <>
@@ -444,6 +513,102 @@ export function WikiPage() {
           </aside>
         </div>
       </div>
+      <AnimatePresence>
+        {contributionModalGap && (
+          <motion.div
+            className="byok-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={(event) => {
+              if (event.target === event.currentTarget && !isSubmittingContribution) {
+                closeContributionModal()
+              }
+            }}
+          >
+            <motion.div
+              className="byok-modal glass-card wiki-contribution-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="wiki-contribution-title"
+              initial={{ opacity: 0, scale: 0.96, y: 18 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 18 }}
+              transition={{ duration: 0.18 }}
+            >
+              <button
+                type="button"
+                className="btn-close-minimal modal-close-btn"
+                onClick={closeContributionModal}
+                aria-label="Close modal"
+                disabled={isSubmittingContribution}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="wiki-contribution-modal-copy">
+                <span className="wiki-contribution-kicker">Draft Contribution</span>
+                <h2 id="wiki-contribution-title">Fill {formatFieldName(contributionModalGap)}</h2>
+                <p>
+                  Add factual context for this missing field. Your contribution will appear in <strong>Drafts</strong> first and higher tiers can later confirm it into consensus.
+                </p>
+              </div>
+
+              <div className="wiki-contribution-meta">
+                <span className="wiki-tier-badge tier-community">{identity?.tier ?? "community"}</span>
+                <span className="wiki-contribution-chip">{slug}</span>
+              </div>
+
+              <div className="wiki-contribution-form">
+                <textarea
+                  ref={contributionTextareaRef}
+                  className="input-field wiki-contribution-textarea"
+                  placeholder={`Describe ${formatFieldName(contributionModalGap).toLowerCase()} with concise, source-minded detail...`}
+                  value={contributionValue}
+                  onChange={(event) => setContributionValue(event.target.value)}
+                  disabled={isSubmittingContribution}
+                  maxLength={2000}
+                />
+
+                <div className="wiki-contribution-footer">
+                  <span className="wiki-contribution-hint">
+                    Keep it factual. Press {submitShortcutLabel}+Enter to submit.
+                  </span>
+                  <span className="wiki-contribution-count">{contributionValue.trim().length}/2000</span>
+                </div>
+
+                {contributionError && (
+                  <p className="wiki-contribution-message is-error">{contributionError}</p>
+                )}
+                {contributionSuccess && (
+                  <p className="wiki-contribution-message is-success">{contributionSuccess}</p>
+                )}
+
+                <div className="byok-actions wiki-contribution-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={closeContributionModal}
+                    disabled={isSubmittingContribution}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void handleSubmitContribution()}
+                    disabled={isSubmittingContribution || !contributionValue.trim()}
+                  >
+                    {isSubmittingContribution ? "Saving..." : "Publish Draft"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
