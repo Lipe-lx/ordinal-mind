@@ -488,8 +488,8 @@
   display: grid;
   gap: var(--space-lg);
   background:
-    radial-gradient(circle at top left, rgba(247, 147, 26, 0.12), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+    radial-gradient(circle at top left, rgba(247, 147, 26, 0.09), transparent 34%),
+    linear-gradient(180deg, rgba(18, 18, 24, 0.985), rgba(14, 14, 20, 0.965));
 }
 
 .wiki-contribution-modal-copy {
