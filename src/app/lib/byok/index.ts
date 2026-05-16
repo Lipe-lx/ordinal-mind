@@ -82,11 +82,11 @@ export const MODELS: Record<string, { id: string, name: string }[]> = {
   ],
   gemini: [
     // { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro" },
-    { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview" },
-    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-    { id: "gemma-4-31b-it", name: "Gemma 4 (31B)" },
-    { id: "gemma-4-26b-a4b-it", name: "Gemma 4 (26B A4B)" }
+    { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview (Free tier)" },
+    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite (Free tier)" },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Free tier)" },
+    { id: "gemma-4-31b-it", name: "Gemma 4 (31B) (Free tier)" },
+    { id: "gemma-4-26b-a4b-it", name: "Gemma 4 (26B A4B) (Free tier)" }
   ],
   openrouter: [
     { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet" },

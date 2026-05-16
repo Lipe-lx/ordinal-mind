@@ -183,6 +183,31 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                       ))}
                     </div>
                   </div>
+                  
+                  {config.provider === "gemini" && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      style={{ 
+                        fontSize: "0.7rem", 
+                        color: "var(--accent-primary)", 
+                        background: "rgba(247, 147, 26, 0.08)", 
+                        padding: "8px 12px", 
+                        borderRadius: "8px",
+                        border: "1px solid rgba(247, 147, 26, 0.15)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        lineHeight: "1.4"
+                      }}
+                    >
+                      <span style={{ fontSize: "1rem" }}>💡</span>
+                      <span>
+                        <strong>Google AI Studio</strong> offers a generous <strong>Free Tier</strong> for these models. 
+                        No credit card required for most regions.
+                      </span>
+                    </motion.div>
+                  )}
 
                   {config.provider !== "unknown" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -200,21 +225,41 @@ export function BYOKModal({ onClose, initialTab }: Props) {
                   )}
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>API Key</label>
                       {(() => {
                         const p = PROVIDERS.find(p => p.id === config.provider);
-                        return p?.keyLink ? (
+                        if (!p?.keyLink) return null;
+                        const isGemini = p.id === "gemini";
+                        return (
                           <a 
                             href={p.keyLink} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="link-minimal"
-                            style={{ fontSize: "0.65rem", fontWeight: "700", color: "var(--accent-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}
+                            className={isGemini ? "btn-premium" : "link-minimal"}
+                            style={isGemini ? { 
+                              height: "28px", 
+                              minHeight: "28px", 
+                              padding: "0 10px", 
+                              fontSize: "0.65rem",
+                              borderRadius: "6px",
+                              background: "linear-gradient(135deg, rgba(247, 147, 26, 0.2), rgba(247, 147, 26, 0.1))"
+                            } : { 
+                              fontSize: "0.65rem", 
+                              fontWeight: "700", 
+                              color: "var(--accent-primary)", 
+                              textTransform: "uppercase", 
+                              letterSpacing: "0.05em" 
+                            }}
                           >
-                            Get Your Key &rarr;
+                            {isGemini ? (
+                              <>
+                                <span style={{ marginRight: "4px" }}>Google AI Studio (Free API)</span>
+                                <span>&rarr;</span>
+                              </>
+                            ) : "Get Your Key \u0026rarr;"}
                           </a>
-                        ) : null;
+                        );
                       })()}
                     </div>
                     <input
