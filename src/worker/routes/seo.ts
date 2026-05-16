@@ -200,7 +200,7 @@ function buildHomeHtml(): string {
     `<main>
     <header>
       <h1>OrdinalMind</h1>
-      <p>Factual first memory engine for Bitcoin Ordinals.</p>
+      <p>Chronicle Memory Engine for Bitcoin Ordinals.</p>
       <p>Resolve an inscription number, inscription ID, or Taproot address into a verifiable Chronicle built from public sources.</p>
     </header>
     <section aria-labelledby="home-inputs">
