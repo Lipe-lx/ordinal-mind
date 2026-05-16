@@ -21,7 +21,8 @@
   max-height: calc(100dvh - max(var(--space-md), var(--safe-area-top)) - max(var(--space-md), var(--safe-area-bottom)));
   padding: var(--space-2xl);
   background: var(--bg-modal-elevated);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
 }
 

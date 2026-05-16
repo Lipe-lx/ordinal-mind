@@ -487,6 +487,8 @@
   max-width: 560px;
   display: grid;
   gap: var(--space-lg);
+  min-width: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(247, 147, 26, 0.09), transparent 34%),
     linear-gradient(180deg, rgba(18, 18, 24, 0.985), rgba(14, 14, 20, 0.965));
@@ -529,6 +531,7 @@
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .wiki-contribution-chip {
@@ -537,12 +540,17 @@
   gap: 0.4rem;
   padding: 0.32rem 0.62rem;
   border-radius: 999px;
+  min-width: 0;
+  max-width: 100%;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-glass);
   color: var(--text-secondary);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wiki-contribution-form {
