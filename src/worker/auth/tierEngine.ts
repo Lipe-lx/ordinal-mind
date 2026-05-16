@@ -104,6 +104,28 @@ async function isGenesisWhitelisted(discordId: string, kv: KVNamespace): Promise
   }
 }
 
+const VALID_TIERS: ReadonlySet<string> = new Set(["anon", "community", "og", "genesis"])
+
+/**
+ * Check for a manual tier override in KV (key `og_tier_overrides`).
+ * Overrides are stored as a JSON object mapping discord_id → OGTier.
+ * Returns the overridden tier if valid, or null if no override exists.
+ */
+async function getTierOverride(discordId: string, kv: KVNamespace): Promise<OGTier | null> {
+  try {
+    const raw = await kv.get("og_tier_overrides")
+    if (!raw) return null
+    const map = JSON.parse(raw) as Record<string, string>
+    const value = map[discordId]
+    if (typeof value === "string" && VALID_TIERS.has(value)) {
+      return value as OGTier
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Calculate the OG tier for a Discord user.
  *
@@ -122,7 +144,11 @@ export async function calculateTier(
   const isGenesis = await isGenesisWhitelisted(discordId, kv)
   if (isGenesis) return "genesis"
 
-  // 2. Load server config
+  // 2. Manual tier override (KV key: og_tier_overrides)
+  const override = await getTierOverride(discordId, kv)
+  if (override) return override
+
+  // 3. Load server config
   const config = await getServerConfig(kv)
 
   const guildSet = new Set(guildIds)

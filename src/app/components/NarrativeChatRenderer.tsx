@@ -147,7 +147,7 @@ export function NarrativeChatRenderer({
             {!hasKey && (
               <button className="btn-premium" onClick={() => onOpenBYOK("llm")}>
                 <span className="byok-icon icon-premium">🔑</span>
-                <span>Configure BYOK</span>
+                <span>Configure</span>
               </button>
             )}
           </div>
@@ -418,7 +418,7 @@ export function NarrativeChatRenderer({
             {!hasKey ? (
               <button type="button" className="btn-premium" onClick={() => onOpenBYOK("llm")}>
                 <span className="byok-icon icon-premium">🔑</span>
-                <span>Configure BYOK</span>
+                <span>Configure</span>
               </button>
             ) : (
               <>
