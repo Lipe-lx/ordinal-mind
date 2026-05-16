@@ -179,8 +179,8 @@ function buildStaticPageHtml(title: string, description: string, canonicalPath: 
 }
 
 function buildHomeHtml(): string {
-  const title = "OrdinalMind — Bitcoin Ordinals Factual Resolution Engine"
-  const description = "Factual first chronicle engine for Bitcoin Ordinals. Resolve inscription numbers, inscription IDs, and taproot addresses into verifiable public-data timelines."
+  const title = "OrdinalMind — Chronicle Memory Engine for Bitcoin Ordinals"
+  const description = "Every inscription carries a story. OrdinalMind traces its journey — from inscription to current holder — through verifiable public data."
 
   const jsonLd = {
     "@context": "https://schema.org",
